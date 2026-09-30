@@ -1205,9 +1205,11 @@
   const fmtDate = t => { const d = new Date(t); return `${d.getMonth() + 1}月${d.getDate()}日 ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; };
   const ageText = g => { const d = Math.floor((Date.now() - g.born) / 86400000); return d < 1 ? 'きょう' : `${d}日目`; };
   function openAlbum(id) {
-    const a = S.albums && S.albums[id];
-    if (!a) return;
     const g = S.geckos.find(x => x.id === id);
+    // アルバムができる前から暮らしている子は、ここでアルバムを作る
+    if (g && !(S.albums && S.albums[id])) { memo(g, 'アルバムをはじめた', true); save(); }
+    const a = S.albums && S.albums[id];
+    if (!a) { toast('アルバムが見つかりませんでした'); return; }
     const photos = a.entries.filter(e => e.img).length;
     openSheet(`<p class="eyebrow">成長記録アルバム</p>
       <h3 class="sheet-title">${esc(a.name)} <span class="sex ${a.sex}">${a.sex === 'M' ? '♂' : '♀'}</span></h3>
