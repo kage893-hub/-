@@ -331,7 +331,6 @@
     g.tame = clamp(g.tame + 1);
     S.coins += 1;
     daily('fed');
-    if (view === 'case') sfx('eat');
     if (!g.poopAt) g.poopAt = Date.now() + 2 * MIN;
     renderView();
     save();
