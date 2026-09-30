@@ -386,7 +386,7 @@ button { font: inherit; color: inherit; }
 .logo-big img { width: 100%; max-width: 360px; height: auto; display: block; margin: 4px auto 6px; }
 
 /* ---------- お世話ボタンのアイコン・ガイド・コインの演出 */
-.act.care { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; white-space: nowrap; padding-inline: 4px; min-height: 60px; font-size: 14.5px; }
+.act.care { white-space: nowrap; padding-inline: 4px; }
 .act.care svg { width: 22px; height: 22px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .act.glow { position: relative; animation: glow 1.6s ease-in-out infinite; }
 @keyframes glow { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent), 0 2px 0 var(--line); } 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent), 0 2px 0 var(--line); } }

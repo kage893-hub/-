@@ -763,9 +763,9 @@
     setHTML($('#tankName'), `<b>${esc(g.name)}</b><span class="sex ${g.sex}">${sexMark(g)}</span><span class="pill ${status.cls}">${status.text}</span>`);
     setHTML($('#caseInfo'), `
       ${editing ? editPanel(g) : `<div class="actions">
-        <button class="act primary care${tutGlow('feed')}" data-action="feedMenu"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="13" cy="13" rx="6.5" ry="3.8" transform="rotate(-20 13 13)"/><circle cx="6.5" cy="15.5" r="2.4"/><path d="M5 13 2.5 9.5M5.5 17.5 3 20.5M12 16.5l-1.5 4M16 15l1 4M19 9.5l2.5-3"/></svg><span>ごはん</span></button>
-        <button class="act care${tutGlow('clean')}" data-action="clean"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3l-4 9"/><path d="M6.5 12.5h8l1.5 8H5z"/><path d="M8.5 16v4M11 16v4M13.5 16v4"/></svg><span>おそうじ</span></button>
-        <button class="act care${tutGlow('handle')}" data-action="handle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg><span>ふれあう</span></button>
+        <button class="act primary care${tutGlow('feed')}" data-action="feedMenu">ごはん</button>
+        <button class="act care${tutGlow('clean')}" data-action="clean">おそうじ</button>
+        <button class="act care${tutGlow('handle')}" data-action="handle">ふれあう</button>
       </div>
       ${tutCoach()}
       ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮を手伝う</button>' : ''}
