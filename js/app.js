@@ -1314,7 +1314,9 @@
 
   // ---------- BGM（最初に画面をさわったときから流れる。音量はひかえめ）
   const MUSIC_VOL = 0.45;
-  function musicOn() { if (window.LeopaMusic && S && !S.musicOff && !document.hidden) LeopaMusic.start(MUSIC_VOL); }
+  // 時間帯ごとの曲：朝 5〜8時、昼 8〜16時、夕方 16〜19時、夜はそれ以外
+  const songKey = () => { const h = clockNow(); return h >= 5 && h < 8 ? 'morning' : h >= 8 && h < 16 ? 'day' : h >= 16 && h < 19 ? 'evening' : 'night'; };
+  function musicOn() { if (window.LeopaMusic && S && !S.musicOff && !document.hidden) LeopaMusic.start(MUSIC_VOL, songKey()); }
   document.addEventListener('pointerdown', musicOn, { passive: true });
   document.addEventListener('visibilitychange', () => { if (!window.LeopaMusic) return; if (document.hidden) LeopaMusic.stop(); else if (LeopaMusic.ctxUsed) musicOn(); });
 
@@ -1324,6 +1326,7 @@
     simulate(now);
     refreshOffers(now);
     refreshOrders(now);
+    if (window.LeopaMusic) LeopaMusic.setSong(songKey());
     checkAch();
     renderView();
     save();
