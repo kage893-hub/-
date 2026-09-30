@@ -70,16 +70,30 @@
   function load() {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
-      if (raw) { const s = JSON.parse(raw); if (s && s.v === 1) return s; }
+      if (raw) { const s = JSON.parse(raw); if (s && (s.v === 1 || s.v === 2)) return migrate(s); }
     } catch (e) { /* 保存できない環境でも遊べる */ }
     return null;
+  }
+  // 古いデータ（見た目の遺伝がない版）を新しい形にそろえる
+  function migrate(s) {
+    if (s.v === 1) {
+      for (const x of [...s.geckos, ...s.eggs, ...(s.offers || [])]) x.poly = G.normPoly(x.poly);
+      for (const g of s.geckos) if (g.gravid && g.gravid.dad) g.gravid.dad.poly = G.normPoly(g.gravid.dad.poly);
+      const oldNames = Object.keys(s.dex || {});
+      s.dex = {};
+      for (const n of oldNames) if (G.DEX.some(d => d.id === n)) s.dex[n] = true;
+      s.names = {};
+      s.v = 2;
+    }
+    s.names = s.names || {};
+    return s;
   }
   function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* noop */ } }
 
   function newGecko(o) {
     return {
       id: 'g' + (S.nextId++), name: o.name, sex: o.sex,
-      genes: G.normGenes(o.genes || {}), tang: o.tang === undefined ? 20 : o.tang,
+      genes: G.normGenes(o.genes || {}), tang: o.tang === undefined ? 20 : o.tang, poly: G.normPoly(o.poly),
       growth: o.growth || 0, hunger: o.hunger === undefined ? 70 : o.hunger, clean: 100, tame: o.tame || 10,
       poop: 0, poopAt: 0, shedUntil: 0, gravid: null, restUntil: 0, handledAt: 0,
       seed: Math.floor(Math.random() * 1e9), gen: o.gen || 1, born: Date.now(),
@@ -87,22 +101,26 @@
   }
   function freshState() {
     S = {
-      v: 1, coins: 60, cases: 4, incTemp: 29.5, food: { cricket: 20, dubia: 3, worm: 3 },
-      geckos: [], eggs: [], dex: {}, selected: null, offers: [], offersAt: 0,
+      v: 2, coins: 60, cases: 4, incTemp: 29.5, food: { cricket: 20, dubia: 3, worm: 3 },
+      geckos: [], eggs: [], dex: {}, names: {}, selected: null, offers: [], offersAt: 0,
       lastTick: Date.now(), nextId: 1, welcomed: false, stats: { hatched: 0, rehomed: 0 },
     };
-    const a = newGecko({ name: 'レオ', sex: 'M', genes: { alb: 1 }, tang: 45, growth: 55, hunger: 60 });
-    const b = newGecko({ name: 'もち', sex: 'F', genes: { snow: 1, alb: 1 }, tang: 22, growth: 55, hunger: 60 });
+    // どちらも斑点がやや少なく、しっぽに少しオレンジがある。選んでいけばハイポやキャロットテールをめざせる
+    const a = newGecko({ name: 'レオ', sex: 'M', genes: { alb: 1 }, tang: 45, growth: 55, hunger: 60, poly: { spots: 38, blotch: 40, head: 45, carrot: 30, lav: 25, aberrant: 20 } });
+    const b = newGecko({ name: 'もち', sex: 'F', genes: { snow: 1, alb: 1 }, tang: 22, growth: 55, hunger: 60, poly: { spots: 30, blotch: 55, head: 50, carrot: 22, lav: 40, aberrant: 30 } });
     S.geckos.push(a, b);
     S.selected = a.id;
     register(a); register(b);
   }
+  const nameOf = x => G.morphName(x.genes, x.tang, x.poly);
+  // 図鑑に登録して、新しく載った項目の名前を返す
   function register(g) {
-    const name = G.morphName(g.genes, g.tang);
-    const isNew = !S.dex[name];
-    S.dex[name] = true;
-    return isNew;
+    const fresh = G.dexMatches(g.genes, g.tang, g.poly).filter(id => !S.dex[id]);
+    fresh.forEach(id => { S.dex[id] = true; });
+    S.names[nameOf(g)] = true;
+    return fresh.map(id => G.DEX.find(d => d.id === id).name);
   }
+  const unseen = x => G.dexMatches(x.genes, x.tang, x.poly).some(id => !S.dex[id]);
   function unusedName() {
     const used = new Set(S.geckos.map(g => g.name));
     const free = NAMES.filter(n => !used.has(n));
@@ -144,7 +162,7 @@
     for (let i = 0; i < 2; i++) {
       const child = G.breed(g, dad);
       S.eggs.push({
-        id: 'e' + (S.nextId++), genes: child.genes, tang: child.tang,
+        id: 'e' + (S.nextId++), genes: child.genes, tang: child.tang, poly: child.poly,
         sex: Math.random() < temp.pMale ? 'M' : 'F', temp: temp.t,
         laidAt: now, hatchAt: now + temp.mins * MIN, mom: g.name, dad: dad.name,
         gen: Math.max(g.gen, dad.gen || 1) + 1,
@@ -161,7 +179,16 @@
     const x = Math.random();
     const genes = { snow: x < 0.7 ? 0 : x < 0.95 ? 1 : 2, alb: r(), ecl: r(), bliz: r() };
     const adult = Math.random() < 0.25;
-    const o = { genes, tang: Math.round(rand(0, 65)), sex: Math.random() < 0.5 ? 'M' : 'F', growth: adult ? 150 : Math.round(rand(0, 20)), seed: Math.floor(Math.random() * 1e9) };
+    const poly = G.randomPoly();
+    let tang = Math.round(rand(0, 65));
+    // ときどき、ブリーダーが選別してきた血統の子が入荷する
+    const line = Math.random();
+    if (line < 0.12) poly.spots = Math.round(rand(6, 26));
+    else if (line < 0.2) poly.carrot = Math.round(rand(35, 70));
+    else if (line < 0.28) tang = Math.round(rand(60, 85));
+    else if (line < 0.33) poly.aberrant = Math.round(rand(55, 85));
+    else if (line < 0.38) poly.lav = Math.round(rand(55, 85));
+    const o = { genes, tang, poly, sex: Math.random() < 0.5 ? 'M' : 'F', growth: adult ? 150 : Math.round(rand(0, 20)), seed: Math.floor(Math.random() * 1e9) };
     o.price = Math.round(valueOf(o) * 1.3);
     return o;
   }
@@ -178,6 +205,11 @@
     if (visual >= 2) v *= 1.3;
     if (visual >= 3) v *= 1.3;
     v += o.tang * 0.5;
+    // ラインの呼び名がつく子は値打ちが上がる
+    const line = G.lineTokens(o.genes, o.tang, o.poly).filter(t => t !== 'タンジェリン');
+    v += line.length * 22;
+    if (line.includes('スーパーハイポ')) v += 30;
+    if (line.includes('ボールディ')) v += 20;
     if (o.growth >= GROWTH.adult) v *= 1.4;
     return Math.round(v);
   }
@@ -213,7 +245,7 @@
   let tankGid = null;
 
   function lookOf(g) {
-    return { id: g.id, genes: g.genes, tang: g.tang, seed: g.seed, stage: stageOf(g), gravid: !!g.gravid, shed: !!g.shedUntil, size: sizeOf(g) };
+    return { id: g.id, genes: g.genes, tang: g.tang, poly: g.poly, seed: g.seed, stage: stageOf(g), gravid: !!g.gravid, shed: !!g.shedUntil, size: sizeOf(g) };
   }
   function initTank() {
     const box = $('#tank3d');
@@ -243,10 +275,27 @@
     const g = S.geckos.find(x => x.id === tankGid);
     for (const k of tank.takeFoods()) if (g) applyEat(g, k);
   }
+  // 写真は重いので、まだ撮っていないものは1枚ずつ順番に撮って差しこむ
+  const photoQueue = new Map();
+  let photoBusy = false;
   function portrait(g, stage, label) {
-    const look = { genes: G.normGenes(g.genes), tang: g.tang, seed: g.seed || 1, stage: stage || 'adult' };
+    const look = { genes: G.normGenes(g.genes), tang: g.tang, poly: g.poly, seed: g.seed || 1, stage: stage || 'adult' };
+    if (!L3.supported) return A.gecko(look, { stage: look.stage, label });
+    const url = L3.photoReady(look);
+    if (url) return `<img src="${url}" alt="${esc(label || '')}">`;
+    const key = L3.photoKey(look).replace(/[^\w|.-]/g, '');
+    photoQueue.set(key, look);
+    if (!photoBusy) { photoBusy = true; setTimeout(pumpPhotos, 30); }
+    return `<img class="photo-wait" data-photo="${key}" alt="${esc(label || '')}">`;
+  }
+  function pumpPhotos() {
+    const next = photoQueue.entries().next();
+    if (next.done) { photoBusy = false; return; }
+    const [key, look] = next.value;
+    photoQueue.delete(key);
     const url = L3.photo(look);
-    return url ? `<img src="${url}" alt="${esc(label || '')}">` : A.gecko(look, { stage: look.stage, label });
+    document.querySelectorAll(`img[data-photo="${key}"]`).forEach(img => { img.src = url; img.classList.remove('photo-wait'); });
+    setTimeout(pumpPhotos, 30);
   }
 
   // ======================================================
@@ -291,21 +340,22 @@
       return;
     }
     S.eggs = S.eggs.filter(x => x !== e);
-    const g = newGecko({ name: unusedName(), sex: e.sex, genes: e.genes, tang: e.tang, growth: 0, hunger: 60, gen: e.gen });
+    const g = newGecko({ name: unusedName(), sex: e.sex, genes: e.genes, tang: e.tang, poly: e.poly, growth: 0, hunger: 60, gen: e.gen });
     S.geckos.push(g);
     S.stats.hatched++;
     S.coins += 5;
-    const isNew = register(g);
+    const fresh = register(g);
     save();
     renderView();
-    const morph = G.morphName(g.genes, g.tang);
+    const morph = nameOf(g);
     const hets = G.hets(g.genes);
     openSheet(`<div class="reveal">
       <div class="reveal-art">${portrait(g, "baby", morph)}</div>
-      ${isNew ? '<span class="pill new">図鑑に新しく登録！</span>' : ''}
+      ${fresh.length ? `<span class="pill new">図鑑に新しく登録：${fresh.map(esc).join('・')}</span>` : ''}
       <p class="eyebrow">うまれました！</p>
       <h3 class="morph big">${esc(morph)}</h3>
-      <p class="muted">${g.sex === 'M' ? '♂ オス' : '♀ メス'} ・ ${esc(e.mom)} × ${esc(e.dad)} の子 ・ タンジェリン度 ${g.tang}${hets.length ? ' ・ ' + hets.map(h => 'het ' + h).join(' / ') : ''}</p>
+      <p class="muted">${g.sex === 'M' ? '♂ オス' : '♀ メス'} ・ ${esc(e.mom)} × ${esc(e.dad)} の子${hets.length ? ' ・ ' + hets.map(h => 'het ' + h).join(' / ') : ''}</p>
+      ${traitTable(g, true)}
       <form id="renameForm" data-id="${g.id}" data-goto="1" class="rename">
         <label for="renameInput">なまえ</label>
         <input id="renameInput" value="${esc(g.name)}" maxlength="10" autocomplete="off">
@@ -414,13 +464,14 @@
         const mom = g.sex === 'F' ? g : p, dad = g.sex === 'F' ? p : g;
         const fc = G.forecast(mom, dad);
         return `<div class="pair-card">
-          <div class="pair-head">${A.swatch(p)}<b>${esc(p.name)}</b><span class="muted">${sexMark(p)} ${esc(G.morphName(p.genes, p.tang))}</span></div>
+          <div class="pair-head">${A.swatch(p)}<b>${esc(p.name)}</b><span class="muted">${sexMark(p)} ${esc(nameOf(p))}</span></div>
           <div class="forecast">
             <div class="fc-label">生まれる子の予想</div>
             ${fc.morphs.slice(0, 6).map(m => `<div class="fc-row"><span>${esc(m.name)}</span><span class="fc-bar"><i style="--v:${(m.p * 100).toFixed(1)}%"></i></span><b>${pct(m.p)}</b></div>`).join('')}
             ${fc.morphs.length > 6 ? `<div class="muted small">ほか ${fc.morphs.length - 6} 種類</div>` : ''}
             ${fc.hets.length ? `<div class="muted small">${fc.hets.map(h => `het ${h.name} ${pct(h.p)}`).join(' ・ ')}</div>` : ''}
-            <div class="muted small">タンジェリン度はだいたい ${fc.tang} 前後</div>
+            <div class="fc-label">見た目の遺伝（両親の平均くらい。1匹ずつばらつく）</div>
+            <div class="muted small">${[['タンジェリン度', fc.tang]].concat(G.POLY.map(t => [t.name, fc.poly[t.key]])).map(([n, v]) => `${n} ${v}`).join(' ・ ')}</div>
           </div>
           <button class="act primary" data-action="pair" data-id="${p.id}">${esc(p.name)}とペアリング</button>
         </div>`;
@@ -436,7 +487,7 @@
       const now = Date.now();
       if (!g || !p || pairBlock(g, now) || pairBlock(p, now)) return;
       const mom = g.sex === 'F' ? g : p, dad = g.sex === 'F' ? p : g;
-      mom.gravid = { layAt: now + 10 * MIN, dad: { name: dad.name, genes: Object.assign({}, dad.genes), tang: dad.tang, gen: dad.gen } };
+      mom.gravid = { layAt: now + 10 * MIN, dad: { name: dad.name, genes: Object.assign({}, dad.genes), tang: dad.tang, poly: Object.assign({}, dad.poly), gen: dad.gen } };
       dad.restUntil = now + 20 * MIN;
       closeSheet();
       toast(`ペアリング成功！${mom.name}は約10分後に卵を産みます`);
@@ -493,12 +544,12 @@
       if (S.coins < o.price) { toast('コインが足りません'); return; }
       S.coins -= o.price;
       S.offers.splice(i, 1);
-      const g = newGecko({ name: unusedName(), sex: o.sex, genes: o.genes, tang: o.tang, growth: o.growth, hunger: 70 });
+      const g = newGecko({ name: unusedName(), sex: o.sex, genes: o.genes, tang: o.tang, poly: o.poly, growth: o.growth, hunger: 70 });
       g.seed = o.seed;
       S.geckos.push(g);
-      const isNew = register(g);
+      const fresh = register(g);
       S.selected = g.id;
-      toast(`${g.name}をおむかえしました！${isNew ? '図鑑に新しく登録！' : ''}`);
+      toast(`${g.name}をおむかえしました！${fresh.length ? '図鑑に新しく登録：' + fresh.join('・') : ''}`);
       switchView('case');
       save();
     },
@@ -567,6 +618,30 @@
     else renderShop();
   }
 
+  // 見た目の遺伝の表（compact は目立つ特徴だけをタグで）
+  const openTraits = {};
+  document.addEventListener('toggle', e => {
+    const d = e.target;
+    if (d.classList && d.classList.contains('traits')) openTraits[d.id.slice(7)] = d.open;
+  }, true);
+  function traitRows(x) {
+    const p = x.poly || {};
+    return [{ name: 'タンジェリン度', v: x.tang, lo: '黄色', hi: 'オレンジ' }]
+      .concat(G.POLY.map(t => ({ name: t.name, v: p[t.key] === undefined ? 50 : p[t.key], lo: t.lo, hi: t.hi, quietLow: ['carrot', 'lav', 'aberrant'].includes(t.key) })));
+  }
+  function traitTable(x, compact) {
+    const rows = traitRows(x);
+    if (compact) {
+      const notes = rows.filter(r => r.v >= 75 || (r.v <= 25 && !r.quietLow)).map(r => `${r.name}：${r.v >= 75 ? r.hi : r.lo}`);
+      return notes.length ? `<div class="tags">${notes.map(n => `<span class="tag">${esc(n)}</span>`).join('')}</div>` : '';
+    }
+    return `<div class="trait-grid">${rows.map(r => `<div class="trait">
+      <span class="trait-name">${r.name}</span>
+      <span class="trait-scale"><span class="meter"><i style="--v:${r.v}%;--c:var(--accent)"></i></span><small><span>${r.lo}</span><span>${r.hi}</span></small></span>
+      <b>${r.v}</b></div>`).join('')}</div>
+      <p class="muted small">子どもは両親の平均くらいになり、1匹ずつばらつきます。</p>`;
+  }
+
   function bar(label, v, color, side) {
     return `<div class="bar"><span>${label}</span><span class="meter"><i style="--v:${clamp(v).toFixed(1)}%;--c:${color}"></i></span><b>${side === undefined ? Math.round(v) : side}</b></div>`;
   }
@@ -579,7 +654,7 @@
     sceneMount();
     if (!g) { setHTML($('#caseInfo'), ''); return; }
     const st = stageOf(g);
-    const morph = G.morphName(g.genes, g.tang);
+    const morph = nameOf(g);
     const hets = G.hets(g.genes);
     const status = statusOf(g, now);
     const next = st === 'baby' ? GROWTH.young : st === 'young' ? GROWTH.adult : GROWTH.max;
@@ -597,9 +672,12 @@
         <div class="tags">
           <span class="tag">${STAGE_LABEL[st]}</span>
           <span class="tag">第${g.gen}世代</span>
-          <span class="tag">タンジェリン度 ${g.tang}</span>
           ${hets.map(h => `<span class="tag het">het ${h}</span>`).join('')}
         </div>
+        <details class="traits" id="traits-${g.id}"${openTraits[g.id] ? ' open' : ''}>
+          <summary>この子の見た目の遺伝</summary>
+          ${traitTable(g)}
+        </details>
         <div class="bars">
           ${bar('おなか', g.hunger, g.hunger < 25 ? 'var(--warn)' : 'var(--accent)')}
           ${bar('きれい', g.clean, g.clean < 35 ? 'var(--warn)' : 'var(--info)')}
@@ -652,22 +730,22 @@
 
   let dexHTML = '';
   function renderDex() {
-    const found = G.DEX.filter(d => S.dex[d.name]).length;
-    const extra = Object.keys(S.dex).filter(n => !G.DEX.some(d => d.name === n));
+    const found = G.DEX.filter(d => S.dex[d.id]).length;
+    const extra = Object.keys(S.names).filter(n => !G.DEX.some(d => d.name === n)).sort();
     const cards = G.DEX.map((d, i) => {
-      const got = !!S.dex[d.name];
-      const art = portrait({ genes: d.genes, tang: d.tang, seed: 1000 + i * 7919 }, 'adult', got ? d.name : '');
+      const got = !!S.dex[d.id];
+      const art = portrait({ genes: d.rep.genes, tang: d.rep.tang, poly: d.rep.poly, seed: 1000 + i * 7919 }, 'adult', got ? d.name : '');
       return `<div class="dex-card${got ? '' : ' locked'}"><div class="dex-art">${art}</div><b>${got ? esc(d.name) : '？？？'}</b><small class="muted">${esc(d.hint)}</small></div>`;
     }).join('');
     const html = `
       <h2 class="h2">モルフ図鑑 <small class="muted">${found} / ${G.DEX.length}</small></h2>
       <div class="dex-grid">${cards}</div>
-      ${extra.length ? `<h3 class="h3">そのほかに見つけたモルフ</h3><div class="tags">${extra.map(n => `<span class="tag">${esc(n)}</span>`).join('')}</div>` : ''}
+      ${extra.length ? `<h3 class="h3">これまでに出会ったモルフ名 <small class="muted">${extra.length}種</small></h3><div class="tags">${extra.map(n => `<span class="tag">${esc(n)}</span>`).join('')}</div>` : ''}
       <div class="card guide">
         <h3 class="h3">遺伝のきほん</h3>
         <p><b>劣性</b>（アルビノ・エクリプス・ブリザード）：両親から1つずつ、合わせて2つ受け継ぐと見た目に出ます。1つだけ持っている子は「het（ヘテロ）」と呼び、見た目は変わりませんが子どもに伝えられます。</p>
         <p><b>共優性</b>（マックスノー）：1つで見た目に出て、2つそろうと「スーパー」になります。</p>
-        <p><b>タンジェリン度</b>：両親の平均くらいになります。オレンジの濃い子同士を選んで掛けあわせると少しずつ上がります。</p>
+        <p><b>見た目の遺伝</b>（タンジェリン度・斑点の量や大きさ・頭の斑点・しっぽのオレンジ・ラベンダー・模様の乱れ）：子は両親の平均くらいになり、1匹ずつばらつきます。同じモルフ名でも見た目は1匹ずつちがいます。望む特徴の強い子を選んで掛けあわせ続けると、ハイポやキャロットテールなどの血統が作れます。</p>
       </div>`;
     if (html !== dexHTML) { setHTML($('#view-dex'), html); dexHTML = html; }
   }
@@ -675,15 +753,16 @@
   function renderShop() {
     const now = Date.now();
     const offers = S.offers.map((o, i) => {
-      const morph = G.morphName(o.genes, o.tang);
+      const morph = nameOf(o);
       const hets = G.hets(o.genes);
       return `<div class="offer">
         <div class="offer-art">${portrait(o, stageOf(o), morph)}</div>
         <div class="offer-main">
           <b>${esc(morph)}</b>
-          <small class="muted">${o.sex === 'M' ? '♂ オス' : '♀ メス'} ・ ${STAGE_LABEL[stageOf(o)]} ・ タンジェリン度 ${o.tang}</small>
+          <small class="muted">${o.sex === 'M' ? '♂ オス' : '♀ メス'} ・ ${STAGE_LABEL[stageOf(o)]}</small>
           ${hets.length ? `<small class="het-line">${hets.map(h => 'het ' + h).join(' / ')}</small>` : ''}
-          ${S.dex[morph] ? '' : '<small class="new-line">図鑑にまだいない</small>'}
+          ${unseen(o) ? '<small class="new-line">図鑑にまだいない</small>' : ''}
+          ${traitTable(o, true)}
           <button class="act primary sm" data-action="buyGecko" data-i="${i}" ${S.coins < o.price || S.geckos.length >= S.cases ? 'disabled' : ''}>${o.price} コインでおむかえ</button>
         </div></div>`;
     }).join('');

@@ -1,10 +1,12 @@
 /* レオパといっしょ — 3D 表示（Three.js r128）
  *
  * レオパの体は「頭〜しっぽまで 1 枚つながりのメッシュ」を断面の輪郭から作り、
- * 背骨のボーンで曲げる（SkinnedMesh）。脚・目・まぶた・舌はボーンにぶら下げる。
+ * 目のくぼみ・まぶた・口の溝などを頭の面に彫りこんで、背骨のボーンで曲げる（SkinnedMesh）。
+ * 目玉・まぶた・脚・舌はボーンにぶら下げる。
  * 模様・おなか・唇・突起（ぶつぶつ）は、体の UV に合わせてキャンバスに描く。
+ * 模様の置き方は個体ごとの seed、斑点の量や大きさは見た目の遺伝（poly）で決まる。
  *
- * 座標: レオパは +Z 向き。鼻先 z≈2.27、しっぽの先 z≈-3.36。ケースの床は x: -5〜5, z: -3.75〜3.75。
+ * 座標: レオパは +Z 向き。鼻先 z≈2.26、しっぽの先 z≈-3.36。ケースの床は x: -5〜5, z: -3.75〜3.75。
  */
 (function (root) {
   'use strict';
@@ -38,35 +40,39 @@
   // ======================================================
   // 体の形（断面の輪郭）
   // ======================================================
+  // 実物の比率に合わせる：胴は細長い円柱、幅は頭とほぼ同じ。しっぽは胴と同じくらい長く、付け根から先へまっすぐ細くなる。
   // z, 半幅, 上の厚み, 下の厚み, 中心の高さ, 断面の角ばり具合
   const PROFILE = [
-    [2.22, 0.13, 0.08, 0.07, 0.40, 2.4],
-    [2.14, 0.27, 0.14, 0.11, 0.41, 2.5],
-    [2.00, 0.40, 0.19, 0.14, 0.43, 2.6],
-    [1.82, 0.51, 0.25, 0.17, 0.45, 2.7],
-    [1.62, 0.61, 0.31, 0.2, 0.47, 2.7],
-    [1.42, 0.70, 0.35, 0.22, 0.49, 2.7],
-    [1.24, 0.72, 0.36, 0.24, 0.50, 2.6],
-    [1.08, 0.63, 0.34, 0.25, 0.50, 2.5],
-    [0.92, 0.50, 0.31, 0.26, 0.49, 2.4],
-    [0.74, 0.50, 0.32, 0.27, 0.49, 2.4],
-    [0.50, 0.60, 0.36, 0.29, 0.50, 2.4],
-    [0.20, 0.70, 0.39, 0.31, 0.50, 2.4],
-    [-0.10, 0.74, 0.40, 0.31, 0.49, 2.4],
-    [-0.40, 0.72, 0.38, 0.30, 0.48, 2.4],
-    [-0.68, 0.60, 0.33, 0.27, 0.46, 2.4],
-    [-0.90, 0.48, 0.28, 0.24, 0.40, 2.3],
-    [-1.10, 0.50, 0.29, 0.23, 0.35, 2.3],
-    [-1.40, 0.52, 0.29, 0.22, 0.30, 2.3],
-    [-1.75, 0.46, 0.26, 0.20, 0.25, 2.3],
-    [-2.10, 0.36, 0.21, 0.16, 0.19, 2.2],
-    [-2.45, 0.25, 0.15, 0.12, 0.14, 2.2],
-    [-2.80, 0.15, 0.10, 0.08, 0.10, 2.2],
-    [-3.10, 0.08, 0.055, 0.05, 0.07, 2.2],
+    [2.235, 0.10, 0.07, 0.05, 0.40, 2.4],
+    [2.197, 0.19, 0.13, 0.085, 0.405, 2.5],
+    [2.137, 0.275, 0.18, 0.12, 0.415, 2.6],
+    [2.052, 0.35, 0.215, 0.15, 0.43, 2.7],
+    [1.95, 0.42, 0.24, 0.17, 0.445, 2.8],
+    [1.83, 0.475, 0.255, 0.185, 0.455, 2.9],
+    [1.71, 0.52, 0.26, 0.20, 0.46, 2.9],
+    [1.59, 0.55, 0.265, 0.215, 0.46, 2.8],
+    [1.49, 0.53, 0.26, 0.225, 0.46, 2.7],
+    [1.39, 0.44, 0.25, 0.23, 0.455, 2.5],
+    [1.26, 0.43, 0.25, 0.23, 0.455, 2.4],
+    [1.05, 0.47, 0.26, 0.24, 0.46, 2.4],
+    [0.70, 0.52, 0.28, 0.25, 0.46, 2.4],
+    [0.30, 0.55, 0.29, 0.26, 0.46, 2.4],
+    [-0.10, 0.56, 0.29, 0.26, 0.46, 2.4],
+    [-0.45, 0.54, 0.28, 0.25, 0.45, 2.4],
+    [-0.72, 0.47, 0.26, 0.23, 0.44, 2.4],
+    [-0.90, 0.40, 0.24, 0.21, 0.41, 2.3],
+    [-1.15, 0.38, 0.22, 0.19, 0.37, 2.3],
+    [-1.50, 0.34, 0.20, 0.17, 0.32, 2.3],
+    [-1.90, 0.28, 0.17, 0.14, 0.26, 2.2],
+    [-2.30, 0.21, 0.13, 0.11, 0.20, 2.2],
+    [-2.70, 0.14, 0.09, 0.08, 0.14, 2.2],
+    [-3.05, 0.08, 0.055, 0.05, 0.09, 2.2],
     [-3.30, 0.03, 0.025, 0.02, 0.05, 2.2],
   ];
+
   const Z0 = PROFILE[0][0], Z1 = PROFILE[PROFILE.length - 1][0];
-  const Z_NOSE = 2.265, Z_TAIL = -3.36, LEN = Z_NOSE - Z_TAIL;
+  const Z_NOSE = 2.262, Z_TAIL = -3.36, LEN = Z_NOSE - Z_TAIL;
+  const Z_TAILBASE = -0.92;
 
   function catmull(p0, p1, p2, p3, t) {
     const t2 = t * t, t3 = t2 * t;
@@ -80,6 +86,12 @@
     const t = (b[0] - z) / (b[0] - c[0]);
     const k = n => catmull(a[n], b[n], c[n], d[n], t);
     const p = { w: k(1), ht: k(2), hb: k(3), y: k(4), n: k(5) };
+    // 体を厚く丸く、脚で地面から持ち上げる（しっぽの先に向かって地面に近づく）
+    const body = z > Z_TAILBASE ? 1 : clamp(1 - (Z_TAILBASE - z) / 2.3, 0, 1);
+    const hw = smooth(clamp((z - 1.25) / 0.2, 0, 1));
+    p.ht *= lerp(1.05 + 0.2 * body, 1.3, hw);
+    p.hb *= lerp(1.08 + 0.26 * body, 1.22, hw);
+    p.y += 0.1 * body;
     if (gravid) { const g = Math.exp(-Math.pow((z + 0.1) / 0.45, 2)); p.w *= 1 + 0.13 * g; p.hb *= 1 + 0.14 * g; }
     return p;
   }
@@ -89,14 +101,13 @@
     const e = 2 / (s >= 0 ? p.n : 3.4);
     return [p.w * Math.sign(c) * Math.pow(Math.abs(c), e), p.y + (s >= 0 ? p.ht : p.hb) * Math.sign(s) * Math.pow(Math.abs(s), e)];
   }
-  function surf(z, th, gravid) { const [x, y] = section(profileAt(z, gravid), th); return V(x, y, z); }
+  function surf(z, th) { const [x, y] = section(profileAt(z), th); return V(x, y, z); }
   function surfNormal(z, th) {
     const e = 0.01;
     const a = surf(z, th + e).sub(surf(z, th - e));
     const b = surf(z - e, th).sub(surf(z + e, th));
     const n = new T.Vector3().crossVectors(a, b).normalize();
-    const p = surf(z, th);
-    if (n.dot(p.clone().sub(V(0, profileAt(z).y, z))) < 0) n.negate();
+    if (n.dot(surf(z, th).sub(V(0, profileAt(z).y, z))) < 0) n.negate();
     return n;
   }
   const thToU = th => { let u = (th - 1.5 * Math.PI) / (2 * Math.PI); return u - Math.floor(u); };
@@ -105,17 +116,80 @@
     const p = profileAt(z), h = (p.ht + p.hb) / 2;
     return Math.PI * (3 * (p.w + h) - Math.sqrt((3 * p.w + h) * (p.w + 3 * h)));
   }
-  // 口のライン（右側）。前は低く、うしろで少し上がる＝にっこり
-  const MOUTH_BACK = 1.2;
-  const mouthTh = z => { const t = clamp((2.235 - z) / (2.235 - MOUTH_BACK), 0, 1); return -0.44 + 0.32 * t + 0.12 * t * t; };
+  // 口のライン（右側）。鼻先から目のうしろまで長く、うしろで少し上がる
+  const MOUTH_FRONT = 2.225, MOUTH_BACK = 1.55;
+  const mouthTh = z => { const t = clamp((MOUTH_FRONT - z) / (MOUTH_FRONT - MOUTH_BACK), 0, 1); return -0.34 + 0.24 * t + 0.14 * t * t; };
+
+  // ---------- 顔のパーツの位置
+  const EYE = { z: 1.865, th: 0.6, r: 0.152, depth: 0.05, a: 0.138, b: 0.12 };
+  function eyeFrame(side) {
+    const th = side > 0 ? EYE.th : Math.PI - EYE.th;
+    const S = surf(EYE.z, th);
+    const n = surfNormal(EYE.z, th).add(V(0, 0.05, 0.28)).normalize();
+    const e1 = new T.Vector3().crossVectors(V(0, 1, 0), n).normalize();
+    const e2 = new T.Vector3().crossVectors(n, e1).normalize();
+    return { side, S, n, e1, e2, C: S.clone().addScaledVector(n, -EYE.depth) };
+  }
+  const EYES = [eyeFrame(1), eyeFrame(-1)];
+  const EARS = [1, -1].map(side => { const th = side > 0 ? 0.1 : Math.PI - 0.1; return { side, p: surf(1.47, th), n: surfNormal(1.47, th) }; });
+  const NOSTRILS = [1, -1].map(side => { const th = side > 0 ? 1.0 : Math.PI - 1.0; return { side, p: surf(2.185, th), n: surfNormal(2.185, th) }; });
+
+  /* 頭の面を彫る：目のくぼみ・まぶたのふち・眉・口の溝とくちびる・ほほ・鼻・耳 */
+  const _q = new T.Vector3();
+  function sculpt(v, z, th, p) {
+    if (z < 1.3) {
+      // しっぽの節（輪状のくびれ）と、わき腹のゆるいひだ
+      let out = 0;
+      if (z < Z_TAILBASE - 0.05) out -= 0.012 * Math.pow(Math.max(0, Math.cos((z - Z_TAILBASE) / 0.09 * Math.PI)), 6) * clamp(p.w / 0.4, 0.3, 1);
+      else if (z < 1.0 && z > -0.7) out -= 0.006 * Math.exp(-Math.pow((Math.sin(th) + 0.25) / 0.12, 2)) * (0.5 + 0.5 * Math.sin(z * 22));
+      if (out) {
+        const rx = v.x, ry = v.y - p.y, rl = Math.hypot(rx, ry) || 1;
+        v.x += rx / rl * out;
+        v.y += ry / rl * out;
+      }
+      return;
+    }
+    const rx = v.x, ry = v.y - p.y;
+    const rl = Math.hypot(rx, ry) || 1;
+    let out = 0;
+    // 口の溝と、上下のくちびる（大きめのうろこの列）
+    if (z > MOUTH_BACK - 0.08) {
+      const side = Math.cos(th) >= 0 ? 1 : -1;
+      const thm = side > 0 ? mouthTh(z) : Math.PI - mouthTh(z);
+      const dth = ((th - thm + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      const d = dth * side * rl;
+      const fade = smooth(clamp((z - (MOUTH_BACK - 0.08)) / 0.12, 0, 1));
+      out += fade * (-0.016 * Math.exp(-Math.pow(d / 0.011, 2)) + 0.01 * Math.exp(-Math.pow((d - 0.03) / 0.022, 2)) + 0.005 * Math.exp(-Math.pow((d + 0.03) / 0.02, 2)));
+    }
+    // あごの筋肉でふくらんだほほ
+    out += 0.03 * Math.exp(-Math.pow((z - 1.6) / 0.12, 2)) * Math.exp(-Math.pow((Math.sin(th) + 0.12) / 0.35, 2)) * Math.abs(Math.cos(th));
+    // 鼻先の上はほんの少し平らに
+    out -= 0.01 * Math.exp(-Math.pow((z - 2.05) / 0.12, 2)) * Math.max(0, Math.sin(th));
+    v.x += rx / rl * out;
+    v.y += ry / rl * out;
+    for (const s of NOSTRILS) v.addScaledVector(s.n, 0.013 * Math.exp(-Math.pow(v.distanceTo(s.p) / 0.028, 2)));
+    for (const s of EARS) v.addScaledVector(s.n, -0.035 * Math.exp(-Math.pow(v.distanceTo(s.p) / 0.05, 2)));
+    // 目
+    for (const E of EYES) {
+      if (v.x * E.side < 0.05) continue;
+      _q.copy(v).sub(E.S);
+      if (_q.lengthSq() > 0.25) continue;
+      const l1 = _q.dot(E.e1), l2 = _q.dot(E.e2);
+      const rho = Math.hypot(l1 / EYE.a, l2 / EYE.b);
+      let push = 0.032 * Math.exp(-Math.pow((rho - 1.1) / 0.17, 2));
+      if (l2 > 0) push += 0.03 * Math.exp(-Math.pow((rho - 1.5) / 0.38, 2)) * (l2 / (Math.hypot(l1, l2) || 1));
+      if (rho < 1) push -= 0.1 * smooth(clamp((1 - rho) / 0.14, 0, 1));
+      v.addScaledVector(E.n, push);
+    }
+  }
 
   // ======================================================
   // ボーン
   // ======================================================
   const BONES = [
-    ['mid', 0.05, null], ['chest', 0.45, 'mid'], ['neck', 0.78, 'chest'], ['head', 1.08, 'neck'],
-    ['hip', -0.55, 'mid'], ['t1', -1.0, 'hip'], ['t2', -1.45, 't1'], ['t3', -1.9, 't2'],
-    ['t4', -2.35, 't3'], ['t5', -2.8, 't4'], ['t6', -3.15, 't5'],
+    ['mid', 0.05, null], ['chest', 0.75, 'mid'], ['neck', 1.18, 'chest'], ['head', 1.4, 'neck'],
+    ['hip', -0.6, 'mid'], ['t1', -1.05, 'hip'], ['t2', -1.5, 't1'], ['t3', -1.95, 't2'],
+    ['t4', -2.4, 't3'], ['t5', -2.82, 't4'], ['t6', -3.15, 't5'],
   ];
   const BONE_ORDER = BONES.map((b, i) => ({ i, z: b[1] })).sort((a, b) => b.z - a.z);
   function boneWorld(name) { const b = BONES.find(x => x[0] === name); return V(0, profileAt(b[1]).y, b[1]); }
@@ -132,26 +206,38 @@
     return [0, 0, 1, 0];
   }
 
-  function bodyGeometry(gravid) {
-    const N = 150, M = 44;
+  // 頭は細かく、しっぽは粗く輪切りにする
+  function zSamples(fine) {
+    const zs = [];
+    for (let z = Z0; z > Z1; z -= z > 1.3 ? (fine ? 0.0075 : 0.012) : z > Z_TAILBASE ? 0.022 : 0.03) zs.push(z);
+    zs.push(Z1);
+    return zs;
+  }
+  function bodyGeometry(gravid, fine) {
+    const zs = zSamples(fine);
+    const N = zs.length, M = fine ? 136 : 96;
     const pos = [], uv = [], si = [], sw = [], idx = [];
-    const push = (x, y, z, u, v) => {
-      pos.push(x, y, z); uv.push(u, v);
-      const w = weightsAt(z);
+    const v = new T.Vector3();
+    const push = (x, y, z, u, vv, wz) => {
+      pos.push(x, y, z); uv.push(u, vv);
+      const w = weightsAt(wz);
       si.push(w[0], w[1], 0, 0); sw.push(w[2], w[3], 0, 0);
     };
     for (let i = 0; i < N; i++) {
-      const z = Z0 + (Z1 - Z0) * i / (N - 1);
+      const z = zs[i];
       const p = profileAt(z, gravid);
       for (let j = 0; j <= M; j++) {
         const u = j / M;
-        const [x, y] = section(p, 1.5 * Math.PI + u * 2 * Math.PI);
-        push(x, y, z, u, zToV(z));
+        const th = 1.5 * Math.PI + u * 2 * Math.PI;
+        const [x, y] = section(p, th);
+        v.set(x, y, z);
+        sculpt(v, z, th, p);
+        push(v.x, v.y, v.z, u, zToV(z), z);
       }
     }
     const nose = N * (M + 1), tail = nose + 1;
-    push(0, profileAt(Z0).y - 0.01, Z_NOSE, 0.5, 0);
-    push(0, profileAt(Z1).y, Z_TAIL, 0.5, 1);
+    push(0, profileAt(Z0).y - 0.01, Z_NOSE, 0.5, 0, Z0);
+    push(0, profileAt(Z1).y, Z_TAIL, 0.5, 1, Z1);
     for (let i = 0; i < N - 1; i++) {
       for (let j = 0; j < M; j++) {
         const a = i * (M + 1) + j, b = a + M + 1, c = b + 1, d = a + 1;
@@ -193,105 +279,204 @@
     if (opts && opts.repeat) { t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(opts.repeat, opts.repeat); }
     return t;
   }
+  const DEFAULT_POLY = { spots: 60, blotch: 45, head: 60, carrot: 5, lav: 20, aberrant: 18 };
+  const rgba = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
 
-  /* 体の色と模様。横 = 胴まわり（0 と 1 がおなか、0.5 が背中）、縦 = 鼻先→しっぽの先 */
+  /* 体の色と模様。横 = 胴まわり（0 と 1 がおなか、0.5 が背中）、縦 = 鼻先→しっぽの先
+   * 模様の置き方は個体ごとの seed、量や大きさは見た目の遺伝（poly）で決まる。 */
   function skinCanvas(pal, look, W, H) {
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const ctx = c.getContext('2d');
     const r = prng((look.seed || 1) * 7 + 3);
     const st = look.stage;
+    const poly = Object.assign({}, DEFAULT_POLY, look.poly || {});
+    const scale = W / 1024;
     const belly = A.mix(pal.base, '#FFF9EF', 0.74);
+    const lavCol = '#A898B8';
 
     const around = (cols) => {
       const g = ctx.createLinearGradient(0, 0, W, 0);
       [[0, cols[0]], [0.12, cols[0]], [0.27, cols[1]], [0.5, cols[2]], [0.73, cols[1]], [0.88, cols[0]], [1, cols[0]]].forEach(([p, col]) => g.addColorStop(p, col));
       return g;
     };
-    ctx.fillStyle = around([belly, pal.base, A.mix(pal.base, '#7A4A08', 0.1)]);
-    ctx.fillRect(0, 0, W, H);
-    // しっぽは色が少しちがう
-    const tailCol = st === 'baby' ? A.mix(pal.tail, '#FFFFFF', 0.35) : pal.tail;
-    const tailFill = around([A.mix(tailCol, '#FFFFFF', 0.6), tailCol, A.mix(tailCol, '#6E6070', 0.08)]);
-    const vA = zToV(-0.8), vB = zToV(-1.25);
-    for (let y = Math.floor(vA * H); y < H; y += 2) {
-      ctx.globalAlpha = smooth(clamp((y / H - vA) / (vB - vA), 0, 1));
-      ctx.fillStyle = tailFill;
-      ctx.fillRect(0, y, W, 2);
-    }
-    ctx.globalAlpha = 1;
-    // 頭の上はほんの少し明るく
-    const hg = ctx.createLinearGradient(0, 0, 0, zToV(0.9) * H);
-    hg.addColorStop(0, 'rgba(255,248,225,0.18)');
-    hg.addColorStop(1, 'rgba(255,248,225,0)');
-    ctx.fillStyle = hg;
-    ctx.fillRect(0, 0, W, zToV(0.9) * H);
-
+    const X = u => u * W, Y = z => zToV(z) * H;
     // 世界の長さ rw の丸を、その位置の太さに合わせて描く
-    const blob = (u, z, rw, col, alpha, rot) => {
+    const blob = (u, z, rw, col, alpha, rot, stretch) => {
       const C = Math.max(0.35, circumference(z));
       ctx.globalAlpha = alpha;
       ctx.fillStyle = col;
       ctx.beginPath();
-      ctx.ellipse(u * W, zToV(z) * H, rw / C * W, rw / LEN * H, rot || 0, 0, Math.PI * 2);
+      ctx.ellipse(X(u), Y(z), rw / C * W * (stretch || 1), rw / LEN * H, rot || 0, 0, Math.PI * 2);
       ctx.fill();
     };
-    const bandPath = (z0, z1, col, alpha) => {
-      const y0 = zToV(z0) * H, y1 = zToV(z1) * H;
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = col;
-      ctx.beginPath();
-      ctx.moveTo(0, y0);
-      for (let x = 0; x <= W; x += W / 24) ctx.lineTo(x, y0 + (r() - 0.5) * (y1 - y0) * 0.35);
-      for (let x = W; x >= 0; x -= W / 24) ctx.lineTo(x, y1 + (r() - 0.5) * (y1 - y0) * 0.35);
-      ctx.closePath();
-      ctx.fill();
+    const vertFade = (z0, z1, fill) => {
+      const y0 = Y(z0), y1 = Y(z1);
+      for (let y = Math.floor(y0); y < H; y += 2) {
+        ctx.globalAlpha = smooth(clamp((y - y0) / (y1 - y0), 0, 1));
+        ctx.fillStyle = fill;
+        ctx.fillRect(0, y, W, 2);
+      }
+      ctx.globalAlpha = 1;
     };
 
+    // ---- 地の色（背中は少し濃く、横は明るく、おなかは白）
+    ctx.fillStyle = around([belly, pal.base, A.mix(pal.base, '#7A4A08', 0.1)]);
+    ctx.fillRect(0, 0, W, H);
+    const tailCol = A.mix(st === 'baby' ? A.mix(pal.tail, '#FFFFFF', 0.35) : A.mix(pal.base, '#8A8790', 0.4), lavCol, poly.lav / 100 * 0.45);
+    vertFade(-0.8, -1.25, around([A.mix(tailCol, '#FFFFFF', 0.6), tailCol, A.mix(tailCol, '#6E6070', 0.08)]));
+    // キャロットテール：しっぽの付け根からオレンジ
+    if (poly.carrot > 8) {
+      const len = 0.25 + poly.carrot / 100 * 1.7;
+      const a = Math.min(1, poly.carrot / 45);
+      const cg = ctx.createLinearGradient(0, Y(Z_TAILBASE + 0.1), 0, Y(Z_TAILBASE - len));
+      const orange = A.mix('#F07A1E', pal.base, 0.15);
+      cg.addColorStop(0, rgba(orange, 0));
+      cg.addColorStop(0.12, rgba(orange, 0.95 * a));
+      cg.addColorStop(0.7, rgba(orange, 0.75 * a));
+      cg.addColorStop(1, rgba(orange, 0));
+      ctx.fillStyle = cg;
+      ctx.fillRect(0, Y(Z_TAILBASE + 0.1), W, Y(Z_TAILBASE - len) - Y(Z_TAILBASE + 0.1));
+    }
+    // 頭の上はほんの少し明るく
+    const hg = ctx.createLinearGradient(0, 0, 0, Y(1.1));
+    hg.addColorStop(0, 'rgba(255,248,225,0.16)');
+    hg.addColorStop(1, 'rgba(255,248,225,0)');
+    ctx.fillStyle = hg;
+    ctx.fillRect(0, 0, W, Y(1.1));
+
+    // ---- しま模様（ベビー）と、おとなに残るうすい帯
+    const bandZ = [];
+    {
+      let z = 1.33 - r() * 0.08;
+      const widths = [0.3, 0.36, 0.36, 0.3, 0.28, 0.24, 0.2, 0.18];
+      for (let i = 0; i < widths.length && z > -3.3; i++) {
+        const w = widths[i] * (0.8 + r() * 0.4);
+        bandZ.push([z, z - w]);
+        z -= w + (0.28 + r() * 0.16) * (z > Z_TAILBASE ? 1.25 : 0.95);
+      }
+    }
+    const band = (z0, z1, col, alpha, broken) => {
+      const y0 = Y(z0), y1 = Y(z1), hgt = y1 - y0;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = col;
+      const segs = broken ? 3 + Math.floor(r() * 3) : 1;
+      for (let s = 0; s < segs; s++) {
+        const ua = broken ? r() : 0, ub = broken ? ua + 0.15 + r() * 0.25 : 1;
+        const off = broken ? (r() - 0.5) * hgt : 0;
+        ctx.beginPath();
+        ctx.moveTo(X(ua), y0 + off);
+        for (let u = ua; u <= ub + 1e-6; u += 1 / 24) ctx.lineTo(X(u), y0 + off + (r() - 0.5) * hgt * 0.4);
+        for (let u = ub; u >= ua - 1e-6; u -= 1 / 24) ctx.lineTo(X(u), y1 + off + (r() - 0.5) * hgt * 0.4);
+        ctx.closePath();
+        ctx.fill();
+      }
+    };
+    const jungle = poly.aberrant >= 60, stripe = poly.aberrant >= 82;
     if (pal.pattern) {
-      // ベビーのしま模様（大きくなると斑点に変わる）
       const bandA = st === 'baby' ? 0.95 : st === 'young' ? 0.42 : 0;
       if (bandA > 0) {
-        for (const [z0, z1] of [[0.98, 0.64], [0.28, -0.1], [-0.44, -0.8], [-1.2, -1.5], [-1.8, -2.08], [-2.34, -2.56], [-2.8, -2.98], [-3.14, -3.36]]) {
-          bandPath(z0, z1, pal.spot, bandA);
+        if (stripe && st === 'baby') {
+          // ストライプのベビーは、背中の両わきに太いすじ
+          for (const u of [0.4, 0.6]) {
+            ctx.globalAlpha = bandA;
+            ctx.fillStyle = pal.spot;
+            ctx.beginPath();
+            for (let z = 1.25; z > -3.2; z -= 0.05) ctx.lineTo(X(u + (r() - 0.5) * 0.02 - 0.035), Y(z));
+            for (let z = -3.2; z < 1.25; z += 0.05) ctx.lineTo(X(u + (r() - 0.5) * 0.02 + 0.035), Y(z));
+            ctx.fill();
+          }
+        } else {
+          for (const [z0, z1] of bandZ) band(z0, z1, pal.spot, bandA, jungle);
         }
       }
-      // おとなのしっぽの白っぽい帯
+      // おとなに残る、ラベンダーがかった帯
       if (st !== 'baby') {
-        for (const z of [-1.3, -1.82, -2.3, -2.74, -3.1]) bandPath(z + 0.08, z - 0.08, A.mix(tailCol, '#FFFFFF', 0.5), 0.35);
+        const la = 0.12 + poly.lav / 100 * 0.45;
+        for (const [z0, z1] of bandZ) band(z0 + 0.03, z1 - 0.03, A.mix(pal.base, lavCol, 0.75), la * (z1 > Z_TAILBASE ? 1 : 0.8), jungle);
       }
-      // ヒョウ柄
-      const spotA = st === 'baby' ? 0 : st === 'young' ? 0.72 : 1;
-      if (spotA > 0) {
-        const n = Math.round((look.genes.snow === 2 ? 420 : 330) * (W / 1024));
-        for (let i = 0; i < n; i++) {
-          const z = 2.05 - r() * 5.2;
-          const u = 0.5 + (r() + r() - 1) * 0.36;
-          const isHead = z > 1.0;
-          const C = circumference(z);
-          let rw = (isHead ? 0.018 + r() * 0.03 : 0.03 + r() * 0.055) * clamp(C / 3.2, 0.4, 1);
-          if (look.genes.snow === 2) rw *= 1.15;
-          const parts = 1 + Math.floor(r() * 3);
-          for (let k = 0; k < parts; k++) {
-            const du = (r() - 0.5) * rw * 1.4 / Math.max(0.35, C), dz = (r() - 0.5) * rw * 1.4;
-            blob(u + du, z + dz, rw * (0.6 + r() * 0.5), pal.spot, spotA * (pal.spot === '#A0704A' ? 0.85 : 0.95), r() * 3);
+    } else if (poly.lav > 30) {
+      ctx.globalAlpha = poly.lav / 100 * 0.35;
+      ctx.fillStyle = around([rgba(lavCol, 0), rgba(lavCol, 0.7), rgba(lavCol, 0.4)]);
+      ctx.fillRect(0, Y(1.1), W, H - Y(1.1));
+    }
+
+    // ---- ヒョウ柄
+    const spotA = !pal.pattern ? 0 : st === 'baby' ? 0 : st === 'young' ? 0.72 : 1;
+    if (spotA > 0) {
+      const sizeMul = 0.55 + poly.blotch / 100 * 0.85;
+      const parts = 1 + Math.floor(poly.blotch / 50);
+      const alpha = spotA * (pal.spot === '#A0704A' ? 0.85 : 0.95);
+      const drawSpot = (u, z, rw) => {
+        if (jungle && !stripe && r() < 0.6) {
+          // ジャングル：斑点が不規則につながる
+          blob(u, z, rw * 0.9, pal.spot, alpha, r() * Math.PI, 2.4 + r() * 1.5);
+          return;
+        }
+        const C = Math.max(0.35, circumference(z));
+        for (let k = 0; k < parts; k++) {
+          const du = (r() - 0.5) * rw * 1.5 / C, dz = (r() - 0.5) * rw * 1.5;
+          blob(u + du, z + dz, rw * (0.55 + r() * 0.5), pal.spot, alpha, r() * 3);
+        }
+      };
+      const bodyN = poly.spots < 8 ? 0 : Math.round(330 * Math.pow(poly.spots / 60, 1.35) * scale);
+      for (let i = 0; i < bodyN; i++) {
+        const z = 1.25 - r() * (1.25 - Z_TAILBASE);
+        let u = 0.5 + (r() + r() - 1) * 0.36;
+        if (stripe) u = (r() < 0.5 ? 0.42 : 0.58) + (r() - 0.5) * 0.05;
+        drawSpot(u, z, (0.03 + r() * 0.045) * sizeMul);
+      }
+      // おとなのしっぽには黒い横帯（斑点が帯状に並ぶ）
+      if (!jungle && !stripe) {
+        const barN = Math.round(4 + poly.spots / 25);
+        for (let k = 0; k < barN; k++) {
+          const zc = Z_TAILBASE - 0.25 - k * (2.2 / barN);
+          const C = circumference(zc);
+          for (let i = 0; i < 16 * scale * (0.4 + poly.spots / 100); i++) {
+            drawSpot(0.5 + (r() - 0.5) * 0.7, zc + (r() - 0.5) * 0.12, (0.03 + r() * 0.03) * sizeMul * clamp(C / 2.2, 0.4, 1));
           }
         }
+      }
+      // しっぽの斑点は、ハイポでも少し残る
+      const tailN = Math.round(120 * (0.3 + 0.7 * poly.spots / 100) * scale);
+      for (let i = 0; i < tailN; i++) {
+        const z = Z_TAILBASE - r() * 2.3;
+        const u = 0.5 + (r() + r() - 1) * 0.4;
+        drawSpot(u, z, (0.025 + r() * 0.04) * sizeMul * clamp(circumference(z) / 2.8, 0.4, 1));
+      }
+      // 頭の斑点（少ないとボールディ）
+      const headN = poly.head < 10 ? 0 : Math.round(80 * Math.pow(poly.head / 60, 1.2) * scale);
+      for (let i = 0; i < headN; i++) {
+        const z = 1.3 + r() * 0.82;
+        const u = 0.5 + (r() + r() - 1) * 0.3;
+        blob(u, z, (0.01 + r() * 0.018) * (0.7 + poly.blotch / 250), pal.spot, alpha, r() * 3);
       }
     }
     // 抱卵中はおなかの横に卵が透ける
     if (look.gravid) {
       for (const u of [0.13, 0.87]) for (const z of [0.15, -0.3]) blob(u, z, 0.16, '#FFE9DC', 0.45);
     }
-    // おなかは白く（模様も薄く）
+    // ---- おなかは白く
     const bg = ctx.createLinearGradient(0, 0, W, 0);
-    const bc = a => { const n = parseInt(belly.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
-    [[0, 0.95], [0.1, 0.85], [0.2, 0], [0.8, 0], [0.9, 0.85], [1, 0.95]].forEach(([p, a]) => bg.addColorStop(p, bc(a)));
+    [[0, 0.95], [0.1, 0.85], [0.2, 0], [0.8, 0], [0.9, 0.85], [1, 0.95]].forEach(([p, a]) => bg.addColorStop(p, rgba(belly, a)));
     ctx.globalAlpha = 1;
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
 
-    // くちびると口のライン
+    // ---- 目のまわり：まぶたは明るく、ふちに細い線
+    for (const E of EYES) {
+      const th = E.side > 0 ? EYE.th : Math.PI - EYE.th;
+      const C = circumference(EYE.z);
+      const cx = X(thToU(th)), cy = Y(EYE.z);
+      const rx = EYE.b / C * W, ry = EYE.a / LEN * H;
+      const ring = (k, col, a) => { ctx.globalAlpha = a; ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(cx, cy, rx * k, ry * k, 0, 0, Math.PI * 2); ctx.fill(); };
+      ring(1.5, A.mix(pal.base, '#FFF8EA', 0.12), 0.9);
+      ring(1.28, A.mix(pal.base, '#FFF8EA', 0.42), 0.95);
+      ring(1.08, A.mix(pal.spot, pal.base, 0.35), 0.8);
+      ring(0.98, '#3A2E26', 1);
+    }
+
+    // ---- くちびると口のライン
     const lineAlong = (thOffset, width, col, alpha) => {
       ctx.globalAlpha = alpha;
       ctx.strokeStyle = col;
@@ -299,11 +484,10 @@
       for (const side of [1, -1]) {
         const at = z => {
           const th = mouthTh(z) + thOffset;
-          return [thToU(side > 0 ? th : Math.PI - th) * W, zToV(z) * H];
+          return [X(thToU(side > 0 ? th : Math.PI - th)), Y(z)];
         };
-        // 区間ごとに、その場所の太さに合わせた線幅で描く
-        for (let z = MOUTH_BACK; z < 2.235; z += 0.01) {
-          const [x0, y0] = at(z), [x1, y1] = at(Math.min(2.235, z + 0.01));
+        for (let z = MOUTH_BACK; z < MOUTH_FRONT; z += 0.008) {
+          const [x0, y0] = at(z), [x1, y1] = at(Math.min(MOUTH_FRONT, z + 0.008));
           ctx.lineWidth = width / Math.max(0.35, circumference(z)) * W;
           ctx.beginPath();
           ctx.moveTo(x0, y0);
@@ -311,21 +495,22 @@
           ctx.stroke();
         }
         // 鼻先の下を回って反対側へ（横向きの線なので、縦方向の密度で太さを決める）
-        const [xe, ye] = at(2.235);
+        const [xe, ye] = at(MOUTH_FRONT);
         ctx.lineWidth = width * H / LEN;
         ctx.beginPath();
         ctx.moveTo(xe, ye);
-        ctx.lineTo((side > 0 ? 0 : 1) * W, zToV(2.245) * H);
+        ctx.lineTo((side > 0 ? 0 : 1) * W, Y(2.24));
         ctx.stroke();
       }
     };
-    lineAlong(0.09, 0.04, A.mix(pal.base, '#FFFDF6', 0.6), 0.7);
-    lineAlong(0, 0.02, '#2A1F18', 0.9);
+    lineAlong(0.07, 0.05, A.mix(pal.base, '#FFFDF6', 0.5), 0.75);
+    lineAlong(-0.07, 0.04, A.mix(pal.base, '#FFFDF6', 0.65), 0.6);
+    lineAlong(0, 0.014, '#2A1F18', 0.85);
     ctx.globalAlpha = 1;
     return c;
   }
 
-  // 突起（ぶつぶつ）の凹凸。全個体で共通
+  // 突起（ぶつぶつ）とうろこの凹凸。全個体で共通
   const bumpCache = {};
   function bumpTexture(W, H) {
     const key = W + 'x' + H;
@@ -336,10 +521,11 @@
     ctx.fillStyle = '#808080';
     ctx.fillRect(0, 0, W, H);
     const r = prng(99);
-    const dot = (u, z, rw, a) => {
+    const X = u => u * W, Y = z => zToV(z) * H;
+    const dot = (u, z, rw, a, stretch) => {
       const C = Math.max(0.35, circumference(z));
-      const rx = rw / C * W, ry = rw / LEN * H;
-      const x = u * W, y = zToV(z) * H;
+      const rx = rw / C * W * (stretch || 1), ry = rw / LEN * H;
+      const x = X(u), y = Y(z);
       const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(rx, ry));
       g.addColorStop(0, `rgba(255,255,255,${a})`);
       g.addColorStop(1, 'rgba(255,255,255,0)');
@@ -349,18 +535,40 @@
       ctx.fill();
     };
     const scale = W / 1024;
-    // こまかいうろこ
-    for (let i = 0; i < 9000 * scale; i++) dot(r(), 2.2 - r() * 5.5, 0.011 + r() * 0.008, 0.35);
-    // 背中と横の大きめの突起
-    for (let i = 0; i < 2600 * scale; i++) {
-      const z = 1.9 - r() * 5.1;
-      dot(0.5 + (r() + r() - 1) * 0.42, z, (0.02 + r() * 0.016) * clamp(circumference(z) / 3, 0.45, 1), 0.85);
+    // 体のこまかいうろこ
+    for (let i = 0; i < 8000 * scale; i++) dot(r(), 1.2 - r() * 4.5, 0.011 + r() * 0.008, 0.35);
+    // 頭はさらにこまかい粒
+    for (let i = 0; i < 9000 * scale; i++) dot(r(), 1.15 + r() * 1.1, 0.006 + r() * 0.005, 0.4);
+    // 背中と横の大きめの突起（頭はうしろ半分だけ）
+    for (let i = 0; i < 2400 * scale; i++) {
+      const z = 1.55 - r() * 4.7;
+      const k = z > 1.2 ? 0.55 : 1;
+      dot(0.5 + (r() + r() - 1) * 0.42, z, (0.02 + r() * 0.016) * k * clamp(circumference(z) / 3, 0.45, 1), 0.85);
+    }
+    // くちびるの大きなうろこ（上あごと下あごに一列ずつ）
+    for (const side of [1, -1]) {
+      for (const [off, count] of [[0.045, 13], [-0.04, 11]]) {
+        for (let k = 0; k < count; k++) {
+          const z = MOUTH_BACK + 0.04 + (MOUTH_FRONT - MOUTH_BACK - 0.06) * (k + 0.5) / count;
+          const p = profileAt(z);
+          const th = mouthTh(z) + off / Math.max(0.2, p.w);
+          dot(thToU(side > 0 ? th : Math.PI - th), z, 0.03, 0.75, 0.5);
+        }
+      }
     }
     // おなかはなめらかに
     const g = ctx.createLinearGradient(0, 0, W, 0);
     [[0, 0.8], [0.14, 0.55], [0.24, 0], [0.76, 0], [0.86, 0.55], [1, 0.8]].forEach(([p, a]) => g.addColorStop(p, `rgba(128,128,128,${a})`));
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
+    // 鼻先・しっぽの先は輪切りが細く集まるので、凹凸を消す
+    for (const [z0, z1] of [[Z_NOSE, 2.17], [Z_TAIL, -3.2]]) {
+      const tg = ctx.createLinearGradient(0, Y(z0), 0, Y(z1));
+      tg.addColorStop(0, 'rgba(128,128,128,1)');
+      tg.addColorStop(1, 'rgba(128,128,128,0)');
+      ctx.fillStyle = tg;
+      ctx.fillRect(0, Math.min(Y(z0), Y(z1)), W, Math.abs(Y(z1) - Y(z0)));
+    }
     bumpCache[key] = canvasTexture(c);
     return bumpCache[key];
   }
@@ -370,13 +578,15 @@
     const ctx = c.getContext('2d');
     ctx.fillStyle = col;
     ctx.fillRect(0, 0, 128, 128);
-    if (pal.pattern && look.stage !== 'baby') {
+    const poly = Object.assign({}, DEFAULT_POLY, look.poly || {});
+    if (pal.pattern && look.stage !== 'baby' && poly.spots >= 8) {
       const r = prng((look.seed || 1) + 41);
       ctx.fillStyle = pal.spot;
       ctx.globalAlpha = look.stage === 'young' ? 0.6 : 0.85;
-      for (let i = 0; i < 9; i++) {
+      const n = Math.round(9 * poly.spots / 60);
+      for (let i = 0; i < n; i++) {
         ctx.beginPath();
-        ctx.arc(r() * 128, r() * 128, 3 + r() * 5, 0, Math.PI * 2);
+        ctx.arc(r() * 128, r() * 128, (2.5 + r() * 4) * (0.6 + poly.blotch / 100), 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -403,62 +613,90 @@
     return granuleTex;
   }
 
-  /* 目の模様。球の正面（+Z）が中心。レオパの虹彩は網目模様、瞳は縦長でふちがギザギザ */
-  function irisCanvas(pal, dilated) {
-    const W = 512, H = 256, cx = W / 2, cy = H / 2;
+  /* 目の模様。球の正面（+Z）が中心、上が +Y。
+   * レオパの虹彩は銀灰色に黒い網目。瞳は縦長でふちが波打つ（夜は丸く開く）。 */
+  function irisCanvas(pal, dilated, seed) {
+    const W = 1024, H = 512, cx = W / 2, cy = H / 2;
+    const R = 175; // 見えている虹彩の半径（px）
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const ctx = c.getContext('2d');
-    const r = prng(17);
-    const g = ctx.createRadialGradient(cx, cy, 6, cx, cy, 150);
+    const r = prng(17 + (seed || 0));
+    const g = ctx.createRadialGradient(cx, cy, 8, cx, cy, R * 1.25);
     if (pal.solid) {
-      g.addColorStop(0, A.mix(pal.eye, '#FFFFFF', 0.1));
-      g.addColorStop(0.7, pal.eye);
-      g.addColorStop(1, A.mix(pal.eye, '#000000', 0.5));
+      g.addColorStop(0, A.mix(pal.eye, '#FFFFFF', 0.08));
+      g.addColorStop(0.75, pal.eye);
+      g.addColorStop(1, A.mix(pal.eye, '#000000', 0.4));
     } else {
-      g.addColorStop(0, A.mix(pal.eye, '#FFFFFF', 0.32));
-      g.addColorStop(0.4, pal.eye);
-      g.addColorStop(0.8, A.mix(pal.eye, '#000000', 0.2));
-      g.addColorStop(1, A.mix(pal.eye, '#000000', 0.35));
+      g.addColorStop(0, A.mix(pal.eye, '#FFF4D8', 0.45));
+      g.addColorStop(0.3, A.mix(pal.eye, '#FFFFFF', 0.28));
+      g.addColorStop(0.7, pal.eye);
+      g.addColorStop(1, A.mix(pal.eye, '#000000', 0.3));
     }
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
-    // 網目
-    ctx.strokeStyle = pal.solid ? 'rgba(255,255,255,.05)' : A.mix(pal.eye, '#000000', 0.55);
-    ctx.lineWidth = 1.8;
-    ctx.globalAlpha = pal.solid ? 1 : 0.6;
-    for (let i = 0; i < 200; i++) {
-      let a = r() * Math.PI * 2, d = 16 + r() * 110;
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.95);
-      for (let k = 0; k < 4; k++) {
-        a += (r() - 0.5) * 0.5;
-        d += (r() - 0.3) * 14;
-        ctx.lineTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.95);
-      }
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
     if (!pal.solid) {
-      // 瞳孔のまわりの明るい輪
-      ctx.strokeStyle = A.mix(pal.eye, '#FFFFFF', 0.5);
-      ctx.globalAlpha = 0.4;
-      ctx.lineWidth = 5;
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, dilated ? 34 : 14, 74, 0, 0, Math.PI * 2);
-      ctx.stroke();
+      // 放射状の細い筋
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < 360; i++) {
+        const a = r() * Math.PI * 2, d0 = 20 + r() * 40, d1 = d0 + 30 + r() * 120;
+        ctx.strokeStyle = r() < 0.5 ? 'rgba(255,255,255,.14)' : 'rgba(0,0,0,.12)';
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * d0, cy + Math.sin(a) * d0);
+        ctx.lineTo(cx + Math.cos(a) * d1, cy + Math.sin(a) * d1);
+        ctx.stroke();
+      }
+      // 黒い網目（点をつないだ網）
+      const pts = Array.from({ length: 420 }, () => { const a = r() * Math.PI * 2, d = 22 + Math.sqrt(r()) * (R - 10); return [cx + Math.cos(a) * d, cy + Math.sin(a) * d]; });
+      ctx.strokeStyle = A.mix(pal.eye, '#000000', 0.7);
+      ctx.lineCap = 'round';
+      for (const p of pts) {
+        const near = pts.map(q => [q, Math.hypot(q[0] - p[0], q[1] - p[1])]).filter(x => x[1] > 0).sort((a, b) => a[1] - b[1]).slice(0, 2 + Math.floor(r() * 2));
+        for (const [q, d] of near) {
+          if (d > 38) continue;
+          ctx.globalAlpha = 0.3 + r() * 0.35;
+          ctx.lineWidth = 0.9 + r() * 1.6;
+          ctx.beginPath();
+          ctx.moveTo(p[0], p[1]);
+          ctx.quadraticCurveTo((p[0] + q[0]) / 2 + (r() - 0.5) * 12, (p[1] + q[1]) / 2 + (r() - 0.5) * 12, q[0], q[1]);
+          ctx.stroke();
+        }
+      }
       ctx.globalAlpha = 1;
-      // 瞳
+      // ふちの暗い輪
+      const rg = ctx.createRadialGradient(cx, cy, R * 0.82, cx, cy, R * 1.1);
+      rg.addColorStop(0, 'rgba(0,0,0,0)');
+      rg.addColorStop(1, 'rgba(20,16,12,.55)');
+      ctx.fillStyle = rg;
+      ctx.fillRect(0, 0, W, H);
+      // 瞳（ふちが波打つ縦長）
+      const hw = dilated ? 58 : 15, hh = R * 0.93;
+      ctx.fillStyle = A.mix(pal.eye, '#FFE9B0', 0.35);
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, hw + 7, hh + 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
       ctx.fillStyle = pal.pupil;
       ctx.beginPath();
-      const hw = dilated ? 32 : 12, hh = 74;
-      for (let k = 0; k <= 40; k++) {
-        const t = k / 40 * Math.PI * 2;
-        const wav = 1 + 0.18 * Math.sin(t * 9);
-        const x = cx + Math.cos(t) * hw * wav, y = cy + Math.sin(t) * hh;
-        if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      for (let k = 0; k <= 80; k++) {
+        const t = k / 80 * Math.PI * 2;
+        const y = Math.sin(t);
+        const wav = dilated ? 1 : 1 + 0.35 * Math.pow(Math.cos(y * 7.5), 2) - 0.25;
+        const x = cx + Math.cos(t) * hw * wav * Math.pow(1 - y * y, 0.15);
+        if (k === 0) ctx.moveTo(x, cy + y * hh); else ctx.lineTo(x, cy + y * hh);
       }
       ctx.fill();
+    } else {
+      // 真っ黒な目にも、奥にうっすら模様
+      ctx.strokeStyle = 'rgba(255,255,255,.05)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 120; i++) {
+        const a = r() * Math.PI * 2, d = 30 + r() * (R - 30);
+        ctx.beginPath();
+        ctx.arc(cx, cy, d, a, a + 0.3);
+        ctx.stroke();
+      }
     }
     return c;
   }
@@ -472,26 +710,28 @@
     g.translate(0, L / 2, 0);
     return g;
   }
+  function basisQuat(E) {
+    return new T.Quaternion().setFromRotationMatrix(new T.Matrix4().makeBasis(E.e1, E.e2, E.n));
+  }
 
-  /* look: { genes, tang, seed, stage, gravid, shed }  quality: 'high' | 'photo' */
+  /* look: { genes, tang, poly, seed, stage, gravid, shed }  quality: 'high' | 'photo' */
   function buildGecko(look, quality) {
     const pal = A.colors(look.genes, look.tang, look.stage);
     const hi = quality !== 'photo';
-    const W = hi ? 1024 : 512, H = hi ? 1536 : 768;
+    const W = hi ? 1024 : 768, H = hi ? 1536 : 1152;
     const colorTex = canvasTexture(skinCanvas(pal, look, W, H), { srgb: true });
     const owned = [colorTex];
     const shed = !!look.shed;
     const skinMat = phys('#ffffff', {
-      map: colorTex, bumpMap: bumpTexture(W, H), bumpScale: 0.018,
-      roughness: shed ? 0.95 : 0.58, clearcoat: shed ? 0 : 0.18, clearcoatRoughness: 0.55, skinning: true,
+      map: colorTex, bumpMap: bumpTexture(W, H), bumpScale: 0.016,
+      roughness: shed ? 0.95 : 0.55, clearcoat: shed ? 0 : 0.2, clearcoatRoughness: 0.5, skinning: true,
     });
     const limbCol = A.mix(pal.base, '#FFF9EF', 0.06);
     const limbTex = canvasTexture(limbCanvas(pal, look, limbCol), { srgb: true, repeat: 2 });
     owned.push(limbTex);
     const limbMat = phys('#ffffff', { map: limbTex, bumpMap: granules(), bumpScale: 0.01, roughness: 0.6, clearcoat: shed ? 0 : 0.12 });
     const toeMat = phys(A.mix(limbCol, '#FFE8DC', 0.35), { roughness: 0.55 });
-    const lidMat = phys(A.mix(pal.base, '#FFF9EF', 0.04), { roughness: 0.55, bumpMap: granules(), bumpScale: 0.006, side: T.DoubleSide });
-    const rimMat = phys(A.mix(pal.base, '#FFF6E0', 0.15), { roughness: 0.55 });
+    const lidMat = phys(A.mix(pal.base, '#FFF8EA', 0.4), { roughness: 0.6, bumpMap: granules(), bumpScale: 0.008, side: T.DoubleSide });
     if (shed) for (const m of [skinMat, limbMat, lidMat]) { m.emissive = new T.Color('#FFFFFF'); m.emissiveIntensity = 0.22; }
 
     const rootG = new T.Group();
@@ -500,13 +740,12 @@
       const b = new T.Bone();
       b.name = name;
       const w = boneWorld(name);
-      const pw = parent ? boneWorld(parent) : V(0, 0, 0);
-      b.position.copy(w.sub(pw));
+      b.position.copy(w.sub(parent ? boneWorld(parent) : V(0, 0, 0)));
       if (parent) bones[parent].add(b);
       bones[name] = b;
       return b;
     });
-    const mesh = new T.SkinnedMesh(bodyGeometry(!!look.gravid), skinMat);
+    const mesh = new T.SkinnedMesh(bodyGeometry(!!look.gravid, hi), skinMat);
     mesh.add(bones.mid);
     mesh.updateMatrixWorld(true);
     mesh.bind(new T.Skeleton(boneList));
@@ -518,61 +757,54 @@
     const HW = boneWorld('head');
     const toHead = p => p.clone().sub(HW);
 
-    // ---- 目とまぶた
-    const eyeTex = [canvasTexture(irisCanvas(pal, false), { srgb: true }), canvasTexture(irisCanvas(pal, true), { srgb: true })];
+    // ---- 目（頭に彫ったくぼみにはめこむ）とまぶた
+    const eyeTex = [canvasTexture(irisCanvas(pal, false, look.seed % 7), { srgb: true }), canvasTexture(irisCanvas(pal, true, look.seed % 7), { srgb: true })];
     owned.push(...eyeTex);
-    const eyeMat = phys('#ffffff', { map: eyeTex[0], roughness: shed ? 0.5 : 0.12, clearcoat: 1, clearcoatRoughness: shed ? 0.6 : 0.03 });
+    const eyeMat = phys('#ffffff', { map: eyeTex[0], roughness: shed ? 0.5 : 0.1, clearcoat: 1, clearcoatRoughness: shed ? 0.6 : 0.02 });
     if (shed) { eyeMat.emissive = new T.Color('#9FA7B0'); eyeMat.emissiveIntensity = 0.25; }
-    const eyeGeo = new T.SphereGeometry(0.2, 48, 32);
+    const eyeGeo = new T.SphereGeometry(EYE.r, 64, 40);
     eyeGeo.rotateY(-Math.PI / 2);
+    const lidR = EYE.r * 1.03;
     const lids = [];
-    for (const side of [1, -1]) {
-      const th = side > 0 ? 0.55 : Math.PI - 0.55;
-      const p = surf(1.5, th), n = surfNormal(1.5, th);
-      const center = p.clone().sub(n.clone().multiplyScalar(0.1));
-      const dir = n.clone().add(V(0, 0.08, 0.38)).normalize();
+    for (const E of EYES) {
       const eg = new T.Group();
-      eg.position.copy(toHead(center));
-      eg.quaternion.setFromRotationMatrix(new T.Matrix4().lookAt(dir, V(0, 0, 0), V(0, 1, 0)));
+      eg.position.copy(toHead(E.C));
+      eg.quaternion.copy(basisQuat(E));
       bones.head.add(eg);
       eg.add(new T.Mesh(eyeGeo, eyeMat));
-      const mk = (upper) => {
-        const g = new T.Group();
-        const shell = new T.Mesh(new T.SphereGeometry(0.212, 40, 16, 0, Math.PI * 2, upper ? 0 : Math.PI / 2, Math.PI / 2), lidMat);
-        const rim = new T.Mesh(new T.TorusGeometry(0.21, 0.014, 10, 48), rimMat);
-        rim.rotation.x = Math.PI / 2;
-        g.add(shell, rim);
-        eg.add(g);
-        return g;
+      const mk = upper => {
+        const m = new T.Mesh(new T.SphereGeometry(lidR, 48, 16, 0, Math.PI * 2, upper ? 0 : Math.PI / 2, Math.PI / 2), lidMat);
+        eg.add(m);
+        return m;
       };
       lids.push({ up: mk(true), lo: mk(false) });
     }
 
     // ---- 耳の穴・鼻の穴
-    const holeMat = phys('#2A2019', { roughness: 0.4 });
-    for (const side of [1, -1]) {
-      const th = side > 0 ? 0.14 : Math.PI - 0.14;
-      const ear = new T.Mesh(new T.SphereGeometry(1, 16, 10), holeMat);
-      const p = surf(1.13, th), n = surfNormal(1.13, th);
-      ear.position.copy(toHead(p.sub(n.clone().multiplyScalar(0.01))));
-      ear.scale.set(0.06, 0.045, 0.014);
-      ear.quaternion.setFromRotationMatrix(new T.Matrix4().lookAt(n, V(0, 0, 0), V(0, 1, 0)));
+    const holeMat = phys('#221A14', { roughness: 0.35, clearcoat: 0.4 });
+    for (const s of EARS) {
+      const ear = new T.Mesh(new T.SphereGeometry(1, 20, 12), holeMat);
+      ear.position.copy(toHead(s.p.clone().addScaledVector(s.n, -0.03)));
+      ear.scale.set(0.028, 0.042, 0.012);
+      ear.quaternion.setFromRotationMatrix(new T.Matrix4().lookAt(s.n, V(0, 0, 0), V(0, 1, 0)));
       bones.head.add(ear);
-      const nth = side > 0 ? 1.05 : Math.PI - 1.05;
-      const nos = new T.Mesh(new T.SphereGeometry(0.022, 10, 8), holeMat);
-      nos.position.copy(toHead(surf(2.165, nth)));
-      nos.scale.set(1, 0.6, 1);
+    }
+    for (const s of NOSTRILS) {
+      const nos = new T.Mesh(new T.SphereGeometry(1, 12, 8), holeMat);
+      nos.position.copy(toHead(s.p.clone().addScaledVector(s.n, 0.011)));
+      nos.scale.set(0.014, 0.01, 0.006);
+      nos.quaternion.setFromRotationMatrix(new T.Matrix4().lookAt(s.n, V(0, 0, 0), V(0, 1, 0)));
       bones.head.add(nos);
     }
 
-    // ---- 舌
-    const tongue = new T.Mesh(new T.SphereGeometry(1, 20, 12), phys('#E57388', { roughness: 0.3, clearcoat: 0.6 }));
+    // ---- 舌（太くて先が丸いピンク）
+    const tongue = new T.Mesh(new T.SphereGeometry(1, 24, 14), phys('#E36F86', { roughness: 0.28, clearcoat: 0.7 }));
     tongue.scale.set(0.001, 0.001, 0.001);
-    const tongueBase = toHead(V(0, profileAt(2.2).y - 0.035, 2.18));
+    const tongueBase = toHead(V(0, profileAt(2.2).y - 0.03, 2.17));
     tongue.position.copy(tongueBase);
     bones.head.add(tongue);
     const mouth = new T.Object3D();
-    mouth.position.copy(toHead(surf(2.235, -Math.PI / 2 + 0.001)));
+    mouth.position.copy(toHead(V(0, profileAt(2.22).y - 0.03, 2.25)));
     bones.head.add(mouth);
 
     // ---- 脚（左前・右前・右後ろ・左後ろ）
@@ -584,7 +816,7 @@
     legs[1].phaseOff = Math.PI; legs[3].phaseOff = Math.PI;
 
     rootG.traverse(o => { if (o.isMesh && o !== mesh) o.castShadow = true; });
-    // 目まわりの影が頭に落ちると黒いくまに見えるので、頭の小物は影を落とさない
+    // 頭の小物の影が顔に落ちると黒いくまに見えるので、影は落とさない
     bones.head.traverse(o => { if (o.isMesh) o.castShadow = false; });
     const gk = { root: rootG, mesh, bones, eyeMat, eyeTex, lids, tongue, tongueBase, mouth, legs, midY: bones.mid.position.y, owned, dilated: false };
     pose(gk, restPose());
@@ -593,8 +825,8 @@
 
   function buildLeg(side, front, bone, mat, toeMat) {
     const cfg = front
-      ? { z: 0.5, x: 0.44, y: 0.42, Lu: 0.34, Lf: 0.34, r0: 0.12, r1: 0.082, r2: 0.058, rest: 0.4, droop: 0.3, toe: [-70, -36, -4, 26, 56], len: [0.1, 0.15, 0.17, 0.16, 0.12], yaw: 0.2 }
-      : { z: -0.62, x: 0.44, y: 0.42, Lu: 0.38, Lf: 0.36, r0: 0.15, r1: 0.095, r2: 0.062, rest: -0.45, droop: 0.28, toe: [-58, -24, 8, 38, 68], len: [0.11, 0.16, 0.19, 0.2, 0.15], yaw: 0.55 };
+      ? { z: 0.86, x: 0.4, y: 0.5, Lu: 0.38, Lf: 0.4, r0: 0.115, r1: 0.078, r2: 0.055, rest: 0.4, droop: 0.3, toe: [-70, -36, -4, 26, 56], len: [0.13, 0.2, 0.23, 0.21, 0.16], yaw: 0.2 }
+      : { z: -0.62, x: 0.4, y: 0.49, Lu: 0.42, Lf: 0.42, r0: 0.145, r1: 0.09, r2: 0.06, rest: -0.45, droop: 0.28, toe: [-58, -24, 8, 38, 68], len: [0.14, 0.21, 0.26, 0.27, 0.2], yaw: 0.55 };
     const BW = boneWorld(bone.name);
     const shoulder = new T.Group();
     shoulder.position.copy(V(side * cfg.x, cfg.y, cfg.z).sub(BW));
@@ -621,14 +853,14 @@
     cfg.toe.forEach((deg, i) => {
       const phi = side * (cfg.yaw + deg * Math.PI / 180);
       const L = cfg.len[i];
-      const tg = taper(0.026, 0.014, L, 8);
+      const tg = taper(0.024, 0.013, L, 8);
       tg.rotateX(Math.PI / 2);
       const toe = new T.Mesh(tg, mat);
       toe.rotation.order = 'YXZ';
       toe.rotation.y = phi;
       toe.rotation.x = 0.12;
       toe.position.set(Math.sin(phi) * 0.03, -0.012, Math.cos(phi) * 0.03);
-      const tip = new T.Mesh(new T.SphereGeometry(0.018, 8, 6), toeMat);
+      const tip = new T.Mesh(new T.SphereGeometry(0.017, 8, 6), toeMat);
       tip.position.set(0, 0, L);
       toe.add(tip);
       wrist.add(toe);
@@ -640,6 +872,8 @@
     return { t: 0, phase: 0, walk: 0, look: 0, pitch: 0, tilt: 0, curl: 0, stalk: 0, happy: 0, drop: 0.04, blink: 0, tongue: 0, breathe: 0, sway: 0 };
   }
 
+  // まぶた：開いているときは、ふちが皮ふの下にかくれる角度まで引っこむ
+  const LID_OPEN = 1.1, LID_SHUT_UP = 0.06, LID_SHUT_LO = -0.02;
   const _p = new T.Vector3();
   function pose(gk, P) {
     const B = gk.bones;
@@ -650,8 +884,9 @@
     B.hip.rotation.y = 0.22 * s * P.walk;
     B.neck.rotation.y = 0.17 * s * P.walk + P.look * 0.45;
     B.head.rotation.y = P.look * 0.55;
-    B.neck.rotation.x = P.pitch * 0.5;
-    B.head.rotation.x = P.pitch * 0.5;
+    // ふだんは首をすこし上げて、頭を持ち上げている
+    B.neck.rotation.x = P.pitch * 0.5 - 0.08;
+    B.head.rotation.x = P.pitch * 0.5 - 0.06;
     B.head.rotation.z = P.tilt;
     B.chest.scale.x = 1 + P.breathe * 0.03;
     B.chest.scale.y = 1 + P.breathe * 0.02;
@@ -664,16 +899,15 @@
         + 0.3 * Math.sin(P.t * 9 - i * 0.8) * P.happy * (i / 5);
       b.rotation.x = i >= 3 ? -0.08 * P.stalk : 0;
     });
-    // まばたき（レオパにはまぶたがある）
     for (const l of gk.lids) {
-      l.up.rotation.x = lerp(-0.92, 0.1, P.blink);
-      l.lo.rotation.x = lerp(0.72, -0.02, P.blink);
+      l.up.rotation.x = lerp(-LID_OPEN, LID_SHUT_UP, P.blink);
+      l.lo.rotation.x = lerp(LID_OPEN, LID_SHUT_LO, Math.min(1, P.blink * 1.1));
     }
     // ぺろっ
     const tg = P.tongue;
     if (tg > 0.01) {
-      gk.tongue.scale.set(0.07, 0.028, 0.06 + 0.1 * tg);
-      gk.tongue.position.set(gk.tongueBase.x, gk.tongueBase.y + 0.03 * Math.sin(tg * Math.PI), gk.tongueBase.z + 0.12 * tg);
+      gk.tongue.scale.set(0.06, 0.024, 0.05 + 0.08 * tg);
+      gk.tongue.position.set(gk.tongueBase.x, gk.tongueBase.y + 0.025 * Math.sin(tg * Math.PI), gk.tongueBase.z + 0.1 * tg);
       gk.tongue.rotation.x = -0.5 * tg;
     } else gk.tongue.scale.set(0.001, 0.001, 0.001);
 
@@ -716,6 +950,10 @@
       if (o.geometry) o.geometry.dispose();
       if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
     });
+  }
+  function lookKey(look) {
+    const p = look.poly || {};
+    return [look.genes.snow, look.genes.alb, look.genes.ecl, look.genes.bliz, look.tang, p.spots, p.blotch, p.head, p.carrot, p.lav, p.aberrant, look.seed, look.stage, !!look.gravid, !!look.shed].join('|');
   }
 
   // ======================================================
@@ -1010,7 +1248,7 @@
         blob.visible = false;
         return;
       }
-      const key = [look.genes.snow, look.genes.alb, look.genes.ecl, look.genes.bliz, look.tang, look.seed, look.stage, !!look.gravid, !!look.shed].join('|');
+      const key = lookKey(look);
       if (look.id !== st.id) {
         Object.assign(st, { x: rand(-1.5, 2), z: rand(-0.5, 1.5), yaw: rand(-1, 1), mode: 'idle', wait: 1, sleeping: false, stalk: 0 });
       }
@@ -1353,9 +1591,10 @@
   // ======================================================
   let pr = null;
   const photoCache = new Map();
-  function photo(look) {
+  function photo(look, opts) {
     if (!supported) return null;
-    const key = [look.genes.snow, look.genes.alb, look.genes.ecl, look.genes.bliz, look.tang, look.seed, look.stage, !!look.shed].join('|');
+    const face = !!(opts && opts.face), side = !!(opts && opts.side);
+    const key = lookKey(look) + (face ? '|face' : '') + (side ? '|side' : '');
     if (photoCache.has(key)) return photoCache.get(key);
     if (!pr) {
       const renderer = new T.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
@@ -1387,11 +1626,12 @@
     const gk = buildGecko(look, 'photo');
     // しっぽをくるんと巻いて、こっちを向いたポーズ
     const P = restPose();
-    P.curl = 1.8;
-    P.look = -0.2;
+    P.curl = side ? 0 : 1.8;
+    P.look = face || side ? 0 : -0.2;
+    if (side) gk.root.rotation.y = -Math.PI / 2 + 0.25;
     P.tilt = 0.12;
     P.drop = 0.05;
-    gk.root.rotation.y = 0.45;
+    if (!side) gk.root.rotation.y = 0.45;
     pr.scene.add(gk.root);
     pose(gk, P);
     gk.root.updateMatrixWorld(true);
@@ -1403,9 +1643,24 @@
     box.expandByScalar(0.45);
     const c = box.getCenter(new T.Vector3());
     const size = box.getSize(new T.Vector3());
-    const dist = Math.max(size.x, size.z) * 2.25;
-    pr.camera.position.set(c.x + dist * 0.05, dist * 0.5, c.z + dist * 0.85);
-    pr.camera.lookAt(c.x + 0.15, 0.3, c.z);
+    if (side) {
+      // 参考写真と同じ、ななめ前の低い位置から全身
+      pr.camera.position.set(c.x + 3.4, 2.3, c.z + 9.8);
+      pr.camera.lookAt(c.x, 0.35, c.z);
+    } else if (face) {
+      // 顔のアップ：ななめ前から
+      const h = gk.bones.head.getWorldPosition(new T.Vector3());
+      const m = gk.mouth.getWorldPosition(new T.Vector3());
+      const tgt = h.clone().lerp(m, 0.35);
+      const fwd = m.clone().sub(h).setY(0).normalize();
+      const right = new T.Vector3(fwd.z, 0, -fwd.x);
+      pr.camera.position.copy(tgt).addScaledVector(fwd, 3.3).addScaledVector(right, -1.6).add(new T.Vector3(0, 0.9, 0));
+      pr.camera.lookAt(tgt.x, tgt.y + 0.22, tgt.z);
+    } else {
+      const dist = Math.max(size.x, size.z) * 2.25;
+      pr.camera.position.set(c.x + dist * 0.05, dist * 0.5, c.z + dist * 0.85);
+      pr.camera.lookAt(c.x + 0.15, 0.3, c.z);
+    }
     pr.renderer.render(pr.scene, pr.camera);
     const url = pr.renderer.domElement.toDataURL('image/png');
     pr.scene.remove(gk.root);
@@ -1414,5 +1669,10 @@
     return url;
   }
 
-  root.Leopa3D = { supported, createTank, photo };
+  function photoKey(look, opts) {
+    return lookKey(look) + (opts && opts.face ? '|face' : '') + (opts && opts.side ? '|side' : '');
+  }
+  function photoReady(look, opts) { return photoCache.get(photoKey(look, opts)) || null; }
+
+  root.Leopa3D = { supported, createTank, photo, photoReady, photoKey };
 })(typeof window !== 'undefined' ? window : globalThis);

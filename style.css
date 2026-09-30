@@ -286,3 +286,16 @@ button { font: inherit; color: inherit; }
   box-shadow: 0 2px 8px -2px rgba(0, 0, 0, .35);
 }
 .tank3d.closeup canvas { touch-action: none; cursor: grab; }
+
+/* ---------- 見た目の遺伝 */
+.traits { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.traits summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--muted); }
+.trait-grid { display: grid; gap: 6px; margin-top: 8px; }
+.trait { display: grid; grid-template-columns: 7.5em 1fr 2.2em; gap: 10px; align-items: start; font-size: 12.5px; }
+.trait b { text-align: right; font-variant-numeric: tabular-nums; }
+.trait-scale { display: grid; gap: 1px; padding-top: 4px; }
+.trait-scale small { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); }
+.offer-main .tags, .reveal .tags { margin-top: 2px; justify-content: center; }
+.offer-main .tags { justify-content: flex-start; }
+.photo-wait { background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 22%, transparent), transparent); animation: breathe 1.4s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: .45; } }
