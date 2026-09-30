@@ -1260,7 +1260,11 @@
 
   function loadModel(url) {
     if (!MODEL.ready) {
-      MODEL.ready = fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+      // ページに埋めこまれたモデル（1枚にまとめた試遊版）があれば、それを使う
+      const embedded = root.LEOPA_MODEL_B64
+        ? Promise.resolve(Uint8Array.from(atob(root.LEOPA_MODEL_B64), c => c.charCodeAt(0)).buffer)
+        : null;
+      MODEL.ready = (embedded || fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }))
         .then(buf => { prepareModel(buf); photoCache.clear(); return true; })
         .catch(() => false);
     }
