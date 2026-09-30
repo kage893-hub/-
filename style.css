@@ -400,3 +400,7 @@ button { font: inherit; color: inherit; }
 @keyframes bump { 35% { transform: scale(1.12); } }
 .coin-pop { position: absolute; right: 8px; top: -4px; font-weight: 700; font-size: 14px; color: #C68A1E; pointer-events: none; animation: coinUp 1.1s ease-out forwards; }
 @keyframes coinUp { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-22px); } }
+
+/* 下の段のボタン（ペアリング・アルバム・もようがえ・里親に出す）は 2×2 に並べて折り返さない */
+.actions.sub { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.actions.sub .act { white-space: nowrap; min-height: 42px; padding-inline: 6px; }
