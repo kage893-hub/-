@@ -43,35 +43,35 @@
   // 実物の比率に合わせる：胴は細長い円柱、幅は頭とほぼ同じ。しっぽは胴と同じくらい長く、付け根から先へまっすぐ細くなる。
   // z, 半幅, 上の厚み, 下の厚み, 中心の高さ, 断面の角ばり具合
   const PROFILE = [
-    [2.235, 0.10, 0.07, 0.05, 0.40, 2.4],
-    [2.197, 0.19, 0.13, 0.085, 0.405, 2.5],
-    [2.137, 0.275, 0.18, 0.12, 0.415, 2.6],
-    [2.052, 0.35, 0.215, 0.15, 0.43, 2.7],
-    [1.95, 0.42, 0.24, 0.17, 0.445, 2.8],
-    [1.83, 0.475, 0.255, 0.185, 0.455, 2.9],
-    [1.71, 0.52, 0.26, 0.20, 0.46, 2.9],
-    [1.59, 0.55, 0.265, 0.215, 0.46, 2.8],
-    [1.49, 0.53, 0.26, 0.225, 0.46, 2.7],
-    [1.39, 0.44, 0.25, 0.23, 0.455, 2.5],
-    [1.26, 0.43, 0.25, 0.23, 0.455, 2.4],
-    [1.05, 0.47, 0.26, 0.24, 0.46, 2.4],
-    [0.70, 0.52, 0.28, 0.25, 0.46, 2.4],
-    [0.30, 0.55, 0.29, 0.26, 0.46, 2.4],
-    [-0.10, 0.56, 0.29, 0.26, 0.46, 2.4],
-    [-0.45, 0.54, 0.28, 0.25, 0.45, 2.4],
-    [-0.72, 0.47, 0.26, 0.23, 0.44, 2.4],
-    [-0.90, 0.40, 0.24, 0.21, 0.41, 2.3],
-    [-1.15, 0.38, 0.22, 0.19, 0.37, 2.3],
-    [-1.50, 0.34, 0.20, 0.17, 0.32, 2.3],
-    [-1.90, 0.28, 0.17, 0.14, 0.26, 2.2],
-    [-2.30, 0.21, 0.13, 0.11, 0.20, 2.2],
-    [-2.70, 0.14, 0.09, 0.08, 0.14, 2.2],
+    [2.17, 0.11, 0.075, 0.055, 0.40, 2.3],
+    [2.14, 0.20, 0.135, 0.09, 0.405, 2.3],
+    [2.09, 0.29, 0.185, 0.125, 0.415, 2.35],
+    [2.02, 0.37, 0.22, 0.155, 0.43, 2.4],
+    [1.94, 0.43, 0.245, 0.175, 0.445, 2.45],
+    [1.83, 0.48, 0.26, 0.19, 0.455, 2.5],
+    [1.71, 0.52, 0.265, 0.205, 0.46, 2.5],
+    [1.59, 0.55, 0.27, 0.22, 0.46, 2.45],
+    [1.49, 0.54, 0.265, 0.23, 0.46, 2.4],
+    [1.39, 0.5, 0.26, 0.24, 0.455, 2.3],
+    [1.26, 0.49, 0.26, 0.245, 0.455, 2.3],
+    [1.05, 0.52, 0.27, 0.25, 0.46, 2.4],
+    [0.70, 0.57, 0.29, 0.26, 0.46, 2.5],
+    [0.30, 0.61, 0.31, 0.27, 0.46, 2.5],
+    [-0.10, 0.62, 0.31, 0.27, 0.46, 2.5],
+    [-0.45, 0.59, 0.30, 0.26, 0.45, 2.5],
+    [-0.72, 0.51, 0.27, 0.24, 0.44, 2.4],
+    [-0.90, 0.47, 0.26, 0.23, 0.42, 2.3],
+    [-1.15, 0.48, 0.26, 0.22, 0.39, 2.2],
+    [-1.50, 0.44, 0.24, 0.20, 0.34, 2.2],
+    [-1.90, 0.35, 0.20, 0.17, 0.28, 2.2],
+    [-2.30, 0.25, 0.15, 0.13, 0.21, 2.2],
+    [-2.70, 0.15, 0.10, 0.09, 0.14, 2.2],
     [-3.05, 0.08, 0.055, 0.05, 0.09, 2.2],
     [-3.30, 0.03, 0.025, 0.02, 0.05, 2.2],
   ];
 
   const Z0 = PROFILE[0][0], Z1 = PROFILE[PROFILE.length - 1][0];
-  const Z_NOSE = 2.262, Z_TAIL = -3.36, LEN = Z_NOSE - Z_TAIL;
+  const Z_NOSE = 2.195, Z_TAIL = -3.36, LEN = Z_NOSE - Z_TAIL;
   const Z_TAILBASE = -0.92;
 
   function catmull(p0, p1, p2, p3, t) {
@@ -89,9 +89,11 @@
     // 体を厚く丸く、脚で地面から持ち上げる（しっぽの先に向かって地面に近づく）
     const body = z > Z_TAILBASE ? 1 : clamp(1 - (Z_TAILBASE - z) / 2.3, 0, 1);
     const hw = smooth(clamp((z - 1.25) / 0.2, 0, 1));
-    p.ht *= lerp(1.05 + 0.2 * body, 1.3, hw);
-    p.hb *= lerp(1.08 + 0.26 * body, 1.22, hw);
-    p.y += 0.1 * body;
+    const arch = Math.exp(-Math.pow((z + 0.05) / 0.9, 2));
+    p.ht *= lerp(1.05 + 0.12 * body + 0.1 * arch, 1.4, hw);
+    p.hb *= lerp(1.0 + 0.2 * body, 1.3, hw);
+    p.w *= lerp(1, 1.1, hw);
+    p.y += 0.02 * body + 0.02 * hw;
     if (gravid) { const g = Math.exp(-Math.pow((z + 0.1) / 0.45, 2)); p.w *= 1 + 0.13 * g; p.hb *= 1 + 0.14 * g; }
     return p;
   }
@@ -117,11 +119,11 @@
     return Math.PI * (3 * (p.w + h) - Math.sqrt((3 * p.w + h) * (p.w + 3 * h)));
   }
   // 口のライン（右側）。鼻先から目のうしろまで長く、うしろで少し上がる
-  const MOUTH_FRONT = 2.225, MOUTH_BACK = 1.55;
+  const MOUTH_FRONT = 2.16, MOUTH_BACK = 1.55;
   const mouthTh = z => { const t = clamp((MOUTH_FRONT - z) / (MOUTH_FRONT - MOUTH_BACK), 0, 1); return -0.34 + 0.24 * t + 0.14 * t * t; };
 
   // ---------- 顔のパーツの位置
-  const EYE = { z: 1.865, th: 0.6, r: 0.152, depth: 0.05, a: 0.138, b: 0.12 };
+  const EYE = { z: 1.83, th: 0.6, r: 0.172, depth: 0.078, a: 0.146, b: 0.122 };
   function eyeFrame(side) {
     const th = side > 0 ? EYE.th : Math.PI - EYE.th;
     const S = surf(EYE.z, th);
@@ -132,7 +134,7 @@
   }
   const EYES = [eyeFrame(1), eyeFrame(-1)];
   const EARS = [1, -1].map(side => { const th = side > 0 ? 0.1 : Math.PI - 0.1; return { side, p: surf(1.47, th), n: surfNormal(1.47, th) }; });
-  const NOSTRILS = [1, -1].map(side => { const th = side > 0 ? 1.0 : Math.PI - 1.0; return { side, p: surf(2.185, th), n: surfNormal(2.185, th) }; });
+  const NOSTRILS = [1, -1].map(side => { const th = side > 0 ? 1.0 : Math.PI - 1.0; return { side, p: surf(2.12, th), n: surfNormal(2.12, th) }; });
 
   /* 頭の面を彫る：目のくぼみ・まぶたのふち・眉・口の溝とくちびる・ほほ・鼻・耳 */
   const _q = new T.Vector3();
@@ -162,9 +164,9 @@
       out += fade * (-0.016 * Math.exp(-Math.pow(d / 0.011, 2)) + 0.01 * Math.exp(-Math.pow((d - 0.03) / 0.022, 2)) + 0.005 * Math.exp(-Math.pow((d + 0.03) / 0.02, 2)));
     }
     // あごの筋肉でふくらんだほほ
-    out += 0.03 * Math.exp(-Math.pow((z - 1.6) / 0.12, 2)) * Math.exp(-Math.pow((Math.sin(th) + 0.12) / 0.35, 2)) * Math.abs(Math.cos(th));
+    out += 0.045 * Math.exp(-Math.pow((z - 1.62) / 0.17, 2)) * Math.exp(-Math.pow((Math.sin(th) + 0.1) / 0.45, 2)) * Math.abs(Math.cos(th));
     // 鼻先の上はほんの少し平らに
-    out -= 0.01 * Math.exp(-Math.pow((z - 2.05) / 0.12, 2)) * Math.max(0, Math.sin(th));
+    out -= 0.008 * Math.exp(-Math.pow((z - 1.99) / 0.12, 2)) * Math.max(0, Math.sin(th));
     v.x += rx / rl * out;
     v.y += ry / rl * out;
     for (const s of NOSTRILS) v.addScaledVector(s.n, 0.013 * Math.exp(-Math.pow(v.distanceTo(s.p) / 0.028, 2)));
@@ -176,9 +178,11 @@
       if (_q.lengthSq() > 0.25) continue;
       const l1 = _q.dot(E.e1), l2 = _q.dot(E.e2);
       const rho = Math.hypot(l1 / EYE.a, l2 / EYE.b);
-      let push = 0.032 * Math.exp(-Math.pow((rho - 1.1) / 0.17, 2));
-      if (l2 > 0) push += 0.03 * Math.exp(-Math.pow((rho - 1.5) / 0.38, 2)) * (l2 / (Math.hypot(l1, l2) || 1));
-      if (rho < 1) push -= 0.1 * smooth(clamp((1 - rho) / 0.14, 0, 1));
+      // 厚みのあるまぶた（上は少し厚く）と、なだらかな眉
+      const upper = l2 > 0 ? l2 / (Math.hypot(l1, l2) || 1) : 0;
+      let push = (0.048 + 0.012 * upper) * Math.exp(-Math.pow((rho - 1.12) / 0.24, 2));
+      push += 0.02 * Math.exp(-Math.pow((rho - 1.6) / 0.45, 2)) * upper;
+      if (rho < 1) push -= 0.12 * smooth(clamp((1 - rho) / 0.12, 0, 1));
       v.addScaledVector(E.n, push);
     }
   }
@@ -421,10 +425,16 @@
       };
       const bodyN = poly.spots < 8 ? 0 : Math.round(330 * Math.pow(poly.spots / 60, 1.35) * scale);
       for (let i = 0; i < bodyN; i++) {
-        const z = 1.25 - r() * (1.25 - Z_TAILBASE);
+        let z;
+        if (r() < 0.6 && bandZ.length) {
+          const b = bandZ[Math.floor(r() * Math.min(3, bandZ.length))];
+          z = (b[0] + b[1]) / 2 + (r() + r() - 1) * 0.2;
+        } else z = 1.25 - r() * (1.25 - Z_TAILBASE);
+        z = clamp(z, Z_TAILBASE, 1.25);
         let u = 0.5 + (r() + r() - 1) * 0.36;
         if (stripe) u = (r() < 0.5 ? 0.42 : 0.58) + (r() - 0.5) * 0.05;
-        drawSpot(u, z, (0.03 + r() * 0.045) * sizeMul);
+        const region = (z > 1.0 ? 0.65 : 1) * (Math.abs(u - 0.5) > 0.22 ? 0.72 : 1);
+        drawSpot(u, z, (0.03 + r() * 0.045) * sizeMul * region);
       }
       // おとなのしっぽには黒い横帯（斑点が帯状に並ぶ）
       if (!jungle && !stripe) {
@@ -499,7 +509,7 @@
         ctx.lineWidth = width * H / LEN;
         ctx.beginPath();
         ctx.moveTo(xe, ye);
-        ctx.lineTo((side > 0 ? 0 : 1) * W, Y(2.24));
+        ctx.lineTo((side > 0 ? 0 : 1) * W, Y(2.18));
         ctx.stroke();
       }
     };
@@ -543,7 +553,7 @@
     for (let i = 0; i < 2400 * scale; i++) {
       const z = 1.55 - r() * 4.7;
       const k = z > 1.2 ? 0.55 : 1;
-      dot(0.5 + (r() + r() - 1) * 0.42, z, (0.02 + r() * 0.016) * k * clamp(circumference(z) / 3, 0.45, 1), 0.85);
+      dot(0.5 + (r() + r() - 1) * 0.42, z, (0.013 + r() * 0.01) * k * clamp(circumference(z) / 3, 0.45, 1), 0.45);
     }
     // くちびるの大きなうろこ（上あごと下あごに一列ずつ）
     for (const side of [1, -1]) {
@@ -561,8 +571,16 @@
     [[0, 0.8], [0.14, 0.55], [0.24, 0], [0.76, 0], [0.86, 0.55], [1, 0.8]].forEach(([p, a]) => g.addColorStop(p, `rgba(128,128,128,${a})`));
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
+    // 顔（目から前）はなめらかに
+    {
+      const fg = ctx.createLinearGradient(0, Y(1.62), 0, Y(1.78));
+      fg.addColorStop(0, 'rgba(128,128,128,0)');
+      fg.addColorStop(1, 'rgba(128,128,128,.65)');
+      ctx.fillStyle = fg;
+      ctx.fillRect(0, Y(1.62), W, Y(Z_NOSE) - Y(1.62) + 2);
+    }
     // 鼻先・しっぽの先は輪切りが細く集まるので、凹凸を消す
-    for (const [z0, z1] of [[Z_NOSE, 2.17], [Z_TAIL, -3.2]]) {
+    for (const [z0, z1] of [[Z_NOSE, 2.1], [Z_TAIL, -3.2]]) {
       const tg = ctx.createLinearGradient(0, Y(z0), 0, Y(z1));
       tg.addColorStop(0, 'rgba(128,128,128,1)');
       tg.addColorStop(1, 'rgba(128,128,128,0)');
@@ -591,6 +609,25 @@
       }
     }
     return c;
+  }
+  // つやの差：おなかと顔はなめらか、背中はややマット（緑チャンネルが roughness）
+  let roughTex = null;
+  function roughTexture() {
+    if (roughTex) return roughTex;
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 384;
+    const ctx = c.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, 256, 0);
+    [[0, 175], [0.18, 185], [0.3, 235], [0.5, 255], [0.7, 235], [0.82, 185], [1, 175]].forEach(([p, v]) => g.addColorStop(p, `rgb(${v},${v},${v})`));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 384);
+    const fg = ctx.createLinearGradient(0, 0, 0, zToV(1.5) * 384);
+    fg.addColorStop(0, 'rgba(170,170,170,.9)');
+    fg.addColorStop(1, 'rgba(170,170,170,0)');
+    ctx.fillStyle = fg;
+    ctx.fillRect(0, 0, 256, zToV(1.5) * 384);
+    roughTex = canvasTexture(c);
+    return roughTex;
   }
   let granuleTex = null;
   function granules() {
@@ -723,16 +760,20 @@
     const owned = [colorTex];
     const shed = !!look.shed;
     const skinMat = phys('#ffffff', {
-      map: colorTex, bumpMap: bumpTexture(W, H), bumpScale: 0.016,
-      roughness: shed ? 0.95 : 0.55, clearcoat: shed ? 0 : 0.2, clearcoatRoughness: 0.5, skinning: true,
+      map: colorTex, bumpMap: bumpTexture(W, H), bumpScale: 0.0065,
+      roughnessMap: roughTexture(), roughness: shed ? 0.95 : 0.62,
+      clearcoat: shed ? 0 : 0.12, clearcoatRoughness: 0.6, skinning: true,
+      // ごく弱い透け感（光が皮ふの中で少し散る感じ）
+      emissive: new T.Color('#ffffff'), emissiveMap: colorTex, emissiveIntensity: 0.07,
+      sheen: new T.Color('#3a2a18'),
     });
     const limbCol = A.mix(pal.base, '#FFF9EF', 0.06);
     const limbTex = canvasTexture(limbCanvas(pal, look, limbCol), { srgb: true, repeat: 2 });
     owned.push(limbTex);
-    const limbMat = phys('#ffffff', { map: limbTex, bumpMap: granules(), bumpScale: 0.01, roughness: 0.6, clearcoat: shed ? 0 : 0.12 });
-    const toeMat = phys(A.mix(limbCol, '#FFE8DC', 0.35), { roughness: 0.55 });
-    const lidMat = phys(A.mix(pal.base, '#FFF8EA', 0.4), { roughness: 0.6, bumpMap: granules(), bumpScale: 0.008, side: T.DoubleSide });
-    if (shed) for (const m of [skinMat, limbMat, lidMat]) { m.emissive = new T.Color('#FFFFFF'); m.emissiveIntensity = 0.22; }
+    const limbMat = phys('#ffffff', { map: limbTex, bumpMap: granules(), bumpScale: 0.005, roughness: 0.6, clearcoat: shed ? 0 : 0.1, emissive: new T.Color('#ffffff'), emissiveMap: limbTex, emissiveIntensity: 0.07 });
+    const toeMat = phys(A.mix(limbCol, '#F3D9C8', 0.18), { roughness: 0.55 });
+    const lidMat = phys(A.mix(pal.base, '#FFF8EA', 0.08), { roughness: 0.55, bumpMap: granules(), bumpScale: 0.003, side: T.DoubleSide });
+    if (shed) for (const m of [skinMat, limbMat, lidMat]) { m.emissive = new T.Color('#FFFFFF'); m.emissiveMap = null; m.emissiveIntensity = 0.22; }
 
     const rootG = new T.Group();
     const bones = {};
@@ -760,7 +801,9 @@
     // ---- 目（頭に彫ったくぼみにはめこむ）とまぶた
     const eyeTex = [canvasTexture(irisCanvas(pal, false, look.seed % 7), { srgb: true }), canvasTexture(irisCanvas(pal, true, look.seed % 7), { srgb: true })];
     owned.push(...eyeTex);
-    const eyeMat = phys('#ffffff', { map: eyeTex[0], roughness: shed ? 0.5 : 0.1, clearcoat: 1, clearcoatRoughness: shed ? 0.6 : 0.02 });
+    const eyeMat = phys('#ffffff', { map: eyeTex[0], roughness: shed ? 0.5 : 0.3, clearcoat: 1, clearcoatRoughness: shed ? 0.6 : 0.04 });
+    const corneaMat = phys('#ffffff', { transparent: true, opacity: shed ? 0.35 : 0.1, roughness: shed ? 0.5 : 0, clearcoat: 1, clearcoatRoughness: 0, envMapIntensity: 1.6, depthWrite: false });
+    const glintMat = new T.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85 });
     if (shed) { eyeMat.emissive = new T.Color('#9FA7B0'); eyeMat.emissiveIntensity = 0.25; }
     const eyeGeo = new T.SphereGeometry(EYE.r, 64, 40);
     eyeGeo.rotateY(-Math.PI / 2);
@@ -772,6 +815,11 @@
       eg.quaternion.copy(basisQuat(E));
       bones.head.add(eg);
       eg.add(new T.Mesh(eyeGeo, eyeMat));
+      eg.add(new T.Mesh(new T.SphereGeometry(EYE.r * 1.012, 48, 32), corneaMat));
+      const glint = new T.Mesh(new T.SphereGeometry(1, 12, 8), glintMat);
+      glint.position.set(-0.04 * E.side, 0.06, Math.sqrt(EYE.r * EYE.r - 0.0052) + 0.003);
+      glint.scale.set(0.016, 0.012, 0.004);
+      eg.add(glint);
       const mk = upper => {
         const m = new T.Mesh(new T.SphereGeometry(lidR, 48, 16, 0, Math.PI * 2, upper ? 0 : Math.PI / 2, Math.PI / 2), lidMat);
         eg.add(m);
@@ -800,11 +848,11 @@
     // ---- 舌（太くて先が丸いピンク）
     const tongue = new T.Mesh(new T.SphereGeometry(1, 24, 14), phys('#E36F86', { roughness: 0.28, clearcoat: 0.7 }));
     tongue.scale.set(0.001, 0.001, 0.001);
-    const tongueBase = toHead(V(0, profileAt(2.2).y - 0.03, 2.17));
+    const tongueBase = toHead(V(0, profileAt(2.13).y - 0.03, 2.1));
     tongue.position.copy(tongueBase);
     bones.head.add(tongue);
     const mouth = new T.Object3D();
-    mouth.position.copy(toHead(V(0, profileAt(2.22).y - 0.03, 2.25)));
+    mouth.position.copy(toHead(V(0, profileAt(2.15).y - 0.03, 2.18)));
     bones.head.add(mouth);
 
     // ---- 脚（左前・右前・右後ろ・左後ろ）
@@ -825,47 +873,48 @@
 
   function buildLeg(side, front, bone, mat, toeMat) {
     const cfg = front
-      ? { z: 0.86, x: 0.4, y: 0.5, Lu: 0.38, Lf: 0.4, r0: 0.115, r1: 0.078, r2: 0.055, rest: 0.4, droop: 0.3, toe: [-70, -36, -4, 26, 56], len: [0.13, 0.2, 0.23, 0.21, 0.16], yaw: 0.2 }
-      : { z: -0.62, x: 0.4, y: 0.49, Lu: 0.42, Lf: 0.42, r0: 0.145, r1: 0.09, r2: 0.06, rest: -0.45, droop: 0.28, toe: [-58, -24, 8, 38, 68], len: [0.14, 0.21, 0.26, 0.27, 0.2], yaw: 0.55 };
+      ? { z: 0.86, x: 0.42, y: 0.42, Lu: 0.3, Lf: 0.36, r0: 0.13, r1: 0.092, r2: 0.07, rest: 0.4, droop: 0.3, toe: [-70, -36, -4, 26, 56], len: [0.1, 0.15, 0.17, 0.16, 0.12], yaw: 0.2 }
+      : { z: -0.62, x: 0.44, y: 0.41, Lu: 0.34, Lf: 0.38, r0: 0.165, r1: 0.105, r2: 0.075, rest: -0.45, droop: 0.28, toe: [-58, -24, 8, 38, 68], len: [0.11, 0.16, 0.2, 0.21, 0.15], yaw: 0.55 };
     const BW = boneWorld(bone.name);
     const shoulder = new T.Group();
     shoulder.position.copy(V(side * cfg.x, cfg.y, cfg.z).sub(BW));
     bone.add(shoulder);
     const upper = new T.Group();
     shoulder.add(upper);
-    const ug = taper(cfg.r0, cfg.r1, cfg.Lu);
+    const ug = taper(cfg.r0, cfg.r1 * 1.12, cfg.Lu);
     ug.rotateZ(-side * Math.PI / 2);
     upper.add(new T.Mesh(ug, mat));
     upper.add(new T.Mesh(new T.SphereGeometry(cfg.r0, 16, 12), mat));
     const elbow = new T.Group();
     elbow.position.set(side * cfg.Lu, 0, 0);
     upper.add(elbow);
-    elbow.add(new T.Mesh(new T.SphereGeometry(cfg.r1 * 1.02, 14, 10), mat));
-    const fg = taper(cfg.r1, cfg.r2, cfg.Lf);
+    elbow.add(new T.Mesh(new T.SphereGeometry(cfg.r1 * 1.15, 16, 12), mat));
+    const fg = taper(cfg.r1 * 1.12, cfg.r2 * 1.1, cfg.Lf);
     fg.rotateZ(Math.PI);
     elbow.add(new T.Mesh(fg, mat));
     const wrist = new T.Group();
     wrist.position.set(0, -cfg.Lf, 0);
     elbow.add(wrist);
     const palm = new T.Mesh(new T.SphereGeometry(1, 16, 10), mat);
-    palm.scale.set(cfg.r2 * 1.5, cfg.r2 * 0.6, cfg.r2 * 1.5);
+    palm.scale.set(cfg.r2 * 1.7, cfg.r2 * 0.85, cfg.r2 * 1.6);
     wrist.add(palm);
     cfg.toe.forEach((deg, i) => {
       const phi = side * (cfg.yaw + deg * Math.PI / 180);
       const L = cfg.len[i];
-      const tg = taper(0.024, 0.013, L, 8);
+      const tg = taper(0.034, 0.022, L, 10);
       tg.rotateX(Math.PI / 2);
       const toe = new T.Mesh(tg, mat);
       toe.rotation.order = 'YXZ';
       toe.rotation.y = phi;
-      toe.rotation.x = 0.12;
+      toe.rotation.x = 0.1 + (i % 2) * 0.05;
       toe.position.set(Math.sin(phi) * 0.03, -0.012, Math.cos(phi) * 0.03);
-      const tip = new T.Mesh(new T.SphereGeometry(0.017, 8, 6), toeMat);
+      const tip = new T.Mesh(new T.SphereGeometry(0.026, 10, 8), toeMat);
       tip.position.set(0, 0, L);
       toe.add(tip);
       wrist.add(toe);
     });
-    return { shoulder, upper, elbow, wrist, side, front, rest: cfg.rest, droop: cfg.droop, Lu: cfg.Lu, Lf: cfg.Lf, phaseOff: 0 };
+    // 左右対称すぎないように、置き方を少しずらす
+    return { shoulder, upper, elbow, wrist, side, front, rest: cfg.rest + side * (front ? 0.07 : -0.05), droop: cfg.droop + (side > 0 ? 0.03 : 0), Lu: cfg.Lu, Lf: cfg.Lf, phaseOff: 0 };
   }
 
   function restPose() {
