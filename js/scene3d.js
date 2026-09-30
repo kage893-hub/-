@@ -1591,6 +1591,11 @@
     rim.position.set(2, 4, -8);
     scene.add(hemi, sun, heat, rim);
     // ケースの外：木のテーブルと部屋の壁
+    let wall = null;
+    // 夜につける、部屋のスタンドライト
+    const lamp = new T.PointLight('#FFC98A', 0, 26, 1.4);
+    lamp.position.set(-7, 7, 5);
+    scene.add(lamp);
     {
       const c = document.createElement('canvas');
       c.width = 512; c.height = 256;
@@ -1614,7 +1619,7 @@
       table.rotation.x = -Math.PI / 2;
       table.position.y = -0.02;
       table.receiveShadow = true;
-      const wall = new T.Mesh(new T.PlaneGeometry(80, 30), phys('#E9E4D8', { roughness: 0.95 }));
+      wall = new T.Mesh(new T.PlaneGeometry(80, 30), phys('#E9E4D8', { roughness: 0.95 }));
       wall.position.set(0, 12, -9);
       scene.add(table, wall);
     }
@@ -1804,16 +1809,46 @@
         st.poops.push(p);
       }
     }
-    function setNight(on) {
-      if (st.gk) setPupil(st.gk, on);
-      st.night = on;
-      hemi.intensity = on ? 0.12 : 0.3;
-      hemi.color.set(on ? '#A9B8FF' : '#FFF6E4');
-      sun.intensity = on ? 0.35 : 1.0;
-      sun.color.set(on ? '#AFC0FF' : '#FFF4E6');
-      heat.intensity = on ? 0.9 : 0.8;
-      renderer.toneMappingExposure = on ? 0.75 : 0.95;
-      scene.background = new T.Color(on ? '#1B2130' : '#DCE6DE');
+    // 部屋の明かり：時刻（朝・昼・夕方・夜）と季節で、光の色と強さが変わる
+    const C = h => new T.Color(h);
+    const SEASON_SKY = { spring: '#FFEFF1', summer: '#FFFBE6', autumn: '#FFE6C4', winter: '#E6EEFF' };
+    let clockKey = '';
+    function setClock(hour, season) {
+      const key = hour.toFixed(2) + season;
+      if (key === clockKey) return;
+      clockKey = key;
+      const ramp = (a, b, x) => clamp((x - a) / (b - a), 0, 1);
+      const day = ramp(5, 7.5, hour) * (1 - ramp(17, 19.5, hour));       // 昼の明るさ
+      const dusk = Math.exp(-Math.pow((hour - 17.6) / 1.2, 2));          // 夕焼け
+      const dawn = Math.exp(-Math.pow((hour - 6.2) / 0.9, 2));           // 朝焼け
+      const night = 1 - day;
+      const night2 = night > 0.5;
+      if (st.gk) setPupil(st.gk, night2);
+      st.night = night2;
+      const sunCol = C('#AFC0FF').lerp(C('#FFF4E6'), day).lerp(C('#FF9450'), dusk * 0.85).lerp(C('#FFB8A0'), dawn * 0.5);
+      sun.color.copy(sunCol);
+      sun.intensity = 0.3 + 0.75 * day;
+      // 夕方は日ざしが横から入る
+      sun.position.set(-3 - 6 * dusk + 4 * dawn, 10 - 5 * (dusk + dawn), 5);
+      hemi.color.copy(C('#A9B8FF').lerp(C(SEASON_SKY[season] || '#FFF6E4'), day));
+      hemi.intensity = 0.12 + 0.2 * day;
+      lamp.intensity = night * 0.95;
+      heat.intensity = 0.8 + 0.2 * night;
+      renderer.toneMappingExposure = 0.78 + 0.18 * day;
+      const bg = C('#1B2130').lerp(C('#DCE6DE'), day).lerp(C('#F2C9A0'), dusk * 0.45);
+      scene.background = bg;
+      if (wall) wall.material.color.copy(C('#5A5470').lerp(C('#E9E4D8'), day).lerp(C('#F2B48A'), dusk * 0.65));
+    }
+    function setNight(on) { setClock(on ? 22 : 13, 'summer'); }
+    // 今のケースを写真に撮る（アルバム用。小さめの JPEG）
+    function snapshot() {
+      renderer.render(scene, camera);
+      const src = renderer.domElement;
+      const w = 480, h = Math.round(w * src.height / src.width);
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(src, 0, 0, w, h);
+      return c.toDataURL('image/jpeg', 0.72);
     }
     function setDirty(on) { dirt.visible = on; }
     function wake() {
@@ -2138,7 +2173,7 @@
     requestAnimationFrame(loop);
 
     return {
-      setGecko, spawnFood, takeFoods, setPoops, setNight, setDirty, wake, hearts, setClose, setDecor, setEdit,
+      setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
       pendingFoods: () => st.foods.map(f => f.kind),
       lick() { st.lick = 0.9; },
       happy() { st.happy = 1.4; if (st.sleeping) wake(); },

@@ -65,6 +65,10 @@
   const sexMark = g => g.sex === 'M' ? '♂' : '♀';
   const selected = () => S.geckos.find(g => g.id === S.selected) || null;
   const isNight = () => { const h = new Date().getHours(); return h >= 18 || h < 6; };
+  const clockNow = () => { const d = new Date(); return d.getHours() + d.getMinutes() / 60; };
+  const seasonNow = () => { const m = new Date().getMonth() + 1; return m >= 3 && m <= 5 ? 'spring' : m >= 6 && m <= 8 ? 'summer' : m >= 9 && m <= 11 ? 'autumn' : 'winter'; };
+  const SEASON_JA = { spring: '春', summer: '夏', autumn: '秋', winter: '冬' };
+  const timeJa = h => h < 5 ? '夜' : h < 8 ? '朝' : h < 16 ? '昼' : h < 19 ? '夕方' : '夜';
 
   // ---------- 保存
   function load() {
@@ -163,7 +167,9 @@
       g.shedUntil = now + 40 * MIN;
     }
     const st2 = stageOf(g);
-    if (st2 !== st) toast(`${g.name}が${STAGE_LABEL[st2]}になりました！`);
+    if (st2 !== st) { toast(`${g.name}が${STAGE_LABEL[st2]}になりました！`); memo(g, `${STAGE_LABEL[st2]}になった！ 模様も変わってきたね`, true); }
+    if (g.shedUntil && !g._shedMemo) { g._shedMemo = true; if (!(albumOf(g).entries.some(e => e.text.includes('脱皮')))) memo(g, 'はじめての脱皮がはじまった'); }
+    if (!g.shedUntil) g._shedMemo = false;
   }
   function layEggs(g, now) {
     if (S.eggs.length + 2 > EGG_CAP) return; // インキュベーターが空くまで待つ
@@ -182,6 +188,7 @@
     g.restUntil = now + 60 * MIN;
     sfx('lay');
     toast(`${g.name}が卵を2個産みました！インキュベーターに移しました`);
+    memo(g, `${dad.name}とのあいだに、卵を2個産んだ`);
   }
 
   // ---------- お店の入荷
@@ -282,7 +289,9 @@
     tank.setDecor(g ? decorOf(g) : []);
     tank.setPoops(g ? g.poop : 0);
     tank.setDirty(!!g && g.clean < 35);
-    tank.setNight(isNight());
+    tank.setClock(clockNow(), seasonNow());
+    const th = $('.thermo');
+    if (th) th.textContent = `${SEASON_JA[seasonNow()]}の${timeJa(clockNow())} ／ ホット側 32℃ ・ クール側 26℃`;
   }
   function flushFoods() {
     if (!tank) return;
@@ -361,6 +370,7 @@
     S.stats.hatched++;
     S.coins += 5;
     const fresh = register(g);
+    memo(g, `${e.mom} × ${e.dad} の子として、${e.temp}℃の卵から生まれた`, true);
     save();
     renderView();
     const morph = nameOf(g);
@@ -448,7 +458,9 @@
       const wait = g.handledAt + 15 * MIN - now;
       if (wait > 0) { toast(`少し休ませてあげよう（あと${fmtLeft(wait)}）`); return; }
       g.handledAt = now;
+      const wasTame = g.tame;
       g.tame = clamp(g.tame + 6);
+      if (wasTame < 100 && g.tame >= 100) memo(g, 'なれ度が100に！手の上ですっかりくつろぐように', true);
       S.coins += 1;
       daily('handled');
       if (tank) { tank.happy(); tank.hearts(3); }
@@ -462,6 +474,7 @@
       g.shedUntil = 0;
       g.tame = clamp(g.tame + 4);
       toast('脱皮完了！脱いだ皮はぱくっと食べちゃいました');
+      memo(g, 'しっとりケアで脱皮が完了。皮はぱくっと食べた', true);
       renderView();
       save();
     },
@@ -514,6 +527,8 @@
       const now = Date.now();
       if (!g || !p || pairBlock(g, now) || pairBlock(p, now)) return;
       const mom = g.sex === 'F' ? g : p, dad = g.sex === 'F' ? p : g;
+      memo(mom, `${dad.name}とペアリングした`);
+      memo(dad, `${mom.name}とペアリングした`);
       mom.gravid = { layAt: now + 10 * MIN, dad: { name: dad.name, genes: Object.assign({}, dad.genes), tang: dad.tang, poly: Object.assign({}, dad.poly), gen: dad.gen } };
       dad.restUntil = now + 20 * MIN;
       closeSheet();
@@ -535,6 +550,7 @@
       const g = selected();
       if (!g || S.geckos.length <= 1 || g.gravid) return;
       const reward = Math.round(valueOf(g) * 0.8);
+      memo(g, 'やさしい飼い主さんのもとへ旅立った。元気でね');
       S.geckos = S.geckos.filter(x => x !== g);
       S.coins += reward;
       S.stats.rehomed++;
@@ -576,6 +592,7 @@
       g.seed = o.seed;
       S.geckos.push(g);
       const fresh = register(g);
+      memo(g, 'ショップからおむかえした', true);
       S.selected = g.id;
       toast(`${g.name}をおむかえしました！${fresh.length ? '図鑑に新しく登録：' + fresh.join('・') : ''}`);
       switchView('case');
@@ -729,6 +746,7 @@
 
       <div class="actions sub">
         <button class="act ghost" data-action="pairMenu">ペアリング${block ? '' : ' OK'}</button>
+        <button class="act ghost" data-action="album">アルバム</button>
         <button class="act ghost" data-action="editStart">もようがえ</button>
         <button class="act ghost" data-action="rehomeMenu">里親に出す</button>
       </div>
@@ -775,6 +793,7 @@
     }).join('');
     const html = `
       <h2 class="h2">モルフ図鑑 <small class="muted">${found} / ${G.DEX.length}</small></h2>
+      ${albumList()}
       ${achSection()}
       <h3 class="h3">モルフ</h3>
       <div class="dex-grid">${cards}</div>
@@ -870,6 +889,7 @@
       S.geckos.push(g);
       S.selected = g.id;
       register(g);
+      memo(g, '爬虫類ショップ「ヤモリ堂」からおむかえした', true);
       save();
       renderView();
       openSheet(`<div class="reveal">
@@ -1042,6 +1062,7 @@
       const i = Number(t.dataset.i), o = S.orders[i];
       const g = S.geckos.find(x => x.id === t.dataset.id);
       if (!o || !g || !fits(o, g) || S.geckos.length <= 1) return;
+      memo(g, `${o.buyer}のもとへ旅立った`);
       S.geckos = S.geckos.filter(x => x !== g);
       if (S.selected === g.id) S.selected = S.geckos[0].id;
       S.coins += o.reward;
@@ -1161,6 +1182,80 @@
       sfx('buy');
       toast(`${d.name}を買いました。ケースの「もようがえ」で置けます`);
       renderView(); save();
+    },
+  });
+
+  // ======================================================
+  // 成長記録アルバム
+  // 節目（おむかえ・成長・脱皮・産卵など）は、そのときの見た目を覚えておいて写真を撮り直す。
+  // 「写真をとる」ではケースの今の様子を JPEG で残す（1匹あたり最大 12 枚）。
+  // ======================================================
+  const MAX_PHOTOS = 12;
+  function albumOf(g) {
+    S.albums = S.albums || {};
+    const a = S.albums[g.id] || (S.albums[g.id] = { name: g.name, sex: g.sex, entries: [] });
+    a.name = g.name; a.sex = g.sex; a.morph = nameOf(g);
+    return a;
+  }
+  function memo(g, text, withLook) {
+    const e = { t: Date.now(), text };
+    if (withLook) e.look = { genes: Object.assign({}, g.genes), tang: g.tang, poly: Object.assign({}, g.poly), seed: g.seed, stage: stageOf(g) };
+    albumOf(g).entries.push(e);
+  }
+  const fmtDate = t => { const d = new Date(t); return `${d.getMonth() + 1}月${d.getDate()}日 ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; };
+  const ageText = g => { const d = Math.floor((Date.now() - g.born) / 86400000); return d < 1 ? 'きょう' : `${d}日目`; };
+  function openAlbum(id) {
+    const a = S.albums && S.albums[id];
+    if (!a) return;
+    const g = S.geckos.find(x => x.id === id);
+    const photos = a.entries.filter(e => e.img).length;
+    openSheet(`<p class="eyebrow">成長記録アルバム</p>
+      <h3 class="sheet-title">${esc(a.name)} <span class="sex ${a.sex}">${a.sex === 'M' ? '♂' : '♀'}</span></h3>
+      <p class="muted small">${esc(a.morph || '')}${g ? ` ・ いっしょに暮らして ${ageText(g)}` : ' ・ 旅立ちました'}</p>
+      ${g ? `<button class="act primary" data-action="snapPhoto" data-id="${id}" ${photos >= MAX_PHOTOS ? 'disabled' : ''}>いまの様子を写真にとる（${photos}/${MAX_PHOTOS}）</button>` : ''}
+      <ol class="album">${a.entries.slice().reverse().map((e, i) => {
+        const idx = a.entries.length - 1 - i;
+        const pic = e.img ? `<img src="${e.img}" alt="">` : e.look ? portrait(e.look, e.look.stage, '') : '';
+        return `<li class="album-item${e.img ? ' photo' : ''}">
+          ${pic ? `<div class="album-pic">${pic}</div>` : ''}
+          <div class="album-text"><small class="muted">${fmtDate(e.t)}</small><span>${esc(e.text)}</span>
+          ${e.img ? `<button class="link-btn" data-action="delPhoto" data-id="${id}" data-i="${idx}">この写真を消す</button>` : ''}</div>
+        </li>`;
+      }).join('')}</ol>`);
+  }
+  function albumList() {
+    const all = Object.entries(S.albums || {});
+    if (!all.length) return '';
+    return `<h3 class="h3">思い出アルバム <small class="muted">${all.length}匹</small></h3>
+      <div class="decor-inv">${all.map(([id, a]) => `<button class="chip" data-action="album" data-id="${id}">${esc(a.name)} <span class="sex ${a.sex}">${a.sex === 'M' ? '♂' : '♀'}</span>${S.geckos.some(g => g.id === id) ? '' : ' <small class="muted">旅立ち</small>'}</button>`).join('')}</div>`;
+  }
+  Object.assign(ACTIONS, {
+    album(t) { openAlbum(t.dataset.id || S.selected); },
+    snapPhoto(t) {
+      const g = S.geckos.find(x => x.id === t.dataset.id);
+      if (!g || !tank) return;
+      const a = albumOf(g);
+      if (a.entries.filter(e => e.img).length >= MAX_PHOTOS) return;
+      closeSheet();
+      if (view !== 'case' || S.selected !== g.id) { S.selected = g.id; switchView('case'); }
+      // シートが閉じて画面が落ちついてから撮る
+      setTimeout(() => {
+        let img;
+        try { img = tank.snapshot(); } catch (e) { toast('写真をとれませんでした'); return; }
+        a.entries.push({ t: Date.now(), text: `${stageOf(g) === 'baby' ? 'ベビー' : stageOf(g) === 'young' ? 'ヤング' : 'アダルト'}のころの一枚`, img });
+        sfx('tap');
+        try { save(); } catch (e) { /* 保存がいっぱいでも遊べる */ }
+        toast('アルバムに写真を追加しました');
+        openAlbum(g.id);
+      }, 450);
+    },
+    delPhoto(t) {
+      const a = S.albums && S.albums[t.dataset.id];
+      const i = Number(t.dataset.i);
+      if (!a || !a.entries[i] || !a.entries[i].img) return;
+      a.entries.splice(i, 1);
+      save();
+      openAlbum(t.dataset.id);
     },
   });
 
