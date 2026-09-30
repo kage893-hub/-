@@ -657,6 +657,7 @@
 
   function renderView() {
     setHTML($('#soundBtn'), S.mute ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l4 6M21 9l-4 6"/></svg><span class="sr">音をオンにする</span>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg><span class="sr">音をオフにする</span>');
+    setHTML($('#musicBtn'), `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>${S.musicOff ? '<path d="M3 3l18 18"/>' : ''}</svg><span class="sr">${S.musicOff ? '音楽をオンにする' : '音楽をオフにする'}</span>`);
     setHTML($('#coins'), `<span class="coin" aria-hidden="true"></span><b>${S.coins}</b><span class="sr">コイン</span>`);
     const ready = S.eggs.filter(e => Date.now() >= e.hatchAt).length;
     const badge = $('#eggBadge');
@@ -1303,7 +1304,19 @@
   }
   Object.assign(ACTIONS, {
     toggleSound() { S.mute = !S.mute; if (!S.mute) sfx('tap'); renderView(); save(); },
+    toggleMusic() {
+      S.musicOff = !S.musicOff;
+      if (S.musicOff) window.LeopaMusic && LeopaMusic.stop(); else musicOn();
+      toast(S.musicOff ? '音楽をオフにしました' : `音楽「${LeopaMusic.title}」をオンにしました`);
+      renderView(); save();
+    },
   });
+
+  // ---------- BGM（最初に画面をさわったときから流れる。音量はひかえめ）
+  const MUSIC_VOL = 0.45;
+  function musicOn() { if (window.LeopaMusic && S && !S.musicOff && !document.hidden) LeopaMusic.start(MUSIC_VOL); }
+  document.addEventListener('pointerdown', musicOn, { passive: true });
+  document.addEventListener('visibilitychange', () => { if (!window.LeopaMusic) return; if (document.hidden) LeopaMusic.stop(); else if (LeopaMusic.ctxUsed) musicOn(); });
 
   // ---------- 起動
   function tick() {
