@@ -886,7 +886,7 @@
   function welcome() {
     openSheet(`<div class="welcome">
       <p class="eyebrow">ようこそ</p>
-      <h3 class="logo-big">レオパといっしょ</h3>
+      <h3 class="logo-big"><picture><source srcset="assets/logo.webp" type="image/webp"><img src="assets/logo.png" alt="レオパといっしょ" width="720" height="178"></picture></h3>
       <p>レオパ（ヒョウモントカゲモドキ）との暮らしをはじめましょう。まずは近くの爬虫類ショップへ、いっしょに暮らす子をむかえに行きます。</p>
       <ul class="howto">
         <li><b>ごはん・おそうじ・ふれあう</b>で毎日お世話。アプリを閉じていても時間は流れます。</li>

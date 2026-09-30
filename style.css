@@ -376,3 +376,11 @@ button { font: inherit; color: inherit; }
 .thermo { display: grid; justify-items: end; gap: 0; max-width: none; border-radius: 12px; padding: 3px 10px; }
 .thermo .t-when { font-size: 10.5px; color: #6A695D; }
 .thermo .t-temps { white-space: nowrap; }
+
+/* ---------- ロゴ */
+.logo { line-height: 0; min-width: 0; flex: 1 1 auto; }
+.logo picture { display: block; }
+.logo img { display: block; height: 46px; width: auto; max-width: 100%; object-fit: contain; object-position: left center; filter: drop-shadow(0 2px 3px rgba(60, 45, 10, .18)); }
+@media (max-width: 360px) { .logo img { height: 38px; } }
+.logo-big { line-height: 0; }
+.logo-big img { width: 100%; max-width: 360px; height: auto; display: block; margin: 4px auto 6px; }
