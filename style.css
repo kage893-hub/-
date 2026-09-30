@@ -352,7 +352,7 @@ button { font: inherit; color: inherit; }
 .tank-name:empty { display: none; }
 .tank-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tank-name .pill { font-size: 11px; padding: 2px 8px; }
-.thermo { position: absolute; right: 10px; bottom: 12px; z-index: 8; max-width: calc(100% - 150px); font-size: 11px; line-height: 1.4; padding: 3px 10px; border-radius: 99px; background: rgba(255, 255, 255, .82); color: #3A352C; text-align: right; pointer-events: none; }
+.thermo { position: absolute; right: 10px; bottom: 12px; z-index: 8; max-width: calc(100% - 150px); font-size: 11px; line-height: 1.4; padding: 3px 10px; border-radius: 99px; background: rgba(255, 255, 255, .82); color: #3A352C; text-align: right; border: 0; cursor: pointer; font: inherit; font-size: 11px; }
 .tank-loading {
   position: absolute; inset: 0; z-index: 9; display: grid; place-content: center; justify-items: center; gap: 10px;
   background: var(--sand-1); color: #4A3F2E; font-weight: 700; font-size: 14px; transition: opacity .6s;
@@ -365,3 +365,14 @@ button { font: inherit; color: inherit; }
 .act, .row, .chip, .seg button { -webkit-tap-highlight-color: transparent; }
 .row:active:not(:disabled), .chip:active { transform: scale(.98); }
 .card, .offer, .order, .egg-card, .dex-card { transition: box-shadow .2s; }
+
+/* ---------- ヒーター */
+.thermo .t-hot { color: #C4652B; font-weight: 700; }
+.thermo .t-cool { color: #3C78AD; font-weight: 700; }
+.heat-ctl { display: flex; align-items: center; gap: 12px; }
+.heat-ctl .act { flex: none; width: 56px; font-size: 24px; }
+.heat-val { flex: 1; display: grid; justify-items: center; gap: 2px; }
+.heat-val b { font-family: var(--font-display); font-size: 30px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.thermo { display: grid; justify-items: end; gap: 0; max-width: none; border-radius: 12px; padding: 3px 10px; }
+.thermo .t-when { font-size: 10.5px; color: #6A695D; }
+.thermo .t-temps { white-space: nowrap; }

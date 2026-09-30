@@ -1790,6 +1790,7 @@
       foods: [], poops: [], t: 0, phase: 0, walkW: 0, blinkT: 2, blinkV: 0,
       lick: 0, happy: 0, chomp: 0, stalk: 0, look: 0, tiltT: 0, active: true, night: false,
       drop: 0.04, curl: 0, pitch: 0,
+      heatGlow: 1, heatPref: 0,
       close: false, orbit: 0.55, elev: 0.3, zoom: 1,
     };
     const P = restPose();
@@ -1889,7 +1890,7 @@
       hemi.color.copy(C('#A9B8FF').lerp(C(SEASON_SKY[season] || '#FFF6E4'), day));
       hemi.intensity = 0.12 + 0.2 * day;
       lamp.intensity = night * 0.95;
-      heat.intensity = 0.8 + 0.2 * night;
+      heat.intensity = (0.8 + 0.2 * night) * st.heatGlow;
       renderer.toneMappingExposure = 0.78 + 0.18 * day;
       const bg = C('#1B2130').lerp(C('#DCE6DE'), day).lerp(C('#F2C9A0'), dusk * 0.45);
       scene.background = bg;
@@ -2126,9 +2127,15 @@
             const r0 = Math.random();
             if (dish && r0 < 0.14) { st.mode = 'toDrink'; st.target = nextTo(dish, 1.25 * st.size); }
             else if (stone && !st.night && r0 < 0.28) { st.mode = 'toBask'; st.target = nextTo(stone, 1.2 * st.size); }
-            else if (!st.night && Math.random() < 0.3 && HIDE) { st.mode = 'toHide'; st.target = { x: HIDE.x, z: HIDE.z }; }
+            else if ((!st.night || st.heatPref < 0) && Math.random() < (st.heatPref < 0 ? 0.5 : 0.3) && HIDE) { st.mode = 'toHide'; st.target = { x: HIDE.x, z: HIDE.z }; }
             else if (!st.night && Math.random() < 0.12) { st.sleeping = true; st.wait = rand(12, 25); st.zzz = 0.8; }
-            else { st.mode = 'walk'; st.target = freePoint(1.4 * st.size, -TANK.hw + 2, TANK.hw - 1.8, -TANK.hd + 1.9, TANK.hd - 1.3); }
+            else {
+              // 寒いと暖かい側（右）へ、暑いと涼しい側（左）へ寄りがち
+              let xa = -TANK.hw + 2, xb = TANK.hw - 1.8;
+              if (st.heatPref > 0 && Math.random() < 0.75) xa = 0.5;
+              if (st.heatPref < 0 && Math.random() < 0.75) xb = -0.5;
+              st.mode = 'walk'; st.target = freePoint(1.4 * st.size, xa, xb, -TANK.hd + 1.9, TANK.hd - 1.3);
+            }
           }
         }
       }
@@ -2248,6 +2255,12 @@
     requestAnimationFrame(loop);
 
     return {
+      // ヒーターの温度：光の強さと、レオパがどちら側に寄りがちかを変える
+      setHeat(temp) {
+        st.heatGlow = clamp(0.35 + (temp - 28) * 0.14, 0.35, 1.5);
+        st.heatPref = temp <= 30 ? 1 : temp >= 34 ? -1 : 0;
+        heat.intensity = 0.8 * st.heatGlow;
+      },
       setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
       pendingFoods: () => st.foods.map(f => f.kind),
       lick() { st.lick = 0.9; },

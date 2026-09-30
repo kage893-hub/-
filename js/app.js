@@ -149,7 +149,7 @@
         const fedH = Math.max(0, Math.min(dtH, (g.hunger - 30) / RATE.hunger));
         g.hunger = clamp(g.hunger - RATE.hunger * dtH);
         g.clean = clamp(g.clean - RATE.clean * dtH);
-        if (fedH > 0) grow(g, fedH * GROWTH.perHour, now);
+        if (fedH > 0) grow(g, fedH * GROWTH.perHour * heatInfo(heatOf(g)).growth, now);
       }
       S.lastTick = now;
     }
@@ -290,8 +290,9 @@
     tank.setPoops(g ? g.poop : 0);
     tank.setDirty(!!g && g.clean < 35);
     tank.setClock(clockNow(), seasonNow());
+    if (g && tank.setHeat) tank.setHeat(heatOf(g));
     const th = $('.thermo');
-    if (th) th.textContent = `${SEASON_JA[seasonNow()]}の${timeJa(clockNow())} ・ 32℃／26℃`;
+    if (th) th.innerHTML = `<span class="t-when">${SEASON_JA[seasonNow()]}の${timeJa(clockNow())}</span><span class="t-temps"><span class="t-hot">暖かい側 ${g ? heatOf(g) : 32}℃</span> ／ <span class="t-cool">涼しい側 ${coolTemp()}℃</span></span>`;
   }
   function flushFoods() {
     if (!tank) return;
@@ -327,7 +328,7 @@
   function applyEat(g, kind) {
     const F = FOODS[kind];
     g.hunger = clamp(g.hunger + F.hunger);
-    grow(g, F.growth, Date.now());
+    grow(g, F.growth * heatInfo(heatOf(g)).growth, Date.now());
     g.tame = clamp(g.tame + 1);
     S.coins += 1;
     daily('fed');
@@ -345,9 +346,41 @@
     return '';
   }
 
+  // ---------- ヒーター（ケースごと）
+  const HEAT_MIN = 28, HEAT_MAX = 36;
+  const heatOf = g => g.heat || 32;
+  function coolTemp() {
+    const base = { spring: 25, summer: 27, autumn: 25, winter: 22 }[seasonNow()];
+    return base - (isNight() ? 2 : 0);
+  }
+  function heatInfo(t) {
+    if (t <= 29) return { cls: 'info', label: '寒い', growth: 0.55, text: '寒すぎます。消化がゆっくりで、成長がかなり遅くなります' };
+    if (t === 30) return { cls: 'info', label: '少し寒い', growth: 0.8, text: '少し寒いみたい。成長がやや遅くなります' };
+    if (t <= 33) return { cls: 'good', label: 'ちょうどいい', growth: 1.15, text: 'ちょうどいい温度。よく消化して、成長が少し早くなります' };
+    if (t === 34) return { cls: 'warn', label: '少し暑い', growth: 0.8, text: '少し暑いみたい。涼しい側にいることが多く、食欲が落ちぎみです' };
+    return { cls: 'warn', label: '暑い', growth: 0.55, text: '暑すぎます。隠れ家にこもりがちで、成長がかなり遅くなります' };
+  }
+  function heaterSheet() {
+    const g = selected();
+    if (!g) return;
+    const t = heatOf(g), info = heatInfo(t);
+    openSheet(`<h3 class="sheet-title">ヒーターの温度</h3>
+      <p class="muted small">ケースの右側をパネルヒーターで温めて、暖かい側と涼しい側を作っています。レオパは自分で居心地のいい場所へ移動します。暖かい側は 31〜33℃ がおすすめです。</p>
+      <div class="heat-ctl">
+        <button class="act" data-action="heatDown" ${t <= HEAT_MIN ? 'disabled' : ''} aria-label="温度を下げる">−</button>
+        <div class="heat-val"><small class="muted">暖かい側</small><b>${t}℃</b><span class="pill ${info.cls}">${info.label}</span></div>
+        <button class="act" data-action="heatUp" ${t >= HEAT_MAX ? 'disabled' : ''} aria-label="温度を上げる">＋</button>
+      </div>
+      <p class="small">${info.text}</p>
+      <p class="muted small">涼しい側は部屋の温度（いまは ${coolTemp()}℃）。季節と時間帯で変わります。</p>
+      <button class="act primary" data-action="closeSheet">とじる</button>`);
+  }
+
   function statusOf(g, now) {
     if (g.gravid) return { cls: 'pink', text: S.eggs.length + 2 > EGG_CAP ? '抱卵中・インキュベーター満杯' : `抱卵中 あと${fmtLeft(g.gravid.layAt - now)}` };
     if (g.shedUntil) return { cls: 'info', text: '脱皮中' };
+    if (heatOf(g) <= 30) return { cls: 'info', text: 'ちょっと寒そう' };
+    if (heatOf(g) >= 34) return { cls: 'warn', text: 'ちょっと暑そう' };
     if (g.hunger < 25) return { cls: 'warn', text: 'おなかぺこぺこ' };
     if (g.clean < 35 || g.poop >= 2) return { cls: 'warn', text: 'おそうじしてほしい' };
     if (g.restUntil > now) return { cls: 'muted', text: 'ひとやすみ中' };
@@ -1321,6 +1354,13 @@
   function musicOn() { if (window.LeopaMusic && S && !S.musicOff && !document.hidden) LeopaMusic.start(MUSIC_VOL, songKey()); }
   document.addEventListener('pointerdown', musicOn, { passive: true });
   document.addEventListener('visibilitychange', () => { if (!window.LeopaMusic) return; if (document.hidden) LeopaMusic.stop(); else if (LeopaMusic.ctxUsed) musicOn(); });
+
+  // ヒーターの操作
+  Object.assign(ACTIONS, {
+    heater: heaterSheet,
+    heatUp() { const g = selected(); if (g && heatOf(g) < HEAT_MAX) { g.heat = heatOf(g) + 1; save(); renderView(); heaterSheet(); } },
+    heatDown() { const g = selected(); if (g && heatOf(g) > HEAT_MIN) { g.heat = heatOf(g) - 1; save(); renderView(); heaterSheet(); } },
+  });
 
   // ---------- 起動
   function tick() {
