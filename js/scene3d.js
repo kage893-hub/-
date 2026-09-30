@@ -1099,12 +1099,20 @@
       if (Math.max(...u) - Math.min(...u) > 0.5) for (let k = 0; k < 3; k++) if (u[k] < 0.5) uv.setX(t + k, u[k] + 1);
     }
     MODEL.geo = geo;
-    // 目（モデルで測った位置）
-    MODEL.eyes = [
-      { side: 1, C: toGame(0.081, 0.057, 0.805), dir: V(1, 0.28, 0.4).normalize() },
-      { side: -1, C: toGame(-0.084, 0.056, 0.8), dir: V(-1, 0.28, 0.4).normalize() },
-    ];
-    MODEL.eyeR = 0.036 * MS;
+    // 目：左右それぞれ、モデルの目の盛り上がりを測って眼球を合わせる（左右で形が少しちがうため）
+    const ER = 0.034;
+    MODEL.eyes = [[1, 0.805, 0.057], [-1, 0.8, 0.056]].map(([side, z0, y0]) => {
+      let n = 0, cz = 0, cy = 0, tip = 0;
+      for (let i = 0; i < pos.length / 3; i++) {
+        const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+        if (x * side < 0.05) continue;
+        if (Math.hypot((z - z0) / 0.033, (y - y0) / 0.022) > 0.6) continue;
+        n++; cz += z; cy += y; tip = Math.max(tip, Math.abs(x));
+      }
+      cz /= n || 1; cy /= n || 1;
+      return { side, C: toGame(side * (tip + 0.002 - ER), cy, cz), dir: V(side, 0.25, 0.3).normalize() };
+    });
+    MODEL.eyeR = ER * MS;
     MODEL.mouth = toGame(0, -0.03, 0.93);
     MODEL.head = toGame(0, 0.03, 0.78);
     MODEL.neck = toGame(0, 0.03, 0.58);
@@ -1130,10 +1138,10 @@
         q.y += max(0.0, -sin(ph)) * uWalk * 0.12 * reach;
         p = aPivot + q;
       }
-      float hz = smoothstep(0.9, 1.45, p.z);
+      float hz = smoothstep(0.98, 1.3, p.z);
       if (hz > 0.0) {
-        vec3 pv = vec3(0.0, 0.45, 0.95);
-        vec3 q = rotZ(rotX(rotY(p - pv, uLook * 0.9 * hz), uPitch * hz), uTilt * hz);
+        vec3 pv = vec3(0.0, 0.42, 1.08);
+        vec3 q = rotZ(rotX(rotY(p - pv, uLook * 0.6 * hz), uPitch * hz), uTilt * hz);
         p = pv + q;
       }
       float body = 1.0 - smoothstep(0.8, 1.35, p.z);
@@ -1148,10 +1156,10 @@
     }`;
   function deformPoint(p, U) {
     const q = p.clone();
-    const hz = smooth(clamp((q.z - 0.9) / 0.55, 0, 1));
+    const hz = smooth(clamp((q.z - 0.98) / 0.32, 0, 1));
     if (hz > 0) {
-      const pv = V(0, 0.45, 0.95);
-      q.sub(pv).applyEuler(new T.Euler(U.uPitch.value * hz, U.uLook.value * 0.9 * hz, U.uTilt.value * hz, 'ZXY')).add(pv);
+      const pv = V(0, 0.42, 1.08);
+      q.sub(pv).applyEuler(new T.Euler(U.uPitch.value * hz, U.uLook.value * 0.6 * hz, U.uTilt.value * hz, 'ZXY')).add(pv);
     }
     const body = 1 - smooth(clamp((q.z - 0.8) / 0.55, 0, 1));
     let w = U.uWalk.value * 0.16 * Math.sin(U.uPhase.value - q.z * 1.4) * (0.4 + 0.6 * smooth(clamp((1.2 - q.z) / 2.7, 0, 1))) * body;
@@ -1203,7 +1211,6 @@
     const eyeMat = phys('#ffffff', { map: eyeTex[0], roughness: shed ? 0.5 : 0.3, clearcoat: 1, clearcoatRoughness: shed ? 0.6 : 0.04 });
     const corneaMat = phys('#ffffff', { transparent: true, opacity: shed ? 0.35 : 0.1, roughness: shed ? 0.5 : 0, clearcoat: 1, clearcoatRoughness: 0, envMapIntensity: 1.6, depthWrite: false });
     const glintMat = new T.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85 });
-    const lidMat = phys(A.mix(pal.base, '#FFF8EA', 0.08), { roughness: 0.55, side: T.DoubleSide });
     const R = MODEL.eyeR;
     const eyeGeo = new T.SphereGeometry(R, 48, 32);
     eyeGeo.rotateY(-Math.PI / 2);
@@ -1217,8 +1224,6 @@
       glint.position.set(-0.25 * R * E.side, 0.35 * R, R * 0.93);
       glint.scale.set(0.1 * R, 0.075 * R, 0.03 * R);
       eg.add(glint);
-      const mk = upper => { const m = new T.Mesh(new T.SphereGeometry(R * 1.04, 40, 14, 0, Math.PI * 2, upper ? 0 : Math.PI / 2, Math.PI / 2), lidMat); eg.add(m); return m; };
-      lids.push({ up: mk(true), lo: mk(false) });
       rootG.add(eg);
       eyes.push({ g: eg, C: E.C, baseQ });
     }
@@ -1235,22 +1240,19 @@
     return gk;
   }
 
-  const LID_OPEN_GLB = 1.2;
   function poseGLB(gk, P) {
     const U = gk.U;
     U.uT.value = P.t; U.uPhase.value = P.phase; U.uWalk.value = P.walk; U.uLook.value = P.look;
     U.uPitch.value = P.pitch - 0.05; U.uTilt.value = P.tilt; U.uCurl.value = Math.min(P.curl, 1) * 0.9; U.uStalk.value = P.stalk;
     U.uHappy.value = P.happy; U.uBreathe.value = P.breathe; U.uDrop.value = P.drop - 0.04;
     const hz = 1;
-    const headQ = new T.Quaternion().setFromEuler(new T.Euler(U.uPitch.value * hz, U.uLook.value * 0.9 * hz, U.uTilt.value * hz, 'ZXY'));
+    const headQ = new T.Quaternion().setFromEuler(new T.Euler(U.uPitch.value * hz, U.uLook.value * 0.6 * hz, U.uTilt.value * hz, 'ZXY'));
     for (const e of gk.eyes) {
       e.g.position.copy(deformPoint(e.C, U));
       e.g.quaternion.copy(headQ).multiply(e.baseQ);
     }
-    for (const l of gk.lids) {
-      l.up.rotation.x = lerp(-LID_OPEN_GLB, 0.06, P.blink);
-      l.lo.rotation.x = lerp(LID_OPEN_GLB, -0.02, Math.min(1, P.blink * 1.1));
-    }
+    // モデルにまぶたの形があるので、まばたきは眼球を縦につぶして表す
+    for (const e of gk.eyes) e.g.scale.y = lerp(1, 0.12, P.blink);
     gk.bones.head.position.copy(deformPoint(MODEL.head, U));
     gk.bones.neck.position.copy(deformPoint(MODEL.neck, U));
     gk.bones.mid.position.copy(deformPoint(MODEL.mid, U));
@@ -1419,6 +1421,118 @@
   }
 
   // ======================================================
+  // インテリア（ケースに置ける家具）
+  // 原点が中心、+Z が正面（シェルターの入口）。r は当たり判定の半径。
+  // ======================================================
+  let sandTexCache = null;
+  function sandTex() {
+    if (!sandTexCache) { sandTexCache = canvasTexture(sandCanvas(), { srgb: true }); sandTexCache.flipY = true; }
+    return sandTexCache;
+  }
+  function doorMesh(w, h) {
+    const m = new T.Mesh(new T.CircleGeometry(0.62, 32), new T.MeshBasicMaterial({
+      map: gradientCanvasTexture([[0, 'rgba(18,14,10,1)'], [0.7, 'rgba(30,24,18,.95)'], [1, 'rgba(30,24,18,0)']]), transparent: true, depthWrite: false,
+    }));
+    m.scale.set(w, h, 1);
+    return m;
+  }
+  const DECOR = {
+    rock: {
+      name: '岩シェルター', price: 60, r: 1.45, shelter: { x: 0.25, z: 2.75 },
+      desc: '中にもぐって眠れる。定番のかくれ家',
+      build() {
+        const g = new T.Group();
+        const rock = new T.Mesh(rockGeometry(), phys('#6E6358', { roughness: 0.95, bumpMap: sandTex(), bumpScale: 0.03 }));
+        rock.scale.set(1.75, 1.0, 1.4);
+        rock.position.y = 0.1;
+        const door = doorMesh(1.15, 0.78);
+        door.position.set(0.25, 0.36, 1.37);
+        door.rotation.x = -0.3;
+        g.add(rock, door);
+        return g;
+      },
+    },
+    wet: {
+      name: 'ウェットシェルター', price: 80, r: 1.15, shelter: { x: 0, z: 2.35 },
+      desc: '上に水をためて中をしっとり。脱皮の味方',
+      build() {
+        const g = new T.Group();
+        const dome = new T.Mesh(new T.SphereGeometry(1.05, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2), phys('#8E9A94', { roughness: 0.4, clearcoat: 0.5 }));
+        dome.scale.set(1, 0.72, 1);
+        const pool = new T.Mesh(new T.CircleGeometry(0.42, 32), phys('#6FAECB', { roughness: 0.02, clearcoat: 1 }));
+        pool.rotation.x = -Math.PI / 2;
+        pool.position.y = 0.745;
+        const door = doorMesh(0.75, 0.62);
+        door.position.set(0, 0.3, 1.0);
+        door.rotation.x = -0.2;
+        g.add(dome, pool, door);
+        return g;
+      },
+    },
+    cork: {
+      name: 'コルクバーク', price: 50, r: 1.2, shelter: { x: 0, z: 2.3 },
+      desc: '木の皮のトンネル。自然な雰囲気に',
+      build() {
+        const g = new T.Group();
+        // 半分に割った筒を、入口が正面（+Z）に来るように寝かせる
+        const geo = new T.CylinderGeometry(0.8, 0.8, 2.3, 32, 1, true, -Math.PI / 2, Math.PI);
+        geo.rotateX(-Math.PI / 2);
+        const bark = new T.Mesh(geo, phys('#6B4A30', { roughness: 0.95, bumpMap: sandTex(), bumpScale: 0.08, side: T.DoubleSide }));
+        g.add(bark);
+        const door = doorMesh(1.0, 0.95);
+        door.position.set(0, 0.3, 1.1);
+        g.add(door);
+        return g;
+      },
+    },
+    log: {
+      name: '流木', price: 40, r: 1.1,
+      desc: '白っぽい流木。ケースの主役に',
+      build() {
+        const g = new T.Group();
+        const m = phys('#B9A58D', { roughness: 0.9, bumpMap: sandTex(), bumpScale: 0.05 });
+        const main = new T.Mesh(new T.CylinderGeometry(0.16, 0.24, 2.3, 12), m);
+        main.rotation.set(0, 0, Math.PI / 2 - 0.12);
+        main.position.y = 0.22;
+        const br = new T.Mesh(new T.CylinderGeometry(0.08, 0.13, 1.0, 10), m);
+        br.position.set(0.35, 0.45, 0.25);
+        br.rotation.set(0.6, 0, -0.9);
+        g.add(main, br);
+        return g;
+      },
+    },
+    stone: {
+      name: '平たい石', price: 30, r: 0.85,
+      desc: 'ひなたぼっこ用の石。ホット側にどうぞ',
+      build() {
+        const s = new T.Mesh(rockGeometry(), phys('#8C857C', { roughness: 0.85, bumpMap: sandTex(), bumpScale: 0.03 }));
+        s.scale.set(0.95, 0.22, 0.75);
+        return s;
+      },
+    },
+    plant: {
+      name: '多肉植物', price: 25, r: 0.55,
+      desc: '小さなエケベリア。ケースに彩りを',
+      build: () => buildPlant(),
+    },
+    dish: {
+      name: '水入れ', price: 20, r: 0.95,
+      desc: 'いつでも新鮮なお水を',
+      build() {
+        const g = new T.Group();
+        const dish = new T.Mesh(new T.CylinderGeometry(0.85, 0.78, 0.28, 40), phys('#E8E1D2', { roughness: 0.35, clearcoat: 0.6 }));
+        dish.position.y = 0.14;
+        const water = new T.Mesh(new T.CircleGeometry(0.7, 40), phys('#6FAECB', { roughness: 0.02, clearcoat: 1, transparent: true, opacity: 0.85 }));
+        water.rotation.x = -Math.PI / 2;
+        water.position.y = 0.285;
+        g.add(dish, water);
+        return g;
+      },
+    },
+  };
+  const DEFAULT_DECOR = [{ t: 'rock', x: -3.3, z: -2.3, rot: 0 }, { t: 'dish', x: -3.8, z: 2.5, rot: 0 }, { t: 'plant', x: 1.3, z: -3.05, rot: 0 }];
+
+  // ======================================================
   // ケース
   // ======================================================
   function createTank(container, handlers) {
@@ -1479,31 +1593,9 @@
       f.position.set(x, h, z);
       scene.add(f);
     }
-    // 岩のシェルター
-    const rock = new T.Mesh(rockGeometry(), phys('#6E6358', { roughness: 0.95, bumpMap: sand, bumpScale: 0.03 }));
-    rock.scale.set(1.75, 1.0, 1.4);
-    rock.position.set(-3.3, 0.1, -2.3);
-    rock.castShadow = true;
-    rock.receiveShadow = true;
-    const door = new T.Mesh(new T.CircleGeometry(0.62, 32), new T.MeshBasicMaterial({
-      map: gradientCanvasTexture([[0, 'rgba(18,14,10,1)'], [0.7, 'rgba(30,24,18,.95)'], [1, 'rgba(30,24,18,0)']]), transparent: true, depthWrite: false,
-    }));
-    door.position.set(-3.05, 0.36, -0.93);
-    door.rotation.set(-0.3, 0, 0);
-    door.scale.set(1.15, 0.78, 1);
-    scene.add(rock, door);
-    // 水入れ
-    const dish = new T.Mesh(new T.CylinderGeometry(0.85, 0.78, 0.28, 40), phys('#E8E1D2', { roughness: 0.35, clearcoat: 0.6 }));
-    dish.position.set(-3.8, 0.14, 2.5);
-    dish.castShadow = true;
-    dish.receiveShadow = true;
-    const water = new T.Mesh(new T.CircleGeometry(0.7, 40), phys('#6FAECB', { roughness: 0.02, clearcoat: 1, transparent: true, opacity: 0.85 }));
-    water.rotation.x = -Math.PI / 2;
-    water.position.set(-3.8, 0.285, 2.5);
-    scene.add(dish, water);
-    const plant = buildPlant();
-    plant.position.set(1.3, 0, -3.05);
-    scene.add(plant);
+    // 家具（ケースごとに差しかえる）
+    const decorG = new T.Group();
+    scene.add(decorG);
     // 汚れ
     const dirt = new T.Group();
     const dirtMat = new T.MeshBasicMaterial({ color: '#6E5434', transparent: true, opacity: 0.3, depthWrite: false });
@@ -1524,7 +1616,67 @@
     scene.add(blob);
 
     const BOUNDS = { x: 4.3, zMin: -3.2, zMax: 3.3 };
-    const HIDE = { x: -3.0, z: 0.55, face: Math.PI };
+    let HIDE = null;
+    let obstacles = [];
+    let decorKey = '';
+    let edit = null; // もようがえ中なら { sel }
+    const ring = new T.Mesh(new T.RingGeometry(0.9, 1, 48), new T.MeshBasicMaterial({ color: '#FFC94A', transparent: true, opacity: 0.9, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.02;
+    ring.visible = false;
+    scene.add(ring);
+    function setDecor(list) {
+      const key = JSON.stringify(list || []);
+      if (key === decorKey) return;
+      decorKey = key;
+      while (decorG.children.length) { const c = decorG.children.pop(); disposeTree(c); }
+      obstacles = [];
+      HIDE = null;
+      (list || []).forEach((d, i) => {
+        const def = DECOR[d.t];
+        if (!def) return;
+        const o = def.build();
+        o.position.set(d.x, 0, d.z);
+        o.rotation.y = d.rot || 0;
+        o.userData.index = i;
+        o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; m.userData.index = i; } });
+        decorG.add(o);
+        const ob = { x: d.x, z: d.z, r: def.r, i };
+        if (def.shelter && !HIDE) {
+          const c = Math.cos(d.rot || 0), s2 = Math.sin(d.rot || 0);
+          const sx = d.x + def.shelter.x * c + def.shelter.z * s2, sz = d.z - def.shelter.x * s2 + def.shelter.z * c;
+          HIDE = { x: sx, z: sz, face: (d.rot || 0) + Math.PI, ob };
+        }
+        obstacles.push(ob);
+      });
+      showSel();
+    }
+    function showSel() {
+      const d = edit && edit.sel != null ? obstacles.find(o => o.i === edit.sel) : null;
+      ring.visible = !!d;
+      if (d) { ring.position.x = d.x; ring.position.z = d.z; ring.scale.setScalar(d.r + 0.15); }
+    }
+    function setEdit(e) { edit = e; if (e) setClose(false); showSel(); }
+    // 家具にめりこまないように、体にそって押し出す
+    function resolveObstacles() {
+      const S = 0.95 * st.size;
+      for (let it = 0; it < 3; it++) {
+        for (const o of obstacles) {
+          if (HIDE && o === HIDE.ob && (st.sleeping || st.mode === 'toHide')) continue;
+          for (const k of [1.25, 0.45, -0.4, -1.3]) {
+            const px = st.x + Math.sin(st.yaw) * k * S, pz = st.z + Math.cos(st.yaw) * k * S;
+            const dx = px - o.x, dz = pz - o.z, d = Math.hypot(dx, dz) || 0.001;
+            const min = o.r + 0.32 * S * (k < -1 ? 0.6 : 1);
+            if (d < min) { st.x += dx / d * (min - d); st.z += dz / d * (min - d); }
+          }
+        }
+      }
+    }
+    const freeAt = (x, z, pad) => obstacles.every(o => Math.hypot(x - o.x, z - o.z) > o.r + pad);
+    function freePoint(pad, xa, xb, za, zb) {
+      for (let k = 0; k < 40; k++) { const x = rand(xa, xb), z = rand(za, zb); if (freeAt(x, z, pad)) return { x, z }; }
+      return { x: rand(xa, xb), z: rand(za, zb) };
+    }
     const POOP_SPOTS = [[4.2, -3.0], [3.75, -3.2], [4.35, -2.55]];
 
     const st = {
@@ -1583,7 +1735,8 @@
     function spawnFood(kind) {
       const obj = buildFood(kind);
       let x, z;
-      do { x = rand(-3.3, 3.8); z = rand(-2.2, 2.8); } while (Math.hypot(x - st.x, z - st.z) < 3);
+      let tries = 0;
+      do { x = rand(-3.3, 3.8); z = rand(-2.2, 2.8); tries++; } while ((Math.hypot(x - st.x, z - st.z) < 3 || !freeAt(x, z, 0.4)) && tries < 60);
       obj.position.set(x, 0, z);
       obj.rotation.y = rand(0, 6.28);
       scene.add(obj);
@@ -1691,6 +1844,13 @@
       if (moved > 12) return;
       const r = el.getBoundingClientRect();
       ray.setFromCamera({ x: (e.clientX - r.left) / r.width * 2 - 1, y: -(e.clientY - r.top) / r.height * 2 + 1 }, camera);
+      if (edit) {
+        const hit = ray.intersectObjects(decorG.children, true)[0];
+        if (hit && hit.object.userData.index != null) { handlers.onDecorTap && handlers.onDecorTap(hit.object.userData.index); return; }
+        const f = ray.intersectObject(floor)[0];
+        if (f) handlers.onFloorTap && handlers.onFloorTap(f.point.x, f.point.z);
+        return;
+      }
       for (let i = st.poops.length - 1; i >= 0; i--) {
         if (ray.intersectObject(st.poops[i], true).length || ray.ray.distanceToPoint(st.poops[i].position) < 0.45) {
           handlers.onTapPoop && handlers.onTapPoop();
@@ -1726,6 +1886,12 @@
       return step;
     }
     function clampPos() {
+      resolveObstacles();
+      // 家具にはばまれて進めないときは、行き先を変える
+      if (st.mode === 'walk' || st.mode === 'toHide') {
+        st.walkTime = (st.walkTime || 0) + 1 / 60;
+        if (st.walkTime > 9) { st.mode = 'idle'; st.wait = 0.5; st.walkTime = 0; }
+      }
       const m = 1.4 * st.size;
       st.x = clamp(st.x, -BOUNDS.x + m, BOUNDS.x - m);
       st.z = clamp(st.z, BOUNDS.zMin + m, BOUNDS.zMax - m * 0.6);
@@ -1793,7 +1959,7 @@
           st.zzz -= dt;
           if (st.zzz <= 0) { fx('z', 'zzz'); st.zzz = 1.8; }
           if (st.wait <= 0) wake();
-          st.yaw += angleTo(st.yaw, HIDE.face) * Math.min(1, dt * 2);
+          if (HIDE) st.yaw += angleTo(st.yaw, HIDE.face) * Math.min(1, dt * 2);
         } else if (st.mode === 'walk' || st.mode === 'toHide') {
           step = moveToward(st.target.x, st.target.z, 0.85 * nf, dt);
           if (Math.hypot(st.target.x - st.x, st.target.z - st.z) < 0.12) {
@@ -1804,8 +1970,10 @@
         } else {
           st.wait -= dt;
           if (st.wait <= 0) {
-            if (!st.night && Math.random() < 0.3) { st.mode = 'toHide'; st.target = { x: HIDE.x, z: HIDE.z }; }
-            else { st.mode = 'walk'; st.target = { x: rand(-2.5, 3.5), z: rand(-1.4, 2.4) }; }
+            st.walkTime = 0;
+            if (!st.night && Math.random() < 0.3 && HIDE) { st.mode = 'toHide'; st.target = { x: HIDE.x, z: HIDE.z }; }
+            else if (!st.night && Math.random() < 0.12) { st.sleeping = true; st.wait = rand(12, 25); st.zzz = 0.8; }
+            else { st.mode = 'walk'; st.target = freePoint(1.4 * st.size, -3.2, 3.5, -1.8, 2.4); }
           }
         }
       }
@@ -1893,7 +2061,7 @@
     requestAnimationFrame(loop);
 
     return {
-      setGecko, spawnFood, takeFoods, setPoops, setNight, setDirty, wake, hearts, setClose,
+      setGecko, spawnFood, takeFoods, setPoops, setNight, setDirty, wake, hearts, setClose, setDecor, setEdit,
       pendingFoods: () => st.foods.map(f => f.kind),
       lick() { st.lick = 0.9; },
       happy() { st.happy = 1.4; if (st.sleeping) wake(); },
@@ -1989,5 +2157,5 @@
   }
   function photoReady(look, opts) { return photoCache.get(photoKey(look, opts)) || null; }
 
-  root.Leopa3D = { supported, createTank, photo, photoReady, photoKey, loadModel };
+  root.Leopa3D = { supported, createTank, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR };
 })(typeof window !== 'undefined' ? window : globalThis);

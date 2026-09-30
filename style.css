@@ -299,3 +299,19 @@ button { font: inherit; color: inherit; }
 .offer-main .tags { justify-content: flex-start; }
 .photo-wait { background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 22%, transparent), transparent); animation: breathe 1.4s ease-in-out infinite; }
 @keyframes breathe { 50% { opacity: .45; } }
+
+/* ---------- 目標 */
+.daily { display: grid; gap: 8px; }
+.daily-head { display: flex; align-items: center; gap: 8px; }
+.daily-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.daily-item { font-size: 12.5px; padding: 3px 10px; border-radius: 99px; background: var(--surface-2); color: var(--muted); }
+.daily-item.done { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+.daily .act { justify-self: start; }
+.orders, .ach-list { display: grid; gap: 8px; }
+.order { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); }
+.order-main { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.order-main b { overflow-wrap: anywhere; }
+.ach { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; }
+.ach.done { opacity: .6; }
+.edit-panel { display: grid; gap: 8px; border-color: var(--accent); }
+.decor-inv { display: flex; flex-wrap: wrap; gap: 6px; }

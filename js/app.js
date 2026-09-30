@@ -86,6 +86,7 @@
       s.v = 2;
     }
     s.names = s.names || {};
+    s.decorInv = s.decorInv || {};
     return s;
   }
   function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* noop */ } }
@@ -102,15 +103,24 @@
   function freshState() {
     S = {
       v: 2, coins: 60, cases: 4, incTemp: 29.5, food: { cricket: 20, dubia: 3, worm: 3 },
-      geckos: [], eggs: [], dex: {}, names: {}, selected: null, offers: [], offersAt: 0,
+      geckos: [], eggs: [], dex: {}, names: {}, decorInv: { cork: 1 }, selected: null, offers: [], offersAt: 0,
       lastTick: Date.now(), nextId: 1, welcomed: false, stats: { hatched: 0, rehomed: 0 },
     };
-    // どちらも斑点がやや少なく、しっぽに少しオレンジがある。選んでいけばハイポやキャロットテールをめざせる
-    const a = newGecko({ name: 'レオ', sex: 'M', genes: { alb: 1 }, tang: 45, growth: 55, hunger: 60, poly: { spots: 38, blotch: 40, head: 45, carrot: 30, lav: 25, aberrant: 20 } });
-    const b = newGecko({ name: 'もち', sex: 'F', genes: { snow: 1, alb: 1 }, tang: 22, growth: 55, hunger: 60, poly: { spots: 30, blotch: 55, head: 50, carrot: 22, lav: 40, aberrant: 30 } });
-    S.geckos.push(a, b);
-    S.selected = a.id;
-    register(a); register(b);
+    // はじめはショップでレオパを選ぶところから
+    S.starters = makeStarters();
+  }
+  // はじめてのおむかえ候補。オスとメスがどちらもいて、ブリードの入口になる遺伝子をもつ子も入れる
+  function makeStarters() {
+    const P = o => Object.assign(G.randomPoly(), o);
+    const list = [
+      { sex: 'M', genes: { alb: 1 }, tang: 45, poly: P({ spots: 38, carrot: 30 }), note: 'アルビノの遺伝子をかくし持つ' },
+      { sex: 'F', genes: { snow: 1, alb: 1 }, tang: 22, poly: P({ spots: 30, lav: 40 }), note: 'マックスノー。アルビノの遺伝子も' },
+      { sex: 'F', genes: {}, tang: 62, poly: P({ spots: 40, carrot: 25 }), note: 'オレンジが濃いめの血統' },
+      { sex: 'M', genes: { ecl: 1 }, tang: 35, poly: P({ spots: 24, head: 35 }), note: '斑点が少なめ。エクリプスの遺伝子も' },
+      { sex: Math.random() < 0.5 ? 'M' : 'F', genes: { alb: 2 }, tang: 30, poly: P({}), note: '赤みがかった目のアルビノ' },
+      { sex: Math.random() < 0.5 ? 'M' : 'F', genes: {}, tang: 20, poly: P({ aberrant: 55, blotch: 70 }), note: '模様が少し乱れた個性派' },
+    ];
+    return list.map(o => Object.assign(o, { genes: G.normGenes(o.genes), growth: 55, seed: Math.floor(Math.random() * 1e9) }));
   }
   const nameOf = x => G.morphName(x.genes, x.tang, x.poly);
   // 図鑑に登録して、新しく載った項目の名前を返す
@@ -257,6 +267,8 @@
       onEat(kind) { const g = S.geckos.find(x => x.id === tankGid); if (g) applyEat(g, kind); },
       onTapGecko() { const g = selected(); if (g && g.tame >= 40) tank.hearts(1); },
       onTapPoop() { ACTIONS.poop(); },
+      onFloorTap: (x, z) => floorTap(x, z),
+      onDecorTap: i => decorTap(i),
     });
   }
   function sceneMount() {
@@ -266,6 +278,7 @@
     $('#tankEmpty').hidden = !!g;
     if (!tank) return;
     tank.setGecko(g ? lookOf(g) : null);
+    tank.setDecor(g ? decorOf(g) : []);
     tank.setPoops(g ? g.poop : 0);
     tank.setDirty(!!g && g.clean < 35);
     tank.setNight(isNight());
@@ -307,6 +320,7 @@
     grow(g, F.growth, Date.now());
     g.tame = clamp(g.tame + 1);
     S.coins += 1;
+    daily('fed');
     if (!g.poopAt) g.poopAt = Date.now() + 2 * MIN;
     renderView();
     save();
@@ -365,8 +379,8 @@
 
   // ---------- 操作
   const ACTIONS = {
-    tab(t) { switchView(t.dataset.view); },
-    select(t) { S.selected = t.dataset.id; tipIndex = (tipIndex + 1) % TIPS.length; renderView(); },
+    tab(t) { if (editing) setEditing(null); switchView(t.dataset.view); },
+    select(t) { if (editing) setEditing(null); S.selected = t.dataset.id; tipIndex = (tipIndex + 1) % TIPS.length; renderView(); },
     closeSheet() { closeSheet(); },
 
     feedMenu() {
@@ -400,6 +414,7 @@
       g.poop--;
       g.clean = clamp(g.clean + 15);
       S.coins += 1;
+      daily('cleaned');
       toast('フンをひろいました');
       renderView();
       save();
@@ -411,6 +426,7 @@
       if (g.clean < 70 || g.poop > 0) S.coins += 2;
       g.clean = 100;
       g.poop = 0;
+      daily('cleaned');
       toast('ケースをきれいにしました');
       renderView();
       save();
@@ -424,6 +440,7 @@
       g.handledAt = now;
       g.tame = clamp(g.tame + 6);
       S.coins += 1;
+      daily('handled');
       if (tank) { tank.happy(); tank.hearts(3); }
       toast(g.tame >= 60 ? `${g.name}は手の上でリラックスしている` : `${g.name}を手に乗せてみた`);
       renderView();
@@ -587,6 +604,10 @@
     closeSheet();
     renderView();
     save();
+    if (ev.target.dataset.next === 'starter') {
+      if (S.geckos.length < 2) starterList();
+      else ACTIONS.starterDone();
+    }
   });
   document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
 
@@ -686,6 +707,7 @@
         </div>
         <p class="muted small">${st === 'adult' ? (g.growth >= GROWTH.max ? 'りっぱなおとなです' : 'おとなになりました。ペアリングできます') : `${STAGE_LABEL[st === 'baby' ? 'young' : 'adult']}まで あと ${Math.ceil(next - g.growth)}`}${g.hunger <= 30 ? ' ・ おなかが空いていると成長が止まります' : ''}</p>
       </div>
+      ${editing ? editPanel(g) : `${dailyCard()}
       <div class="actions">
         <button class="act primary" data-action="feedMenu">ごはん</button>
         <button class="act" data-action="clean">おそうじ</button>
@@ -694,9 +716,10 @@
       ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮を手伝う</button>' : ''}
       <div class="actions sub">
         <button class="act ghost" data-action="pairMenu">ペアリング${block ? '' : ' OK'}</button>
+        <button class="act ghost" data-action="editStart">もようがえ</button>
         <button class="act ghost" data-action="rehomeMenu">里親に出す</button>
       </div>
-      <p class="tip"><b>まめちしき</b>${TIPS[tipIndex]}</p>`);
+      <p class="tip"><b>まめちしき</b>${TIPS[tipIndex]}</p>`}`);
   }
 
   function renderEggs() {
@@ -739,6 +762,8 @@
     }).join('');
     const html = `
       <h2 class="h2">モルフ図鑑 <small class="muted">${found} / ${G.DEX.length}</small></h2>
+      ${achSection()}
+      <h3 class="h3">モルフ</h3>
       <div class="dex-grid">${cards}</div>
       ${extra.length ? `<h3 class="h3">これまでに出会ったモルフ名 <small class="muted">${extra.length}種</small></h3><div class="tags">${extra.map(n => `<span class="tag">${esc(n)}</span>`).join('')}</div>` : ''}
       <div class="card guide">
@@ -768,6 +793,7 @@
     }).join('');
     setHTML($('#view-shop'), `
       <h2 class="h2">ショップ</h2>
+      ${ordersSection(now)}
       <h3 class="h3">ごはん</h3>
       <div class="list">${Object.entries(FOODS).map(([k, F]) => `
         <button class="row" data-action="buyFood" data-kind="${k}" ${S.coins < F.price ? 'disabled' : ''}>
@@ -775,6 +801,7 @@
           <span class="row-main"><b>${F.name} ${F.pack}匹</b><small>いま ${S.food[k]}匹 ・ ${F.desc}</small></span>
           <span class="row-side price">${F.price}</span>
         </button>`).join('')}</div>
+      ${interiorShop()}
       <h3 class="h3">ケース <small class="muted">${S.geckos.length} / ${S.cases} 使用中</small></h3>
       <div class="list">
         <button class="row" data-action="buyCase" ${S.cases >= CASE_MAX || S.coins < casePrice() ? 'disabled' : ''}>
@@ -792,21 +819,339 @@
     openSheet(`<div class="welcome">
       <p class="eyebrow">ようこそ</p>
       <h3 class="logo-big">レオパといっしょ</h3>
-      <p>2匹のレオパ（ヒョウモントカゲモドキ）がやってきました。<b>レオ</b>はオス、<b>もち</b>はメス。どちらもアルビノの遺伝子をかくし持っています。</p>
+      <p>レオパ（ヒョウモントカゲモドキ）との暮らしをはじめましょう。まずは近くの爬虫類ショップへ、いっしょに暮らす子をむかえに行きます。</p>
       <ul class="howto">
         <li><b>ごはん・おそうじ・ふれあう</b>で毎日お世話。アプリを閉じていても時間は流れます。</li>
         <li>アダルトになったら<b>ペアリング</b>。卵の温度で性別が変わります。</li>
         <li>いろいろなモルフを生み出して<b>図鑑</b>を埋めよう。</li>
         <li>この世界のレオパは病気にならず、ずっと元気です。お世話をわすれても、しょんぼりするだけ。</li>
       </ul>
-      <button class="act primary" data-action="welcomeDone">はじめる</button></div>`);
+      <button class="act primary" data-action="${S.geckos.length ? 'welcomeDone' : 'starterList'}">${S.geckos.length ? 'はじめる' : 'ショップへ行く'}</button></div>`);
   }
+  // ---- はじめてのおむかえ（2匹までプレゼント）
+  function starterList() {
+    const picked = S.geckos.length;
+    const want = picked === 1 ? (S.geckos[0].sex === 'M' ? 'F' : 'M') : null;
+    openSheet(`<p class="eyebrow">爬虫類ショップ「ヤモリ堂」</p>
+      <h3 class="sheet-title">${picked ? 'もう1匹、えらべます' : 'いっしょに暮らす子をえらぼう'}</h3>
+      <p class="muted small">${picked ? `ペアリングには♂と♀が必要です。${want === 'F' ? 'メス' : 'オス'}をえらぶと、あとで赤ちゃんが見られます。` : 'はじめての2匹までは、お店からのプレゼントです。1匹ずつ顔も模様もちがいます。'}</p>
+      <div class="offers">${S.starters.map((o, i) => `<div class="offer">
+        <div class="offer-art">${portrait(o, 'young', nameOf(o))}</div>
+        <div class="offer-main">
+          <b>${esc(nameOf(o))}</b>
+          <small class="muted">${o.sex === 'M' ? '♂ オス' : '♀ メス'} ・ ヤング</small>
+          <small>${esc(o.note)}</small>
+          ${traitTable(o, true)}
+          <button class="act primary sm" data-action="starterPick" data-i="${i}">この子にする</button>
+        </div></div>`).join('')}</div>
+      ${picked ? '<button class="act wide" data-action="starterDone">1匹でだいじょうぶ</button>' : ''}`);
+  }
+  Object.assign(ACTIONS, {
+    starterList,
+    starterPick(t) {
+      const o = S.starters[Number(t.dataset.i)];
+      if (!o || S.geckos.length >= 2) return;
+      S.starters.splice(Number(t.dataset.i), 1);
+      const g = newGecko({ name: unusedName(), sex: o.sex, genes: o.genes, tang: o.tang, poly: o.poly, growth: o.growth, hunger: 65 });
+      g.seed = o.seed;
+      S.geckos.push(g);
+      S.selected = g.id;
+      register(g);
+      save();
+      renderView();
+      openSheet(`<div class="reveal">
+        <div class="reveal-art">${portrait(g, 'young', nameOf(g))}</div>
+        <p class="eyebrow">おむかえしました</p>
+        <h3 class="morph big">${esc(nameOf(g))}</h3>
+        <p class="muted">${g.sex === 'M' ? '♂ オス' : '♀ メス'} ・ ${esc(o.note)}</p>
+        <form id="renameForm" data-id="${g.id}" data-next="starter" class="rename">
+          <label for="renameInput">この子の名前をつけてあげよう</label>
+          <input id="renameInput" value="${esc(g.name)}" maxlength="10" autocomplete="off">
+          <button class="act primary" type="submit">この名前にする</button>
+        </form></div>`);
+    },
+    starterDone() {
+      S.welcomed = true;
+      S.starters = [];
+      closeSheet();
+      switchView('case');
+      toast('ケースにおむかえしました。ごはんをあげてみよう');
+      save();
+    },
+  });
+
+  // ======================================================
+  // 目標：今日のおせわ・ブリーダー依頼・実績
+  // ======================================================
+  const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
+  const DAILY = [
+    { key: 'fed', label: 'ごはんをあげる', need: 3 },
+    { key: 'cleaned', label: 'おそうじ（フンひろいも）', need: 1 },
+    { key: 'handled', label: 'ふれあう', need: 2 },
+  ];
+  function dailyState() {
+    if (!S.daily || S.daily.day !== todayKey()) {
+      const streak = S.daily && S.daily.claimed && S.daily.day === yesterdayKey() ? (S.daily.streak || 0) : 0;
+      S.daily = { day: todayKey(), fed: 0, cleaned: 0, handled: 0, claimed: false, streak };
+    }
+    return S.daily;
+  }
+  function yesterdayKey() { const d = new Date(Date.now() - 86400000); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
+  function daily(key) {
+    const d = dailyState();
+    const was = DAILY.every(t => d[t.key] >= t.need);
+    d[key] = (d[key] || 0) + 1;
+    if (!was && !d.claimed && DAILY.every(t => d[t.key] >= t.need)) toast('今日のおせわ達成！ごほうびを受け取れます');
+  }
+  function dailyReward(d) { return 20 + Math.min(6, d.streak) * 5; }
+  function dailyCard() {
+    const d = dailyState();
+    const done = DAILY.every(t => d[t.key] >= t.need);
+    return `<div class="card daily">
+      <div class="daily-head"><b>今日のおせわ</b>${d.streak ? `<span class="pill good">${d.streak}日連続</span>` : ''}</div>
+      <div class="daily-list">${DAILY.map(t => `<span class="daily-item${d[t.key] >= t.need ? ' done' : ''}">${t.label} <b>${Math.min(d[t.key], t.need)}/${t.need}</b></span>`).join('')}</div>
+      ${d.claimed ? '<p class="muted small">今日のごほうびは受け取りずみ。また明日！</p>'
+        : `<button class="act ${done ? 'primary' : ''} sm" data-action="claimDaily" ${done ? '' : 'disabled'}>ごほうび ${dailyReward(d)}コイン＋コオロギ5匹</button>`}
+    </div>`;
+  }
+
+  // ---- ブリーダー依頼：条件に合う子をゆずると報酬がもらえる
+  const ORDER_MORPHS = [
+    ['ハイイエロー', 0.1], ['マックスノー', 0.2], ['トレンパーアルビノ', 0.35], ['マックスノー トレンパーアルビノ', 0.5],
+    ['エクリプス', 0.45], ['スーパーマックスノー', 0.55], ['ハイポ', 0.55], ['キャロットテール', 0.5],
+    ['タンジェリン', 0.6], ['ジャングル', 0.6], ['ラベンダー', 0.55], ['スーパーハイポ', 0.85], ['ストライプ', 0.85],
+  ];
+  const ORDER_TRAITS = [
+    { key: 'tang', vals: [45, 55, 65, 75], label: v => `タンジェリン度${v}以上`, test: (g, v) => g.tang >= v, diff: v => (v - 35) / 45 },
+    { key: 'spots', vals: [40, 30, 22, 14], label: v => `斑点の量${v}以下`, test: (g, v) => g.poly.spots <= v, diff: v => (50 - v) / 40 },
+    { key: 'carrot', vals: [30, 45, 60], label: v => `しっぽのオレンジ${v}以上`, test: (g, v) => g.poly.carrot >= v, diff: v => v / 70 },
+    { key: 'lav', vals: [45, 60, 75], label: v => `ラベンダー${v}以上`, test: (g, v) => g.poly.lav >= v, diff: v => v / 85 },
+    { key: 'head', vals: [35, 20, 10], label: v => `頭の斑点${v}以下`, test: (g, v) => g.poly.head <= v, diff: v => (60 - v) / 55 },
+  ];
+  const BUYERS = ['はじめてレオパを飼う学生さん', '爬虫類ショップ「ヤモリ堂」', '地元のブリーダーさん', '繁殖を始めたい家族', '即売会に出るブリーダー', '動物ふれあい施設'];
+  function makeOrder(now) {
+    const o = { id: 'o' + (S.nextId++), buyer: pick(BUYERS), sex: Math.random() < 0.45 ? pick(['M', 'F']) : null, adult: Math.random() < 0.35, until: now + 18 * HOUR };
+    let diff;
+    if (Math.random() < 0.45) {
+      const t = pick(ORDER_TRAITS), v = pick(t.vals);
+      o.kind = 'trait'; o.key = t.key; o.val = v; o.what = t.label(v); diff = t.diff(v);
+    } else {
+      const [name, d] = pick(ORDER_MORPHS);
+      o.kind = 'morph'; o.id2 = G.DEX.find(x => x.name === name).id; o.what = name; diff = d;
+    }
+    o.reward = Math.round((50 + diff * 220) * (o.sex ? 1.15 : 1) * (o.adult ? 1.5 : 1) / 5) * 5;
+    return o;
+  }
+  function orderText(o) {
+    return `${o.what}${o.sex ? `の${o.sex === 'M' ? 'オス' : 'メス'}` : ''}${o.adult ? '（アダルト）' : ''}`;
+  }
+  function fits(o, g) {
+    if (o.sex && g.sex !== o.sex) return false;
+    if (o.adult && stageOf(g) !== 'adult') return false;
+    if (g.gravid) return false;
+    if (o.kind === 'morph') return G.dexMatches(g.genes, g.tang, g.poly).includes(o.id2);
+    return ORDER_TRAITS.find(t => t.key === o.key).test(g, o.val);
+  }
+  function refreshOrders(now) {
+    S.orders = (S.orders || []).filter(o => o.until > now);
+    while (S.orders.length < 3) S.orders.push(makeOrder(now));
+  }
+  function ordersSection(now) {
+    return `<h3 class="h3">ブリーダーからの依頼 <small class="muted">条件に合う子をゆずると報酬</small></h3>
+      <div class="orders">${S.orders.map((o, i) => {
+        const n = S.geckos.filter(g => fits(o, g)).length;
+        return `<div class="order">
+          <div class="order-main"><small class="muted">${esc(o.buyer)}</small><b>${esc(orderText(o))}</b>
+          <small class="muted">あと${fmtLeft(o.until - now)} ・ ${n ? `条件に合う子 ${n}匹` : 'いま条件に合う子はいません'}</small></div>
+          <button class="act ${n ? 'primary' : ''} sm" data-action="orderMenu" data-i="${i}" ${n ? '' : 'disabled'}>${o.reward} コイン</button>
+        </div>`;
+      }).join('')}</div>`;
+  }
+
+  // ---- 実績
+  const ACH = [
+    { id: 'h1', label: 'はじめてのふ化', reward: 30, test: () => S.stats.hatched >= 1 },
+    { id: 'h10', label: '10匹ふ化させる', reward: 120, test: () => S.stats.hatched >= 10 },
+    { id: 'h30', label: '30匹ふ化させる', reward: 350, test: () => S.stats.hatched >= 30 },
+    { id: 'd5', label: '図鑑を5種類うめる', reward: 60, test: () => dexCount() >= 5 },
+    { id: 'd10', label: '図鑑を10種類うめる', reward: 180, test: () => dexCount() >= 10 },
+    { id: 'd16', label: '図鑑を16種類うめる', reward: 400, test: () => dexCount() >= 16 },
+    { id: 'dall', label: '図鑑をすべてうめる', reward: 1500, test: () => dexCount() >= G.DEX.length },
+    { id: 'o1', label: 'はじめての依頼達成', reward: 40, test: () => (S.stats.orders || 0) >= 1 },
+    { id: 'o10', label: '依頼を10回達成', reward: 250, test: () => (S.stats.orders || 0) >= 10 },
+    { id: 'tame', label: 'なれ度100の子を育てる', reward: 60, test: () => S.geckos.some(g => g.tame >= 100) },
+    { id: 'gen5', label: '第5世代の子が生まれる', reward: 200, test: () => S.geckos.some(g => g.gen >= 5) },
+    { id: 'shtctb', label: 'SHTCTB を生み出す', reward: 800, test: () => !!S.dex.SHTCTB },
+    { id: 'streak7', label: '7日連続で今日のおせわ', reward: 200, test: () => (S.daily && S.daily.streak >= 7) },
+  ];
+  const dexCount = () => G.DEX.filter(d => S.dex[d.id]).length;
+  function claimableAch() { S.ach = S.ach || {}; return ACH.filter(a => !S.ach[a.id] && a.test()); }
+  function checkAch() {
+    S.achSeen = S.achSeen || {};
+    for (const a of claimableAch()) if (!S.achSeen[a.id]) { S.achSeen[a.id] = true; toast(`実績「${a.label}」達成！図鑑で受け取れます`); }
+  }
+  function achSection() {
+    S.ach = S.ach || {};
+    const got = ACH.filter(a => S.ach[a.id]).length;
+    return `<h3 class="h3">実績 <small class="muted">${got} / ${ACH.length}</small></h3>
+      <div class="ach-list">${ACH.map(a => {
+        const done = !!S.ach[a.id], ok = !done && a.test();
+        return `<div class="ach${done ? ' done' : ''}"><span>${esc(a.label)}</span>${done ? '<small class="muted">受け取りずみ</small>'
+          : `<button class="act ${ok ? 'primary' : ''} sm" data-action="claimAch" data-id="${a.id}" ${ok ? '' : 'disabled'}>${a.reward}</button>`}</div>`;
+      }).join('')}</div>`;
+  }
+  Object.assign(ACTIONS, {
+    claimDaily() {
+      const d = dailyState();
+      if (d.claimed || !DAILY.every(t => d[t.key] >= t.need)) return;
+      const r = dailyReward(d);
+      d.claimed = true;
+      d.streak = (d.streak || 0) + 1;
+      S.coins += r;
+      S.food.cricket += 5;
+      toast(`ごほうび ${r}コインとコオロギ5匹を受け取りました`);
+      checkAch(); renderView(); save();
+    },
+    orderMenu(t) {
+      const o = S.orders[Number(t.dataset.i)];
+      if (!o) return;
+      const list = S.geckos.filter(g => fits(o, g));
+      openSheet(`<h3 class="sheet-title">${esc(o.buyer)}の依頼</h3>
+        <p>${esc(orderText(o))}をさがしています。ゆずると <b>${o.reward} コイン</b>。</p>
+        <div class="list">${list.map(g => `<button class="row" data-action="deliver" data-i="${t.dataset.i}" data-id="${g.id}" ${S.geckos.length <= 1 ? 'disabled' : ''}>
+          <span class="row-art">${A.swatch(g)}</span>
+          <span class="row-main"><b>${esc(g.name)} ${sexMark(g)}</b><small>${esc(nameOf(g))} ・ ${STAGE_LABEL[stageOf(g)]}</small></span>
+          <span class="row-side">ゆずる</span></button>`).join('')}</div>
+        ${S.geckos.length <= 1 ? '<p class="muted small">さいごの1匹はゆずれません。</p>' : ''}`);
+    },
+    deliver(t) {
+      const i = Number(t.dataset.i), o = S.orders[i];
+      const g = S.geckos.find(x => x.id === t.dataset.id);
+      if (!o || !g || !fits(o, g) || S.geckos.length <= 1) return;
+      S.geckos = S.geckos.filter(x => x !== g);
+      if (S.selected === g.id) S.selected = S.geckos[0].id;
+      S.coins += o.reward;
+      S.stats.orders = (S.stats.orders || 0) + 1;
+      S.orders.splice(i, 1, makeOrder(Date.now()));
+      closeSheet();
+      toast(`${g.name}は${o.buyer}のもとへ。報酬 ${o.reward}コイン！`);
+      checkAch(); renderView(); save();
+    },
+    claimAch(t) {
+      const a = ACH.find(x => x.id === t.dataset.id);
+      S.ach = S.ach || {};
+      if (!a || S.ach[a.id] || !a.test()) return;
+      S.ach[a.id] = true;
+      S.coins += a.reward;
+      toast(`実績「${a.label}」の報酬 ${a.reward}コイン`);
+      dexHTML = '';
+      renderView(); save();
+    },
+  });
+
+  // ======================================================
+  // インテリア：ショップで買って、ケースごとにもようがえ
+  // ======================================================
+  const MAX_DECOR = 7;
+  let editing = null; // { sel: 家具の番号 | null, place: 置く家具の種類 | null }
+  const decorOf = g => { if (!g.decor) g.decor = L3.DEFAULT_DECOR.map(d => Object.assign({}, d)); return g.decor; };
+  function setEditing(e) {
+    editing = e;
+    if (tank) tank.setEdit(e ? { sel: e.sel } : null);
+    renderView();
+  }
+  function decorOk(g, x, z, t, skip) {
+    const r = L3.DECOR[t].r;
+    if (Math.abs(x) > 5 - r - 0.1 || z < -3.75 + r + 0.1 || z > 3.75 - r - 0.1) return 'ケースのはしに寄りすぎです';
+    if (Math.hypot(x - 4.2, z + 3.0) < r + 0.7) return 'そこはトイレの場所です';
+    for (let i = 0; i < decorOf(g).length; i++) {
+      if (i === skip) continue;
+      const d = decorOf(g)[i];
+      if (Math.hypot(x - d.x, z - d.z) < r + L3.DECOR[d.t].r - 0.25) return 'ほかの家具と重なっています';
+    }
+    return '';
+  }
+  function floorTap(x, z) {
+    const g = selected();
+    if (!g || !editing) return;
+    const list = decorOf(g);
+    if (editing.place) {
+      if (list.length >= MAX_DECOR) { toast(`1つのケースに置けるのは${MAX_DECOR}個までです`); return; }
+      const err = decorOk(g, x, z, editing.place);
+      if (err) { toast(err); return; }
+      list.push({ t: editing.place, x: +x.toFixed(2), z: +z.toFixed(2), rot: 0 });
+      S.decorInv[editing.place]--;
+      toast(`${L3.DECOR[editing.place].name}を置きました`);
+      setEditing({ sel: list.length - 1, place: null });
+    } else if (editing.sel != null) {
+      const d = list[editing.sel];
+      const err = decorOk(g, x, z, d.t, editing.sel);
+      if (err) { toast(err); return; }
+      d.x = +x.toFixed(2); d.z = +z.toFixed(2);
+      setEditing({ sel: editing.sel, place: null });
+    }
+    save();
+  }
+  function decorTap(i) { if (editing) setEditing({ sel: i, place: null }); }
+  function editPanel(g) {
+    const list = decorOf(g);
+    const inv = Object.entries(S.decorInv).filter(([, n]) => n > 0);
+    const sel = editing.sel != null ? list[editing.sel] : null;
+    const hint = editing.place ? `${L3.DECOR[editing.place].name}を置く場所を、ケースの床でタップしてね`
+      : sel ? `${L3.DECOR[sel.t].name}を選択中。床をタップすると動かせます`
+      : 'ケースの家具をタップして選ぶか、下から置く家具をえらんでね';
+    return `<div class="card edit-panel">
+      <div class="gc-head"><b>もようがえ中</b><small class="muted">${list.length} / ${MAX_DECOR} 個</small></div>
+      <p class="muted small">${hint}</p>
+      ${sel ? `<div class="actions"><button class="act sm" data-action="rotateDecor">向きを変える</button><button class="act sm" data-action="storeDecor">しまう</button></div>` : ''}
+      <div class="label">持っている家具</div>
+      ${inv.length ? `<div class="decor-inv">${inv.map(([t, n]) => `<button class="chip${editing.place === t ? ' on' : ''}" data-action="pickDecor" data-t="${t}">${L3.DECOR[t].name} ×${n}</button>`).join('')}</div>`
+        : '<p class="muted small">しまった家具や、ショップで買った家具がここに並びます。</p>'}
+      <button class="act primary wide" data-action="editDone">もようがえをおわる</button>
+    </div>`;
+  }
+  function interiorShop() {
+    return `<h3 class="h3">インテリア <small class="muted">買った家具は「もようがえ」で置けます</small></h3>
+      <div class="list">${Object.entries(L3.DECOR).map(([t, d]) => `
+        <button class="row" data-action="buyDecor" data-t="${t}" ${S.coins < d.price ? 'disabled' : ''}>
+          <span class="row-main"><b>${d.name}</b><small>${d.desc}${S.decorInv[t] ? ` ・ 手持ち ${S.decorInv[t]}` : ''}</small></span>
+          <span class="row-side price">${d.price}</span>
+        </button>`).join('')}</div>`;
+  }
+  Object.assign(ACTIONS, {
+    editStart() { if (selected()) setEditing({ sel: null, place: null }); },
+    editDone() { setEditing(null); save(); },
+    pickDecor(t) { setEditing({ sel: null, place: editing && editing.place === t.dataset.t ? null : t.dataset.t }); },
+    rotateDecor() {
+      const g = selected(); const d = g && editing && decorOf(g)[editing.sel];
+      if (!d) return;
+      d.rot = ((d.rot || 0) + Math.PI / 2) % (Math.PI * 2);
+      renderView(); save();
+    },
+    storeDecor() {
+      const g = selected(); if (!g || !editing || editing.sel == null) return;
+      const [d] = decorOf(g).splice(editing.sel, 1);
+      S.decorInv[d.t] = (S.decorInv[d.t] || 0) + 1;
+      toast(`${L3.DECOR[d.t].name}をしまいました`);
+      setEditing({ sel: null, place: null }); save();
+    },
+    buyDecor(t) {
+      const d = L3.DECOR[t.dataset.t];
+      if (!d || S.coins < d.price) { toast('コインが足りません'); return; }
+      S.coins -= d.price;
+      S.decorInv[t.dataset.t] = (S.decorInv[t.dataset.t] || 0) + 1;
+      toast(`${d.name}を買いました。ケースの「もようがえ」で置けます`);
+      renderView(); save();
+    },
+  });
 
   // ---------- 起動
   function tick() {
     const now = Date.now();
     simulate(now);
     refreshOffers(now);
+    refreshOrders(now);
+    checkAch();
     renderView();
     save();
   }
@@ -820,7 +1165,7 @@
   switchView('case');
   setInterval(tick, 5000);
   document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else tick(); });
-  if (!S.welcomed) welcome();
+  if (!S.welcomed) { if (!S.geckos.length && !(S.starters && S.starters.length)) S.starters = makeStarters(); if (S.geckos.length && S.starters && S.starters.length) starterList(); else welcome(); }
 
   if ('serviceWorker' in navigator && /^(https:|http:\/\/localhost)/.test(location.href)) {
     navigator.serviceWorker.register('sw.js').catch(() => { /* プレビュー環境などでは使えない */ });
