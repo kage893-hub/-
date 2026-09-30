@@ -286,7 +286,7 @@
     const key = L3.photoKey(look).replace(/[^\w|.-]/g, '');
     photoQueue.set(key, look);
     if (!photoBusy) { photoBusy = true; setTimeout(pumpPhotos, 30); }
-    return `<img class="photo-wait" data-photo="${key}" alt="${esc(label || '')}">`;
+    return `<img class="photo-wait" data-photo="${key}" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="${esc(label || '')}">`;
   }
   function pumpPhotos() {
     const next = photoQueue.entries().next();
@@ -814,6 +814,8 @@
   S = load();
   if (!S) freshState();
   initTank();
+  // 3D モデルが読みこめたら、レオパを差しかえる
+  if (L3.supported && L3.loadModel) L3.loadModel('assets/gecko.glb').then(ok => { if (ok) { dexHTML = ''; renderView(); } });
   tick();
   switchView('case');
   setInterval(tick, 5000);

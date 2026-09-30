@@ -473,6 +473,8 @@
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
 
+    // 目と口は、3D モデルでは形として彫られているので描かない
+    if (!look.model) {
     // ---- 目のまわり：まぶたは明るく、ふちに細い線
     for (const E of EYES) {
       const th = E.side > 0 ? EYE.th : Math.PI - EYE.th;
@@ -516,6 +518,7 @@
     lineAlong(0.07, 0.05, A.mix(pal.base, '#FFFDF6', 0.5), 0.75);
     lineAlong(-0.07, 0.04, A.mix(pal.base, '#FFFDF6', 0.65), 0.6);
     lineAlong(0, 0.014, '#2A1F18', 0.85);
+    }
     ctx.globalAlpha = 1;
     return c;
   }
@@ -753,6 +756,7 @@
 
   /* look: { genes, tang, poly, seed, stage, gravid, shed }  quality: 'high' | 'photo' */
   function buildGecko(look, quality) {
+    if (MODEL.geo) return buildGeckoGLB(look, quality);
     const pal = A.colors(look.genes, look.tang, look.stage);
     const hi = quality !== 'photo';
     const W = hi ? 1024 : 768, H = hi ? 1536 : 1152;
@@ -925,6 +929,7 @@
   const LID_OPEN = 1.1, LID_SHUT_UP = 0.06, LID_SHUT_LO = -0.02;
   const _p = new T.Vector3();
   function pose(gk, P) {
+    if (gk.glb) return poseGLB(gk, P);
     const B = gk.bones;
     const s = Math.sin(P.phase);
     B.mid.position.y = gk.midY - P.drop + P.walk * Math.abs(Math.cos(P.phase)) * 0.025;
@@ -989,7 +994,7 @@
 
   function disposeGecko(gk) {
     gk.root.traverse(o => {
-      if (o.geometry) o.geometry.dispose();
+      if (o.geometry && o.geometry !== MODEL.geo) o.geometry.dispose();
       if (o.material) o.material.dispose();
     });
     gk.owned.forEach(t => t.dispose());
@@ -1002,7 +1007,264 @@
   }
   function lookKey(look) {
     const p = look.poly || {};
-    return [look.genes.snow, look.genes.alb, look.genes.ecl, look.genes.bliz, look.tang, p.spots, p.blotch, p.head, p.carrot, p.lav, p.aberrant, look.seed, look.stage, !!look.gravid, !!look.shed].join('|');
+    return [MODEL.geo ? 'm' : 'p', look.genes.snow, look.genes.alb, look.genes.ecl, look.genes.bliz, look.tang, p.spots, p.blotch, p.head, p.carrot, p.lav, p.aberrant, look.seed, look.stage, !!look.gravid, !!look.shed].join('|');
+  }
+
+  // ======================================================
+  // 3D モデル（GLB）を使うレオパ
+  // 形だけのモデルに、遺伝で決まる模様を体の流れに沿って巻きつけ、
+  // 光る眼球とまぶたをはめこむ。骨組みがないので、動きは描画の中で形を曲げて付ける。
+  // ======================================================
+  const MODEL = { geo: null, eyes: null, ready: null };
+  // モデルの座標 → ゲームの座標（鼻先 z≈2.19、しっぽの先 z≈-3.4、足の裏 y=0）
+  const MS = 2.95, MZ = -0.6, MY = 0.148;
+  const toGame = (x, y, z) => V(x * MS, (y + MY) * MS, z * MS + MZ);
+  // 目じるしの位置をそろえて、模様の置き場所を元のモデルと合わせる
+  const CANON = [[2.19, 2.195], [1.775, 1.83], [1.02, 1.26], [-1.485, -0.92], [-3.4, -3.36]];
+  function canonZ(z) {
+    if (z >= CANON[0][0]) return CANON[0][1];
+    for (let i = 0; i < CANON.length - 1; i++) {
+      const [a0, b0] = CANON[i], [a1, b1] = CANON[i + 1];
+      if (z <= a0 && z >= a1) return lerp(b0, b1, (a0 - z) / (a0 - a1));
+    }
+    return CANON[CANON.length - 1][1];
+  }
+
+  function parseGLB(buf) {
+    const dv = new DataView(buf);
+    const jlen = dv.getUint32(12, true);
+    const j = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jlen)));
+    const bin = 20 + jlen + 8;
+    const acc = i => {
+      const a = j.accessors[i], bv = j.bufferViews[a.bufferView];
+      const off = bin + (bv.byteOffset || 0) + (a.byteOffset || 0);
+      const n = a.count * ({ SCALAR: 1, VEC2: 2, VEC3: 3 })[a.type];
+      const T2 = { 5126: Float32Array, 5125: Uint32Array, 5123: Uint16Array }[a.componentType];
+      return new T2(buf.slice(off, off + n * T2.BYTES_PER_ELEMENT));
+    };
+    const p = j.meshes[0].primitives[0];
+    return { pos: acc(p.attributes.POSITION), idx: acc(p.indices) };
+  }
+
+  function prepareModel(buf) {
+    const { pos, idx } = parseGLB(buf);
+    const n = pos.length / 3;
+    // 脚の見分け：前脚・後ろ脚のあたりで、体の外や下に出ている部分
+    const legOf = (x, y, z) => {
+      const out = Math.abs(x) > 0.135 || y < -0.085;
+      if (z > 0.3 && z < 0.56 && out) return x < 0 ? 1 : 2;
+      if (z > -0.33 && z < -0.04 && out) return x > 0 ? 4 : 3;
+      return 0;
+    };
+    const PIV = { 1: [-0.12, 0, 0.43], 2: [0.12, 0, 0.43], 3: [-0.13, -0.01, -0.18], 4: [0.13, -0.01, -0.18] };
+    // 体の中心の高さ（輪切りごと）
+    const BIN = 0.025, bins = {};
+    for (let i = 0; i < n; i++) {
+      const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+      if (legOf(x, y, z)) continue;
+      const k = Math.round(z / BIN);
+      const b = bins[k] || (bins[k] = [Infinity, -Infinity]);
+      b[0] = Math.min(b[0], y); b[1] = Math.max(b[1], y);
+    }
+    const centerY = z => {
+      const k = Math.round(z / BIN);
+      for (let d = 0; d < 8; d++) for (const kk of [k - d, k + d]) if (bins[kk]) return (bins[kk][0] + bins[kk][1]) / 2;
+      return 0;
+    };
+    const g = new T.BufferGeometry();
+    const P = new Float32Array(n * 3), UV = new Float32Array(n * 2), LEG = new Float32Array(n), PV = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+      const q = toGame(x, y, z);
+      P.set([q.x, q.y, q.z], i * 3);
+      const leg = legOf(x, y, z);
+      // 脚は体の横と同じ色・模様にする（おなかの白にならないように）
+      const th = leg ? (x > 0 ? 0.35 : Math.PI - 0.35) + (y + 0.05) * 3 * (x > 0 ? 1 : -1) : Math.atan2(y - centerY(z), x);
+      UV[i * 2] = thToU(th);
+      UV[i * 2 + 1] = zToV(canonZ(q.z));
+      LEG[i] = leg;
+      if (leg) { const pv = toGame(...PIV[leg]); PV.set([pv.x, pv.y, pv.z], i * 3); }
+    }
+    g.setAttribute('position', new T.BufferAttribute(P, 3));
+    g.setAttribute('uv', new T.BufferAttribute(UV, 2));
+    g.setAttribute('aLeg', new T.BufferAttribute(LEG, 1));
+    g.setAttribute('aPivot', new T.BufferAttribute(PV, 3));
+    g.setIndex(new T.BufferAttribute(idx, 1));
+    g.computeVertexNormals();
+    // おなか側の継ぎ目（u が 1→0 に戻るところ）で模様が伸びないように、三角形ごとに u をそろえる
+    const geo = g.toNonIndexed();
+    const uv = geo.attributes.uv;
+    for (let t = 0; t < uv.count; t += 3) {
+      const u = [uv.getX(t), uv.getX(t + 1), uv.getX(t + 2)];
+      if (Math.max(...u) - Math.min(...u) > 0.5) for (let k = 0; k < 3; k++) if (u[k] < 0.5) uv.setX(t + k, u[k] + 1);
+    }
+    MODEL.geo = geo;
+    // 目（モデルで測った位置）
+    MODEL.eyes = [
+      { side: 1, C: toGame(0.081, 0.057, 0.805), dir: V(1, 0.28, 0.4).normalize() },
+      { side: -1, C: toGame(-0.084, 0.056, 0.8), dir: V(-1, 0.28, 0.4).normalize() },
+    ];
+    MODEL.eyeR = 0.036 * MS;
+    MODEL.mouth = toGame(0, -0.03, 0.93);
+    MODEL.head = toGame(0, 0.03, 0.78);
+    MODEL.neck = toGame(0, 0.03, 0.58);
+    MODEL.mid = toGame(0, 0.03, 0.1);
+    MODEL.tailTip = toGame(0, -0.13, -0.93);
+  }
+
+  // 形の曲げ方（描画側 GLSL と、眼球などの位置合わせ用 JS で同じ式を使う）
+  const DEFORM_GLSL = `
+    uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop;
+    attribute float aLeg;
+    attribute vec3 aPivot;
+    vec3 rotY(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(c * q.x + s * q.z, q.y, -s * q.x + c * q.z); }
+    vec3 rotX(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(q.x, c * q.y - s * q.z, s * q.y + c * q.z); }
+    vec3 rotZ(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(c * q.x - s * q.y, s * q.x + c * q.y, q.z); }
+    vec3 leoDeform(vec3 p) {
+      if (aLeg > 0.5) {
+        float off = (aLeg < 1.5 || aLeg > 3.5) ? 0.0 : 3.14159;
+        float ph = uPhase + off;
+        float fr = aLeg < 2.5 ? 1.0 : -1.0;
+        vec3 q = rotY(p - aPivot, -0.45 * cos(ph) * uWalk * sign(aPivot.x) * fr);
+        float reach = clamp(length(q.xz) / 0.6, 0.0, 1.0);
+        q.y += max(0.0, -sin(ph)) * uWalk * 0.12 * reach;
+        p = aPivot + q;
+      }
+      float hz = smoothstep(0.9, 1.45, p.z);
+      if (hz > 0.0) {
+        vec3 pv = vec3(0.0, 0.45, 0.95);
+        vec3 q = rotZ(rotX(rotY(p - pv, uLook * 0.9 * hz), uPitch * hz), uTilt * hz);
+        p = pv + q;
+      }
+      float body = 1.0 - smoothstep(0.8, 1.35, p.z);
+      float w = uWalk * 0.16 * sin(uPhase - p.z * 1.4) * (0.4 + 0.6 * smoothstep(1.2, -1.5, p.z)) * body;
+      float tt = clamp((-1.4 - p.z) / 2.0, 0.0, 1.0);
+      w += tt * tt * (uCurl * 1.4 + 0.12 * sin(uT * 1.2 - p.z * 1.5) * (1.0 - uWalk) + uHappy * 0.3 * sin(uT * 9.0 - p.z * 2.0));
+      w += step(0.55, tt) * uStalk * 0.06 * sin(uT * 28.0 - p.z * 4.0);
+      p.x += w;
+      if (aLeg < 0.5) p.x *= 1.0 + uBreathe * 0.025 * smoothstep(1.2, 0.8, p.z) * smoothstep(-1.6, -1.1, p.z);
+      p.y -= uDrop;
+      return p;
+    }`;
+  function deformPoint(p, U) {
+    const q = p.clone();
+    const hz = smooth(clamp((q.z - 0.9) / 0.55, 0, 1));
+    if (hz > 0) {
+      const pv = V(0, 0.45, 0.95);
+      q.sub(pv).applyEuler(new T.Euler(U.uPitch.value * hz, U.uLook.value * 0.9 * hz, U.uTilt.value * hz, 'ZXY')).add(pv);
+    }
+    const body = 1 - smooth(clamp((q.z - 0.8) / 0.55, 0, 1));
+    let w = U.uWalk.value * 0.16 * Math.sin(U.uPhase.value - q.z * 1.4) * (0.4 + 0.6 * smooth(clamp((1.2 - q.z) / 2.7, 0, 1))) * body;
+    const tt = clamp((-1.4 - q.z) / 2, 0, 1);
+    w += tt * tt * (U.uCurl.value * 1.4 + 0.12 * Math.sin(U.uT.value * 1.2 - q.z * 1.5) * (1 - U.uWalk.value) + U.uHappy.value * 0.3 * Math.sin(U.uT.value * 9 - q.z * 2));
+    q.x += w;
+    q.y -= U.uDrop.value;
+    return q;
+  }
+  function deformMaterial(mat, U) {
+    mat.onBeforeCompile = sh => {
+      Object.assign(sh.uniforms, U);
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\n' + DEFORM_GLSL)
+        .replace('#include <begin_vertex>', 'vec3 transformed = leoDeform(vec3(position));');
+    };
+    return mat;
+  }
+
+  function buildGeckoGLB(look, quality) {
+    const pal = A.colors(look.genes, look.tang, look.stage);
+    const hi = quality !== 'photo';
+    const W = hi ? 1024 : 768, H = hi ? 1536 : 1152;
+    const colorTex = canvasTexture(skinCanvas(pal, Object.assign({}, look, { model: true }), W, H), { srgb: true });
+    colorTex.wrapS = T.RepeatWrapping;
+    const bump = bumpTexture(W, H);
+    bump.wrapS = T.RepeatWrapping;
+    const rough = roughTexture();
+    rough.wrapS = T.RepeatWrapping;
+    const shed = !!look.shed;
+    const U = {};
+    for (const k of ['uT', 'uPhase', 'uWalk', 'uLook', 'uPitch', 'uTilt', 'uCurl', 'uStalk', 'uHappy', 'uBreathe', 'uDrop']) U[k] = { value: 0 };
+    const skinMat = deformMaterial(phys('#ffffff', {
+      map: colorTex, bumpMap: bump, bumpScale: 0.006, roughnessMap: rough, roughness: shed ? 0.95 : 0.6,
+      clearcoat: shed ? 0 : 0.12, clearcoatRoughness: 0.6,
+      emissive: new T.Color('#ffffff'), emissiveMap: shed ? null : colorTex, emissiveIntensity: shed ? 0.22 : 0.07,
+      sheen: new T.Color('#3a2a18'),
+    }), U);
+    const mesh = new T.Mesh(MODEL.geo, skinMat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.frustumCulled = false;
+    mesh.customDepthMaterial = deformMaterial(new T.MeshDepthMaterial({ depthPacking: T.RGBADepthPacking }), U);
+    const rootG = new T.Group();
+    rootG.add(mesh);
+
+    // 目：虹彩＋濡れた角膜＋キャッチライト、まばたき用のまぶた
+    const eyeTex = [canvasTexture(irisCanvas(pal, false, (look.seed || 0) % 7), { srgb: true }), canvasTexture(irisCanvas(pal, true, (look.seed || 0) % 7), { srgb: true })];
+    const eyeMat = phys('#ffffff', { map: eyeTex[0], roughness: shed ? 0.5 : 0.3, clearcoat: 1, clearcoatRoughness: shed ? 0.6 : 0.04 });
+    const corneaMat = phys('#ffffff', { transparent: true, opacity: shed ? 0.35 : 0.1, roughness: shed ? 0.5 : 0, clearcoat: 1, clearcoatRoughness: 0, envMapIntensity: 1.6, depthWrite: false });
+    const glintMat = new T.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85 });
+    const lidMat = phys(A.mix(pal.base, '#FFF8EA', 0.08), { roughness: 0.55, side: T.DoubleSide });
+    const R = MODEL.eyeR;
+    const eyeGeo = new T.SphereGeometry(R, 48, 32);
+    eyeGeo.rotateY(-Math.PI / 2);
+    const eyes = [], lids = [];
+    for (const E of MODEL.eyes) {
+      const eg = new T.Group();
+      const baseQ = new T.Quaternion().setFromRotationMatrix(new T.Matrix4().lookAt(E.dir, V(0, 0, 0), V(0, 1, 0)));
+      eg.add(new T.Mesh(eyeGeo, eyeMat));
+      eg.add(new T.Mesh(new T.SphereGeometry(R * 1.012, 40, 24), corneaMat));
+      const glint = new T.Mesh(new T.SphereGeometry(1, 12, 8), glintMat);
+      glint.position.set(-0.25 * R * E.side, 0.35 * R, R * 0.93);
+      glint.scale.set(0.1 * R, 0.075 * R, 0.03 * R);
+      eg.add(glint);
+      const mk = upper => { const m = new T.Mesh(new T.SphereGeometry(R * 1.04, 40, 14, 0, Math.PI * 2, upper ? 0 : Math.PI / 2, Math.PI / 2), lidMat); eg.add(m); return m; };
+      lids.push({ up: mk(true), lo: mk(false) });
+      rootG.add(eg);
+      eyes.push({ g: eg, C: E.C, baseQ });
+    }
+    // タップや視点合わせに使う、頭・首・胴・口の目じるし
+    const mark = () => { const o = new T.Object3D(); rootG.add(o); return o; };
+    const bones = { head: mark(), neck: mark(), mid: mark(), tail: mark() };
+    const mouth = mark();
+    rootG.traverse(o => { if (o.isMesh && o !== mesh) o.castShadow = false; });
+    const gk = {
+      glb: true, root: rootG, mesh, U, eyes, lids, eyeMat, eyeTex, bones, mouth, legs: [],
+      owned: [colorTex, ...eyeTex], dilated: false, tongue: null,
+    };
+    pose(gk, restPose());
+    return gk;
+  }
+
+  const LID_OPEN_GLB = 1.2;
+  function poseGLB(gk, P) {
+    const U = gk.U;
+    U.uT.value = P.t; U.uPhase.value = P.phase; U.uWalk.value = P.walk; U.uLook.value = P.look;
+    U.uPitch.value = P.pitch - 0.05; U.uTilt.value = P.tilt; U.uCurl.value = Math.min(P.curl, 1) * 0.9; U.uStalk.value = P.stalk;
+    U.uHappy.value = P.happy; U.uBreathe.value = P.breathe; U.uDrop.value = P.drop - 0.04;
+    const hz = 1;
+    const headQ = new T.Quaternion().setFromEuler(new T.Euler(U.uPitch.value * hz, U.uLook.value * 0.9 * hz, U.uTilt.value * hz, 'ZXY'));
+    for (const e of gk.eyes) {
+      e.g.position.copy(deformPoint(e.C, U));
+      e.g.quaternion.copy(headQ).multiply(e.baseQ);
+    }
+    for (const l of gk.lids) {
+      l.up.rotation.x = lerp(-LID_OPEN_GLB, 0.06, P.blink);
+      l.lo.rotation.x = lerp(LID_OPEN_GLB, -0.02, Math.min(1, P.blink * 1.1));
+    }
+    gk.bones.head.position.copy(deformPoint(MODEL.head, U));
+    gk.bones.neck.position.copy(deformPoint(MODEL.neck, U));
+    gk.bones.mid.position.copy(deformPoint(MODEL.mid, U));
+    gk.mouth.position.copy(deformPoint(MODEL.mouth, U));
+    gk.bones.tail.position.copy(deformPoint(MODEL.tailTip, U));
+  }
+
+  function loadModel(url) {
+    if (!MODEL.ready) {
+      MODEL.ready = fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+        .then(buf => { prepareModel(buf); photoCache.clear(); return true; })
+        .catch(() => false);
+    }
+    return MODEL.ready;
   }
 
   // ======================================================
@@ -1680,7 +1942,7 @@
     if (side) gk.root.rotation.y = -Math.PI / 2 + 0.25;
     P.tilt = 0.12;
     P.drop = 0.05;
-    if (!side) gk.root.rotation.y = 0.45;
+    if (!side) gk.root.rotation.y = gk.glb ? -1.05 : 0.45;
     pr.scene.add(gk.root);
     pose(gk, P);
     gk.root.updateMatrixWorld(true);
@@ -1706,8 +1968,8 @@
       pr.camera.position.copy(tgt).addScaledVector(fwd, 3.3).addScaledVector(right, -1.6).add(new T.Vector3(0, 0.9, 0));
       pr.camera.lookAt(tgt.x, tgt.y + 0.22, tgt.z);
     } else {
-      const dist = Math.max(size.x, size.z) * 2.25;
-      pr.camera.position.set(c.x + dist * 0.05, dist * 0.5, c.z + dist * 0.85);
+      const dist = Math.max(size.x, size.z) * (gk.glb ? 2.15 : 2.25);
+      pr.camera.position.set(c.x + dist * (gk.glb ? -0.05 : 0.05), dist * (gk.glb ? 0.38 : 0.5), c.z + dist * 0.85);
       pr.camera.lookAt(c.x + 0.15, 0.3, c.z);
     }
     pr.renderer.render(pr.scene, pr.camera);
@@ -1723,5 +1985,5 @@
   }
   function photoReady(look, opts) { return photoCache.get(photoKey(look, opts)) || null; }
 
-  root.Leopa3D = { supported, createTank, photo, photoReady, photoKey };
+  root.Leopa3D = { supported, createTank, photo, photoReady, photoKey, loadModel };
 })(typeof window !== 'undefined' ? window : globalThis);

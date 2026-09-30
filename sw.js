@@ -1,10 +1,10 @@
 /* オフラインでも遊べるように、アプリ本体をキャッシュする。
  * ファイルを変えたら VERSION を上げること。 */
-const VERSION = 'leopa-v6';
+const VERSION = 'leopa-v7';
 const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
   'js/vendor/three.min.js', 'js/genetics.js', 'js/art.js', 'js/scene3d.js', 'js/app.js',
-  'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
+  'assets/gecko.glb', 'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 
 self.addEventListener('install', e => {
