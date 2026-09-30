@@ -1591,7 +1591,7 @@
     rim.position.set(2, 4, -8);
     scene.add(hemi, sun, heat, rim);
     // ケースの外：木のテーブルと部屋の壁
-    let wall = null;
+    let wall = null, windowG = null, windowGlass = null, sunPatch = null;
     // 夜につける、部屋のスタンドライト
     const lamp = new T.PointLight('#FFC98A', 0, 26, 1.4);
     lamp.position.set(-7, 7, 5);
@@ -1622,6 +1622,54 @@
       wall = new T.Mesh(new T.PlaneGeometry(80, 30), phys('#E9E4D8', { roughness: 0.95 }));
       wall.position.set(0, 12, -9);
       scene.add(table, wall);
+      // 奥の壁の窓（昼は明るく、夜は暗い夜空）
+      windowG = new T.Group();
+      const frameM = phys('#F4EFE4', { roughness: 0.6 });
+      windowGlass = new T.Mesh(new T.PlaneGeometry(7, 5), new T.MeshBasicMaterial({ color: '#CFE6F5' }));
+      windowGlass.position.z = 0.01;
+      windowG.add(windowGlass);
+      for (const [x, y, w, h] of [[0, 2.6, 7.4, 0.3], [0, -2.6, 7.4, 0.3], [-3.6, 0, 0.3, 5.5], [3.6, 0, 0.3, 5.5], [0, 0, 0.18, 5], [0, 0, 7, 0.18]]) {
+        const f = new T.Mesh(new T.BoxGeometry(w, h, 0.2), frameM);
+        f.position.set(x, y, 0.1);
+        windowG.add(f);
+      }
+      windowG.position.set(-4.5, 2.5, -8.95);
+      windowG.scale.setScalar(0.6);
+      scene.add(windowG);
+      // テーブルに落ちる日だまり
+      sunPatch = new T.Mesh(new T.PlaneGeometry(9, 5), new T.MeshBasicMaterial({ map: gradientCanvasTexture([[0, 'rgba(255,236,190,.55)'], [0.7, 'rgba(255,236,190,.25)'], [1, 'rgba(255,236,190,0)']]), transparent: true, depthWrite: false }));
+      sunPatch.rotation.x = -Math.PI / 2;
+      sunPatch.position.set(-4, 0.005, -6.6);
+      scene.add(sunPatch);
+      // テーブルの小物：鉢植えと本
+      const pot = new T.Group();
+      const potM = new T.Mesh(new T.CylinderGeometry(0.8, 0.6, 1.3, 28), phys('#C9825A', { roughness: 0.8 }));
+      potM.position.y = 0.65;
+      const soil = new T.Mesh(new T.CircleGeometry(0.75, 24), phys('#4A3526', { roughness: 1 }));
+      soil.rotation.x = -Math.PI / 2; soil.position.y = 1.25;
+      pot.add(potM, soil);
+      const leafM = phys('#5E8C5A', { roughness: 0.6, side: T.DoubleSide });
+      for (let i = 0; i < 9; i++) {
+        const leaf = new T.Mesh(new T.SphereGeometry(1, 12, 8), leafM);
+        leaf.scale.set(0.22, 0.05, 1.1);
+        const a = i / 9 * Math.PI * 2;
+        leaf.position.set(Math.sin(a) * 0.5, 1.9 + (i % 3) * 0.25, Math.cos(a) * 0.5);
+        leaf.rotation.set(-0.9 + (i % 2) * 0.2, a, 0);
+        pot.add(leaf);
+      }
+      pot.position.set(7.6, 0, -6.2);
+      pot.traverse(o => { if (o.isMesh) o.castShadow = true; });
+      const books = new T.Group();
+      [['#6B8FA3', 0.35], ['#C7A56A', 0.3], ['#8E6B8F', 0.28]].forEach(([c, h], i) => {
+        const b = new T.Mesh(new T.BoxGeometry(2.4 - i * 0.2, h, 1.7 - i * 0.1), phys(c, { roughness: 0.8 }));
+        b.position.y = [0, 0.35, 0.65][i] + h / 2;
+        b.rotation.y = (i - 1) * 0.12;
+        b.castShadow = true;
+        books.add(b);
+      });
+      books.position.set(-7.6, 0, 5.4);
+      books.rotation.y = 0.4;
+      scene.add(pot, books);
     }
 
     // 床（ホット側がほんのり暖色）
@@ -1634,6 +1682,7 @@
     // ガラスと枠（手前は低くして中が見えるように）
     const glass = phys('#D5E4DD', { transparent: true, opacity: 0.28, roughness: 0.05, clearcoat: 1 });
     const frame = phys('#2F3431', { roughness: 0.4 });
+    const frontGlass = [];
     for (const [x, z, w, d, h] of [[0, -TANK.hd - 0.1, TANK.hw * 2 + 0.3, 0.1, 2.2], [-TANK.hw - 0.1, 0, 0.1, TANK.hd * 2 + 0.2, 2.2], [TANK.hw + 0.1, 0, 0.1, TANK.hd * 2 + 0.2, 2.2], [0, TANK.hd + 0.1, TANK.hw * 2 + 0.3, 0.1, 0.5]]) {
       const m = new T.Mesh(new T.BoxGeometry(w, h, d), glass);
       m.position.set(x, h / 2, z);
@@ -1641,6 +1690,7 @@
       const f = new T.Mesh(new T.BoxGeometry(w + 0.12, 0.1, d + 0.12), frame);
       f.position.set(x, h, z);
       scene.add(f);
+      if (z > 0) frontGlass.push(m, f);
     }
     // 家具（ケースごとに差しかえる）
     const decorG = new T.Group();
@@ -1674,6 +1724,7 @@
     ring.position.y = 0.02;
     ring.visible = false;
     scene.add(ring);
+    const contactMat = new T.MeshBasicMaterial({ map: gradientCanvasTexture([[0, 'rgba(40,25,10,.35)'], [0.6, 'rgba(40,25,10,.12)'], [1, 'rgba(40,25,10,0)']]), transparent: true, depthWrite: false });
     function setDecor(list) {
       const key = JSON.stringify(list || []);
       if (key === decorKey) return;
@@ -1690,6 +1741,11 @@
         o.userData.index = i;
         o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; m.userData.index = i; } });
         decorG.add(o);
+        const sh = new T.Mesh(new T.PlaneGeometry(1, 1), contactMat);
+        sh.rotation.x = -Math.PI / 2;
+        sh.position.set(d.x, 0.006, d.z);
+        sh.scale.setScalar(def.r * 2.6);
+        decorG.add(sh);
         const ob = { x: d.x, z: d.z, r: def.r, i, t: d.t };
         if (def.shelter && !HIDE) {
           const c = Math.cos(d.rot || 0), s2 = Math.sin(d.rot || 0);
@@ -1837,6 +1893,8 @@
       renderer.toneMappingExposure = 0.78 + 0.18 * day;
       const bg = C('#1B2130').lerp(C('#DCE6DE'), day).lerp(C('#F2C9A0'), dusk * 0.45);
       scene.background = bg;
+      if (windowGlass) windowGlass.material.color.copy(C('#1E2640').lerp(C('#CFE6F5'), day).lerp(C('#F7B98A'), dusk * 0.7).lerp(C('#F4C7C0'), dawn * 0.4));
+      if (sunPatch) { sunPatch.visible = day > 0.05; sunPatch.material.opacity = day; sunPatch.position.x = -4 - 3 * dusk + 3 * dawn; }
       if (wall) wall.material.color.copy(C('#5A5470').lerp(C('#E9E4D8'), day).lerp(C('#F2B48A'), dusk * 0.65));
     }
     function setNight(on) { setClock(on ? 22 : 13, 'summer'); }
@@ -2089,7 +2147,21 @@
 
       // こっちを見る・えさを見る
       let wantLook = 0;
-      if (!moving && !st.sleeping && !food) {
+      // じっとしているときは、ときどき舌をぺろっと出したり、きょろきょろ見回したりする
+      if (!moving && !st.sleeping && !food && st.mode === 'idle') {
+        st.idleT = (st.idleT == null ? rand(3, 7) : st.idleT) - dt;
+        if (st.idleT <= 0) {
+          const r0 = Math.random();
+          if (r0 < 0.45) st.lick = 0.9;
+          else if (r0 < 0.85) { st.peek = rand(-0.7, 0.7); st.peekT = rand(1.2, 2.4); }
+          else st.tiltT = 1.2;
+          st.idleT = rand(4, 9);
+        }
+      }
+      if (st.peekT > 0) st.peekT -= dt;
+      if (!moving && !st.sleeping && !food && st.peekT > 0) {
+        wantLook = st.peek;
+      } else if (!moving && !st.sleeping && !food) {
         wantLook = clamp(angleTo(st.yaw, Math.atan2(camera.position.x - st.x, camera.position.z - st.z)), -0.75, 0.75);
       } else if (food && !st.sleeping) {
         wantLook = clamp(angleTo(st.yaw, Math.atan2(food.obj.position.x - st.x, food.obj.position.z - st.z)), -0.6, 0.6);
@@ -2106,7 +2178,8 @@
       P.phase = st.phase;
       P.walk = st.walkW;
       P.look = st.look;
-      P.pitch = st.pitch + (st.chomp > 0.35 ? -0.15 : 0);
+      // 歩くときは一歩ごとに頭が小さく上下する
+      P.pitch = st.pitch + (st.chomp > 0.35 ? -0.15 : 0) + Math.sin(st.phase * 2) * 0.035 * st.walkW;
       P.tilt = (st.tiltT > 0 ? Math.sin(Math.min(1, st.tiltT) * Math.PI) * 0.22 : 0) + (st.happy > 0 ? Math.sin(st.t * 7) * 0.12 : 0);
       P.curl = st.curl;
       P.stalk = st.stalk > 0 ? 1 : 0;
@@ -2127,6 +2200,8 @@
 
     const _t = new T.Vector3(), _c = new T.Vector3();
     function stepCamera(dt) {
+      // アップのときは、手前のガラスが視界をさえぎらないように隠す
+      for (const o of frontGlass) o.visible = !st.close;
       if (st.close && st.gk) {
         st.gk.bones.neck.getWorldPosition(_t);
         const D = (3.4 * 0.95 * st.size + 1.4) * st.zoom;

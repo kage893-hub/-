@@ -291,7 +291,7 @@
     tank.setDirty(!!g && g.clean < 35);
     tank.setClock(clockNow(), seasonNow());
     const th = $('.thermo');
-    if (th) th.textContent = `${SEASON_JA[seasonNow()]}の${timeJa(clockNow())} ／ ホット側 32℃ ・ クール側 26℃`;
+    if (th) th.textContent = `${SEASON_JA[seasonNow()]}の${timeJa(clockNow())} ・ 32℃／26℃`;
   }
   function flushFoods() {
     if (!tank) return;
@@ -618,6 +618,8 @@
   document.addEventListener('click', ev => {
     const t = ev.target.closest('[data-action]');
     if (!t || t.disabled) return;
+    // 押したときの小さな手ごたえ（対応している端末だけ）
+    if (t.classList.contains('act') && navigator.vibrate) { try { navigator.vibrate(8); } catch (e) { /* noop */ } }
     const fn = ACTIONS[t.dataset.action];
     if (fn) { ev.preventDefault(); fn(t, ev); }
   });
@@ -702,7 +704,7 @@
     setHTML($('#geckoTabs'), S.geckos.map(x => `<button class="chip${x.id === S.selected ? ' on' : ''}" data-action="select" data-id="${x.id}" aria-pressed="${x.id === S.selected}">${A.swatch(x)}<span>${esc(x.name)}</span><span class="sex ${x.sex}">${sexMark(x)}</span>${needsCare(x) ? '<i class="dot" aria-label="お世話が必要"></i>' : ''}</button>`).join('') +
       (S.geckos.length < S.cases ? `<span class="chip ghost">空きケース ${S.cases - S.geckos.length}</span>` : ''));
     sceneMount();
-    if (!g) { setHTML($('#caseInfo'), ''); return; }
+    if (!g) { setHTML($('#caseInfo'), ''); setHTML($('#tankName'), ''); return; }
     const st = stageOf(g);
     const morph = nameOf(g);
     const hets = G.hets(g.genes);
@@ -710,6 +712,7 @@
     const next = st === 'baby' ? GROWTH.young : st === 'young' ? GROWTH.adult : GROWTH.max;
     const growSide = g.growth >= GROWTH.max ? 'MAX' : Math.floor(g.growth);
     const block = pairBlock(g, now);
+    setHTML($('#tankName'), `<b>${esc(g.name)}</b><span class="sex ${g.sex}">${sexMark(g)}</span><span class="pill ${status.cls}">${status.text}</span>`);
     setHTML($('#caseInfo'), `
       ${editing ? editPanel(g) : `<div class="actions">
         <button class="act primary" data-action="feedMenu">ごはん</button>
@@ -1335,7 +1338,9 @@
   if (!S) freshState();
   initTank();
   // 3D モデルが読みこめたら、レオパを差しかえる
-  if (L3.supported && L3.loadModel) L3.loadModel('assets/gecko.glb').then(ok => { if (ok) { dexHTML = ''; renderView(); } });
+  const hideLoading = () => { const el = $('#tankLoading'); if (el) el.classList.add('done'); };
+  if (L3.supported && L3.loadModel) L3.loadModel('assets/gecko.glb').then(ok => { hideLoading(); if (ok) { dexHTML = ''; renderView(); } });
+  else hideLoading();
   tick();
   switchView('case');
   setInterval(tick, 5000);
