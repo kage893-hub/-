@@ -691,7 +691,10 @@
       ctx.strokeStyle = A.mix(pal.eye, '#000000', 0.7);
       ctx.lineCap = 'round';
       for (const p of pts) {
-        const near = pts.map(q => [q, Math.hypot(q[0] - p[0], q[1] - p[1])]).filter(x => x[1] > 0).sort((a, b) => a[1] - b[1]).slice(0, 2 + Math.floor(r() * 2));
+        const near = [];
+        for (const q of pts) { const d = Math.hypot(q[0] - p[0], q[1] - p[1]); if (d > 0 && d <= 38) near.push([q, d]); }
+        near.sort((a, b) => a[1] - b[1]);
+        near.length = Math.min(near.length, 2 + Math.floor(r() * 2));
         for (const [q, d] of near) {
           if (d > 38) continue;
           ctx.globalAlpha = 0.3 + r() * 0.35;
@@ -1181,11 +1184,21 @@
     return mat;
   }
 
+  // よく使う絵（模様・目）を、使った順に一定数だけ覚えておく
+  const skinCache = new Map(), irisCache = new Map();
+  function cachedTex(cache, key, make, limit) {
+    if (cache.has(key)) { const t = cache.get(key); cache.delete(key); cache.set(key, t); return t; }
+    const t = make();
+    cache.set(key, t);
+    while (cache.size > limit) { const [k, old] = cache.entries().next().value; cache.delete(k); old.dispose(); }
+    return t;
+  }
   function buildGeckoGLB(look, quality) {
     const pal = A.colors(look.genes, look.tang, look.stage);
     const hi = quality !== 'photo';
     const W = hi ? 1024 : 768, H = hi ? 1536 : 1152;
-    const colorTex = canvasTexture(skinCanvas(pal, Object.assign({}, look, { model: true }), W, H), { srgb: true });
+    // 描いた模様は覚えておき、同じ子に切りかえたときは描き直さない
+    const colorTex = cachedTex(skinCache, 'skin|' + W + '|' + lookKey(look), () => canvasTexture(skinCanvas(pal, Object.assign({}, look, { model: true }), W, H), { srgb: true }), 8);
     colorTex.wrapS = T.RepeatWrapping;
     const bump = bumpTexture(W, H);
     bump.wrapS = T.RepeatWrapping;
@@ -1209,7 +1222,8 @@
     rootG.add(mesh);
 
     // 目：虹彩＋濡れた角膜＋キャッチライト、まばたき用のまぶた
-    const eyeTex = [canvasTexture(irisCanvas(pal, false, (look.seed || 0) % 7), { srgb: true }), canvasTexture(irisCanvas(pal, true, (look.seed || 0) % 7), { srgb: true })];
+    const eyeKey = [pal.eye, pal.pupil, pal.solid, (look.seed || 0) % 7].join('|');
+    const eyeTex = [false, true].map(d => cachedTex(irisCache, eyeKey + '|' + d, () => canvasTexture(irisCanvas(pal, d, (look.seed || 0) % 7), { srgb: true }), 24));
     const eyeMat = phys('#ffffff', { map: eyeTex[0], roughness: shed ? 0.5 : 0.3, clearcoat: 1, clearcoatRoughness: shed ? 0.6 : 0.04 });
     const corneaMat = phys('#ffffff', { transparent: true, opacity: shed ? 0.35 : 0.1, roughness: shed ? 0.5 : 0, clearcoat: 1, clearcoatRoughness: 0, envMapIntensity: 1.6, depthWrite: false });
     const glintMat = new T.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85 });
@@ -1240,7 +1254,7 @@
     rootG.traverse(o => { if (o.isMesh && o !== mesh) o.castShadow = false; });
     const gk = {
       glb: true, root: rootG, mesh, U, eyes, lids, eyeMat, eyeTex, bones, mouth, legs: [],
-      owned: [colorTex, ...eyeTex], dilated: false, tongue,
+      owned: [], dilated: false, tongue,
     };
     pose(gk, restPose());
     return gk;

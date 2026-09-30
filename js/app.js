@@ -90,11 +90,35 @@
       s.v = 2;
     }
     s.names = s.names || {};
+    movePhotosOut(s);
     if (!s.tut) s.tut = { step: 99 }; // 前から遊んでいる人にはガイドを出さない
     s.decorInv = s.decorInv || {};
     return s;
   }
-  function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* noop */ } }
+  // 保存は操作が落ちついてからまとめて1回（アプリを閉じるときはすぐ保存）
+  let saveTimer = null;
+  function saveNow() {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* 保存できない環境でも遊べる */ }
+  }
+  function save() { if (!saveTimer) saveTimer = setTimeout(saveNow, 1500); }
+  window.addEventListener('pagehide', () => saveNow());
+  // アルバムの写真は、ふだんのデータとは別に1枚ずつしまう（保存を軽くするため）
+  const PHOTO_KEY = id => 'leopa-photo-' + id;
+  function putPhoto(dataUrl) {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    localStorage.setItem(PHOTO_KEY(id), dataUrl);
+    return id;
+  }
+  function getPhoto(e) { if (e.img) return e.img; try { return e.pid ? localStorage.getItem(PHOTO_KEY(e.pid)) : null; } catch (err) { return null; } }
+  function dropPhoto(e) { try { if (e.pid) localStorage.removeItem(PHOTO_KEY(e.pid)); } catch (err) { /* noop */ } }
+  // 前の版でデータの中に入れていた写真を、別の場所へ移す
+  function movePhotosOut(s) {
+    for (const a of Object.values(s.albums || {})) for (const e of a.entries) {
+      if (!e.img) continue;
+      try { e.pid = putPhoto(e.img); delete e.img; } catch (err) { break; }
+    }
+  }
 
   function newGecko(o) {
     return {
@@ -628,9 +652,21 @@
       const fresh = register(g);
       memo(g, 'ショップからおむかえした', true);
       S.selected = g.id;
-      toast(`${g.name}をおむかえしました！${fresh.length ? '図鑑に新しく登録：' + fresh.join('・') : ''}`);
-      switchView('case');
+      sfx('buy');
       save();
+      renderView();
+      // 名前をつけてから、ケースへ
+      openSheet(`<div class="reveal">
+        <div class="reveal-art">${portrait(g, stageOf(g), nameOf(g))}</div>
+        ${fresh.length ? `<span class="pill new">図鑑に新しく登録：${fresh.map(esc).join('・')}</span>` : ''}
+        <p class="eyebrow">おむかえしました</p>
+        <h3 class="morph big">${esc(nameOf(g))}</h3>
+        <p class="muted">${g.sex === 'M' ? '♂ オス' : '♀ メス'} ・ ${STAGE_LABEL[stageOf(g)]}</p>
+        <form id="renameForm" data-id="${g.id}" data-goto="1" class="rename">
+          <label for="renameInput">この子の名前をつけてあげよう</label>
+          <input id="renameInput" value="${esc(g.name)}" maxlength="10" autocomplete="off">
+          <button class="act primary" type="submit">この名前にする</button>
+        </form></div>`);
     },
     resetMenu() {
       openSheet(`<h3 class="sheet-title">はじめからあそぶ</h3>
@@ -640,9 +676,10 @@
     reset() {
       if (tank) tank.takeFoods();
       tankGid = null;
+      try { Object.keys(localStorage).filter(k => k.startsWith('leopa-photo-')).forEach(k => localStorage.removeItem(k)); } catch (e) { /* noop */ }
       freshState();
       closeSheet();
-      save();
+      saveNow();
       switchView('case');
       welcome();
     },
@@ -1286,18 +1323,19 @@
     if (g && !(S.albums && S.albums[id])) { memo(g, 'アルバムをはじめた', true); save(); }
     const a = S.albums && S.albums[id];
     if (!a) { toast('アルバムが見つかりませんでした'); return; }
-    const photos = a.entries.filter(e => e.img).length;
+    const photos = a.entries.filter(e => e.img || e.pid).length;
     openSheet(`<p class="eyebrow">成長記録アルバム</p>
       <h3 class="sheet-title">${esc(a.name)} <span class="sex ${a.sex}">${a.sex === 'M' ? '♂' : '♀'}</span></h3>
       <p class="muted small">${esc(a.morph || '')}${g ? ` ・ いっしょに暮らして ${ageText(g)}` : ' ・ 旅立ちました'}</p>
       ${g ? `<button class="act primary" data-action="snapPhoto" data-id="${id}" ${photos >= MAX_PHOTOS ? 'disabled' : ''}>いまの様子を写真にとる（${photos}/${MAX_PHOTOS}）</button>` : ''}
       <ol class="album">${a.entries.slice().reverse().map((e, i) => {
         const idx = a.entries.length - 1 - i;
-        const pic = e.img ? `<img src="${e.img}" alt="">` : e.look ? portrait(e.look, e.look.stage, '') : '';
-        return `<li class="album-item${e.img ? ' photo' : ''}">
+        const src = getPhoto(e);
+        const pic = src ? `<img src="${src}" alt="">` : e.look ? portrait(e.look, e.look.stage, '') : '';
+        return `<li class="album-item${src ? ' photo' : ''}">
           ${pic ? `<div class="album-pic">${pic}</div>` : ''}
           <div class="album-text"><small class="muted">${fmtDate(e.t)}</small><span>${esc(e.text)}</span>
-          ${e.img ? `<button class="link-btn" data-action="delPhoto" data-id="${id}" data-i="${idx}">この写真を消す</button>` : ''}</div>
+          ${src ? `<button class="link-btn" data-action="delPhoto" data-id="${id}" data-i="${idx}">この写真を消す</button>` : ''}</div>
         </li>`;
       }).join('')}</ol>`);
   }
@@ -1313,14 +1351,16 @@
       const g = S.geckos.find(x => x.id === t.dataset.id);
       if (!g || !tank) return;
       const a = albumOf(g);
-      if (a.entries.filter(e => e.img).length >= MAX_PHOTOS) return;
+      if (a.entries.filter(e => e.img || e.pid).length >= MAX_PHOTOS) return;
       closeSheet();
       if (view !== 'case' || S.selected !== g.id) { S.selected = g.id; switchView('case'); }
       // シートが閉じて画面が落ちついてから撮る
       setTimeout(() => {
         let img;
         try { img = tank.snapshot(); } catch (e) { toast('写真をとれませんでした'); return; }
-        a.entries.push({ t: Date.now(), text: `${stageOf(g) === 'baby' ? 'ベビー' : stageOf(g) === 'young' ? 'ヤング' : 'アダルト'}のころの一枚`, img });
+        let pid;
+        try { pid = putPhoto(img); } catch (err) { toast('保存できる写真がいっぱいです。いらない写真を消してね'); return; }
+        a.entries.push({ t: Date.now(), text: `${stageOf(g) === 'baby' ? 'ベビー' : stageOf(g) === 'young' ? 'ヤング' : 'アダルト'}のころの一枚`, pid });
         sfx('tap');
         try { save(); } catch (e) { /* 保存がいっぱいでも遊べる */ }
         toast('アルバムに写真を追加しました');
@@ -1330,7 +1370,8 @@
     delPhoto(t) {
       const a = S.albums && S.albums[t.dataset.id];
       const i = Number(t.dataset.i);
-      if (!a || !a.entries[i] || !a.entries[i].img) return;
+      if (!a || !a.entries[i] || !(a.entries[i].img || a.entries[i].pid)) return;
+      dropPhoto(a.entries[i]);
       a.entries.splice(i, 1);
       save();
       openAlbum(t.dataset.id);
@@ -1424,7 +1465,7 @@
   tick();
   switchView('case');
   setInterval(tick, 5000);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else tick(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); else tick(); });
   if (!S.welcomed) { if (!S.geckos.length && !(S.starters && S.starters.length)) S.starters = makeStarters(); if (S.geckos.length && S.starters && S.starters.length) starterList(); else welcome(); }
 
   if ('serviceWorker' in navigator && /^(https:|http:\/\/localhost)/.test(location.href)) {
