@@ -90,6 +90,7 @@
       s.v = 2;
     }
     s.names = s.names || {};
+    if (!s.tut) s.tut = { step: 99 }; // 前から遊んでいる人にはガイドを出さない
     s.decorInv = s.decorInv || {};
     return s;
   }
@@ -107,7 +108,7 @@
   function freshState() {
     S = {
       v: 2, coins: 60, cases: 4, incTemp: 29.5, food: { cricket: 20, dubia: 3, worm: 3 },
-      geckos: [], eggs: [], dex: {}, names: {}, decorInv: { cork: 1 }, selected: null, offers: [], offersAt: 0,
+      tut: { step: 0 }, geckos: [], eggs: [], dex: {}, names: {}, decorInv: { cork: 1 }, selected: null, offers: [], offersAt: 0,
       lastTick: Date.now(), nextId: 1, welcomed: false, stats: { hatched: 0, rehomed: 0 },
     };
     // はじめはショップでレオパを選ぶところから
@@ -332,7 +333,8 @@
     g.tame = clamp(g.tame + 1);
     S.coins += 1;
     daily('fed');
-    if (!g.poopAt) g.poopAt = Date.now() + 2 * MIN;
+    // はじめてのお世話ガイド中は、フンを早めに出して待たせない
+    if (!g.poopAt) g.poopAt = Date.now() + (tutStep() === 1 ? 20000 : 2 * MIN);
     renderView();
     save();
   }
@@ -689,10 +691,23 @@
     window.scrollTo(0, 0);
   }
 
+  let lastCoins = null;
+  function coinPop(n) {
+    const box = $('#coins');
+    if (!box) return;
+    box.classList.remove('bump'); void box.offsetWidth; box.classList.add('bump');
+    const f = document.createElement('span');
+    f.className = 'coin-pop';
+    f.textContent = '+' + n;
+    box.appendChild(f);
+    setTimeout(() => f.remove(), 1100);
+  }
   function renderView() {
     setHTML($('#soundBtn'), S.mute ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l4 6M21 9l-4 6"/></svg><span class="sr">音をオンにする</span>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg><span class="sr">音をオフにする</span>');
     setHTML($('#musicBtn'), `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>${S.musicOff ? '<path d="M3 3l18 18"/>' : ''}</svg><span class="sr">${S.musicOff ? '音楽をオンにする' : '音楽をオフにする'}</span>`);
     setHTML($('#coins'), `<span class="coin" aria-hidden="true"></span><b>${S.coins}</b><span class="sr">コイン</span>`);
+    if (lastCoins != null && S.coins > lastCoins) coinPop(S.coins - lastCoins);
+    lastCoins = S.coins;
     const ready = S.eggs.filter(e => Date.now() >= e.hatchAt).length;
     const badge = $('#eggBadge');
     badge.hidden = !ready;
@@ -748,10 +763,11 @@
     setHTML($('#tankName'), `<b>${esc(g.name)}</b><span class="sex ${g.sex}">${sexMark(g)}</span><span class="pill ${status.cls}">${status.text}</span>`);
     setHTML($('#caseInfo'), `
       ${editing ? editPanel(g) : `<div class="actions">
-        <button class="act primary" data-action="feedMenu">ごはん</button>
-        <button class="act" data-action="clean">おそうじ</button>
-        <button class="act" data-action="handle">ふれあう</button>
+        <button class="act primary care${tutGlow('feed')}" data-action="feedMenu"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="13" cy="13" rx="6.5" ry="3.8" transform="rotate(-20 13 13)"/><circle cx="6.5" cy="15.5" r="2.4"/><path d="M5 13 2.5 9.5M5.5 17.5 3 20.5M12 16.5l-1.5 4M16 15l1 4M19 9.5l2.5-3"/></svg><span>ごはん</span></button>
+        <button class="act care${tutGlow('clean')}" data-action="clean"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3l-4 9"/><path d="M6.5 12.5h8l1.5 8H5z"/><path d="M8.5 16v4M11 16v4M13.5 16v4"/></svg><span>おそうじ</span></button>
+        <button class="act care${tutGlow('handle')}" data-action="handle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg><span>ふれあう</span></button>
       </div>
+      ${tutCoach()}
       ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮を手伝う</button>' : ''}
       ${dailyCard()}
       <div class="card gecko-card">
@@ -966,7 +982,31 @@
     return S.daily;
   }
   function yesterdayKey() { const d = new Date(Date.now() - 86400000); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
+  // ---- はじめてのお世話ガイド（ごはん → おそうじ → ふれあう）
+  const TUT = [
+    { key: 'fed', btn: 'feed', text: 'まずは「ごはん」をあげてみよう。コオロギを入れると、レオパが追いかけて食べます' },
+    { key: 'cleaned', btn: 'clean', text: '食べてしばらくすると、ケースの隅にフンが出ます。フンをタップするか「おそうじ」できれいにしよう' },
+    { key: 'handled', btn: 'handle', text: 'さいごに「ふれあう」で手に乗せてみよう。なれ度が上がります' },
+  ];
+  const tutStep = () => (S.tut && S.tut.step < TUT.length ? S.tut.step : -1);
+  const tutGlow = btn => { const i = tutStep(); return i >= 0 && TUT[i].btn === btn ? ' glow' : ''; };
+  function tutCoach() {
+    const i = tutStep();
+    if (i < 0) return '';
+    return `<div class="coach" style="--arrow:${['16.6%', '50%', '83.3%'][i]}"><span class="coach-step">はじめてのお世話 ${i + 1} / ${TUT.length}</span><p>${TUT[i].text}</p></div>`;
+  }
+  function tutAdvance(key) {
+    const i = tutStep();
+    if (i < 0 || TUT[i].key !== key) return;
+    S.tut.step++;
+    if (S.tut.step >= TUT.length) {
+      S.coins += 30;
+      S.food.cricket += 10;
+      setTimeout(() => { sfx('hatch'); toast('はじめてのお世話、できました！ごほうび 30コインとコオロギ10匹'); }, 400);
+    }
+  }
   function daily(key) {
+    tutAdvance(key);
     const d = dailyState();
     const was = DAILY.every(t => d[t.key] >= t.need);
     d[key] = (d[key] || 0) + 1;
