@@ -1233,10 +1233,14 @@
     const mark = () => { const o = new T.Object3D(); rootG.add(o); return o; };
     const bones = { head: mark(), neck: mark(), mid: mark(), tail: mark() };
     const mouth = mark();
+    // 舌（ぺろっ）
+    const tongue = new T.Mesh(new T.SphereGeometry(1, 20, 12), phys('#E36F86', { roughness: 0.28, clearcoat: 0.7 }));
+    tongue.scale.setScalar(0.001);
+    rootG.add(tongue);
     rootG.traverse(o => { if (o.isMesh && o !== mesh) o.castShadow = false; });
     const gk = {
       glb: true, root: rootG, mesh, U, eyes, lids, eyeMat, eyeTex, bones, mouth, legs: [],
-      owned: [colorTex, ...eyeTex], dilated: false, tongue: null,
+      owned: [colorTex, ...eyeTex], dilated: false, tongue,
     };
     pose(gk, restPose());
     return gk;
@@ -1259,6 +1263,14 @@
     gk.bones.neck.position.copy(deformPoint(MODEL.neck, U));
     gk.bones.mid.position.copy(deformPoint(MODEL.mid, U));
     gk.mouth.position.copy(deformPoint(MODEL.mouth, U));
+    const tg = P.tongue;
+    if (tg > 0.01) {
+      const fwd = new T.Vector3(0, -0.25, 1).applyQuaternion(headQ).normalize();
+      gk.tongue.position.copy(gk.mouth.position).addScaledVector(fwd, 0.06 + 0.14 * tg);
+      gk.tongue.quaternion.copy(headQ);
+      gk.tongue.rotateX(0.35 - 0.6 * tg);
+      gk.tongue.scale.set(0.065, 0.026, 0.05 + 0.1 * tg);
+    } else gk.tongue.scale.setScalar(0.001);
     gk.bones.tail.position.copy(deformPoint(MODEL.tailTip, U));
   }
 
@@ -1578,6 +1590,34 @@
     const rim = new T.DirectionalLight('#DDE8FF', 0.35);
     rim.position.set(2, 4, -8);
     scene.add(hemi, sun, heat, rim);
+    // ケースの外：木のテーブルと部屋の壁
+    {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 256;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#A57A52';
+      ctx.fillRect(0, 0, 512, 256);
+      const r = prng(3);
+      for (let i = 0; i < 90; i++) {
+        ctx.strokeStyle = `rgba(${r() < 0.5 ? '90,55,30' : '200,160,120'},${0.12 + r() * 0.18})`;
+        ctx.lineWidth = 1 + r() * 3;
+        const y = r() * 256;
+        ctx.beginPath(); ctx.moveTo(0, y);
+        for (let x = 0; x <= 512; x += 32) ctx.lineTo(x, y + Math.sin(x / 60 + i) * 4);
+        ctx.stroke();
+      }
+      const wood = new T.CanvasTexture(c);
+      wood.encoding = T.sRGBEncoding;
+      wood.wrapS = wood.wrapT = T.RepeatWrapping;
+      wood.repeat.set(3, 2);
+      const table = new T.Mesh(new T.PlaneGeometry(60, 40), phys('#ffffff', { map: wood, roughness: 0.55, clearcoat: 0.3 }));
+      table.rotation.x = -Math.PI / 2;
+      table.position.y = -0.02;
+      table.receiveShadow = true;
+      const wall = new T.Mesh(new T.PlaneGeometry(80, 30), phys('#E9E4D8', { roughness: 0.95 }));
+      wall.position.set(0, 12, -9);
+      scene.add(table, wall);
+    }
 
     // 床（ホット側がほんのり暖色）
     const sand = canvasTexture(sandCanvas(), { srgb: true });
@@ -1645,7 +1685,7 @@
         o.userData.index = i;
         o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; m.userData.index = i; } });
         decorG.add(o);
-        const ob = { x: d.x, z: d.z, r: def.r, i };
+        const ob = { x: d.x, z: d.z, r: def.r, i, t: d.t };
         if (def.shelter && !HIDE) {
           const c = Math.cos(d.rot || 0), s2 = Math.sin(d.rot || 0);
           const sx = d.x + def.shelter.x * c + def.shelter.z * s2, sz = d.z - def.shelter.x * s2 + def.shelter.z * c;
@@ -1892,7 +1932,7 @@
     function clampPos() {
       resolveObstacles();
       // 家具にはばまれて進めないときは、行き先を変える
-      if (st.mode === 'walk' || st.mode === 'toHide') {
+      if (st.mode === 'walk' || st.mode === 'toHide' || st.mode === 'toDrink' || st.mode === 'toBask') {
         st.walkTime = (st.walkTime || 0) + 1 / 60;
         if (st.walkTime > 9) { st.mode = 'idle'; st.wait = 0.5; st.walkTime = 0; }
       }
@@ -1964,18 +2004,36 @@
           if (st.zzz <= 0) { fx('z', 'zzz'); st.zzz = 1.8; }
           if (st.wait <= 0) wake();
           if (HIDE) st.yaw += angleTo(st.yaw, HIDE.face) * Math.min(1, dt * 2);
-        } else if (st.mode === 'walk' || st.mode === 'toHide') {
+        } else if (st.mode === 'drink' || st.mode === 'bask') {
+          // 水をぺろぺろ飲む／石の横でじっとひなたぼっこ
+          st.wait -= dt;
+          if (st.target && st.target.face != null) st.yaw += angleTo(st.yaw, st.target.face) * Math.min(1, dt * 3);
+          if (st.mode === 'drink') { st.lickT -= dt; if (st.lickT <= 0) { st.lick = 0.9; st.lickT = rand(0.9, 1.4); } }
+          if (st.wait <= 0) { st.mode = 'idle'; st.wait = rand(1.5, 4); }
+        } else if (st.mode === 'walk' || st.mode === 'toHide' || st.mode === 'toDrink' || st.mode === 'toBask') {
           step = moveToward(st.target.x, st.target.z, 0.85 * nf, dt);
-          if (Math.hypot(st.target.x - st.x, st.target.z - st.z) < 0.12) {
+          if (Math.hypot(st.target.x - st.x, st.target.z - st.z) < 0.15) {
             if (st.mode === 'toHide') { st.sleeping = true; st.wait = rand(18, 35); st.zzz = 0.8; }
-            st.mode = 'idle';
-            st.wait = st.night ? rand(0.8, 2.5) : rand(2.5, 6);
+            if (st.mode === 'toDrink') { st.mode = 'drink'; st.wait = rand(3, 5); st.lickT = 0.2; }
+            else if (st.mode === 'toBask') { st.mode = 'bask'; st.wait = rand(8, 16); }
+            else { st.mode = 'idle'; st.wait = st.night ? rand(0.8, 2.5) : rand(2.5, 6); }
           }
         } else {
           st.wait -= dt;
           if (st.wait <= 0) {
             st.walkTime = 0;
-            if (!st.night && Math.random() < 0.3 && HIDE) { st.mode = 'toHide'; st.target = { x: HIDE.x, z: HIDE.z }; }
+            const dish = obstacles.find(o => o.t === 'dish'), stone = obstacles.find(o => o.t === 'stone');
+            const nextTo = (o, gap) => {
+              // 家具の手前（ケースの中心に近い側）に、鼻先を向けて止まる
+              const a = Math.atan2(-o.x * 0.6 - o.x * 0.4 + rand(-1.2, 1.2), -o.z + rand(-1, 1));
+              const d = o.r + gap;
+              const x = clamp(o.x + Math.sin(a) * d, -BOUNDS.x + 1.4, BOUNDS.x - 1.4), z = clamp(o.z + Math.cos(a) * d, BOUNDS.zMin + 1.4, BOUNDS.zMax - 1);
+              return { x, z, face: Math.atan2(o.x - x, o.z - z) };
+            };
+            const r0 = Math.random();
+            if (dish && r0 < 0.14) { st.mode = 'toDrink'; st.target = nextTo(dish, 1.25 * st.size); }
+            else if (stone && !st.night && r0 < 0.28) { st.mode = 'toBask'; st.target = nextTo(stone, 1.2 * st.size); }
+            else if (!st.night && Math.random() < 0.3 && HIDE) { st.mode = 'toHide'; st.target = { x: HIDE.x, z: HIDE.z }; }
             else if (!st.night && Math.random() < 0.12) { st.sleeping = true; st.wait = rand(12, 25); st.zzz = 0.8; }
             else { st.mode = 'walk'; st.target = freePoint(1.4 * st.size, -TANK.hw + 2, TANK.hw - 1.8, -TANK.hd + 1.9, TANK.hd - 1.3); }
           }
@@ -2002,7 +2060,7 @@
         wantLook = clamp(angleTo(st.yaw, Math.atan2(food.obj.position.x - st.x, food.obj.position.z - st.z)), -0.6, 0.6);
       }
       st.look = lerp(st.look, wantLook, Math.min(1, dt * 2.5));
-      st.drop = lerp(st.drop, st.sleeping ? 0.13 : moving ? 0 : 0.06, Math.min(1, dt * 2));
+      st.drop = lerp(st.drop, st.sleeping || st.mode === 'bask' ? 0.13 : moving ? 0 : 0.06, Math.min(1, dt * 2));
       st.curl = lerp(st.curl, st.sleeping ? 1 : 0, Math.min(1, dt * 1.5));
       st.pitch = lerp(st.pitch, st.sleeping ? 0.22 : (st.stalk > 0 ? -0.08 : 0), Math.min(1, dt * 3));
       if (st.lick > 0) st.lick -= dt;
@@ -2019,7 +2077,7 @@
       P.stalk = st.stalk > 0 ? 1 : 0;
       P.happy = st.happy > 0 ? 1 : 0;
       P.drop = st.drop;
-      P.blink = st.blinkV;
+      P.blink = st.mode === 'bask' ? Math.max(st.blinkV, 0.55) : st.blinkV;
       P.tongue = st.lick > 0 ? Math.sin((0.9 - st.lick) / 0.9 * Math.PI) : 0;
       P.breathe = Math.sin(st.t * (st.sleeping ? 1.4 : 2.4));
       P.sway = 1;
@@ -2049,9 +2107,24 @@
     }
 
     let last = performance.now();
+    const perf = { t: 0, n: 0, level: 0 };
+    function adapt(rawDt) {
+      perf.t += rawDt; perf.n++;
+      if (perf.t < 2) return;
+      const fps = perf.n / perf.t;
+      perf.t = 0; perf.n = 0;
+      if (fps < 38 && perf.level < 2) {
+        perf.level++;
+        renderer.setPixelRatio(perf.level === 1 ? Math.min(1.5, root.devicePixelRatio || 1) : 1);
+        if (perf.level === 2) { sun.shadow.mapSize.set(1024, 1024); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
+        resize();
+      }
+    }
     function loop(now) {
-      const dt = Math.min(0.1, (now - last) / 1000);
+      const raw = (now - last) / 1000;
+      const dt = Math.min(0.1, raw);
       last = now;
+      if (st.active && raw < 0.5) adapt(raw);
       if (st.active) {
         st.t += dt;
         stepFoods(dt);

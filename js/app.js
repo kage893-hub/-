@@ -180,6 +180,7 @@
     }
     g.gravid = null;
     g.restUntil = now + 60 * MIN;
+    sfx('lay');
     toast(`${g.name}が卵を2個産みました！インキュベーターに移しました`);
   }
 
@@ -265,7 +266,7 @@
     }
     tank = L3.createTank(box, {
       onEat(kind) { const g = S.geckos.find(x => x.id === tankGid); if (g) applyEat(g, kind); },
-      onTapGecko() { const g = selected(); if (g && g.tame >= 40) tank.hearts(1); },
+      onTapGecko() { const g = selected(); sfx('tap'); if (g && g.tame >= 40) tank.hearts(1); },
       onTapPoop() { ACTIONS.poop(); },
       onFloorTap: (x, z) => floorTap(x, z),
       onDecorTap: i => decorTap(i),
@@ -321,6 +322,7 @@
     g.tame = clamp(g.tame + 1);
     S.coins += 1;
     daily('fed');
+    if (view === 'case') sfx('eat');
     if (!g.poopAt) g.poopAt = Date.now() + 2 * MIN;
     renderView();
     save();
@@ -363,18 +365,25 @@
     renderView();
     const morph = nameOf(g);
     const hets = G.hets(g.genes);
-    openSheet(`<div class="reveal">
-      <div class="reveal-art">${portrait(g, "baby", morph)}</div>
-      ${fresh.length ? `<span class="pill new">図鑑に新しく登録：${fresh.map(esc).join('・')}</span>` : ''}
-      <p class="eyebrow">うまれました！</p>
-      <h3 class="morph big">${esc(morph)}</h3>
-      <p class="muted">${g.sex === 'M' ? '♂ オス' : '♀ メス'} ・ ${esc(e.mom)} × ${esc(e.dad)} の子${hets.length ? ' ・ ' + hets.map(h => 'het ' + h).join(' / ') : ''}</p>
-      ${traitTable(g, true)}
-      <form id="renameForm" data-id="${g.id}" data-goto="1" class="rename">
-        <label for="renameInput">なまえ</label>
-        <input id="renameInput" value="${esc(g.name)}" maxlength="10" autocomplete="off">
-        <button class="act primary" type="submit">おむかえする</button>
-      </form></div>`);
+    // 卵がカタカタ → パカッ → 誕生
+    openSheet(`<div class="hatching"><div class="hatch-egg">${A.egg()}</div><p class="muted">カタカタ……</p></div>`);
+    setTimeout(() => sfx('crack'), 500);
+    setTimeout(() => sfx('crack'), 1050);
+    setTimeout(() => {
+      sfx('hatch');
+      openSheet(`<div class="reveal">
+        <div class="reveal-art">${portrait(g, "baby", morph)}</div>
+        ${fresh.length ? `<span class="pill new">図鑑に新しく登録：${fresh.map(esc).join('・')}</span>` : ''}
+        <p class="eyebrow">うまれました！</p>
+        <h3 class="morph big">${esc(morph)}</h3>
+        <p class="muted">${g.sex === 'M' ? '♂ オス' : '♀ メス'} ・ ${esc(e.mom)} × ${esc(e.dad)} の子${hets.length ? ' ・ ' + hets.map(h => 'het ' + h).join(' / ') : ''}</p>
+        ${traitTable(g, true)}
+        <form id="renameForm" data-id="${g.id}" data-goto="1" class="rename">
+          <label for="renameInput">なまえ</label>
+          <input id="renameInput" value="${esc(g.name)}" maxlength="10" autocomplete="off">
+          <button class="act primary" type="submit">おむかえする</button>
+        </form></div>`);
+    }, 1600);
   }
 
   // ---------- 操作
@@ -415,6 +424,7 @@
       g.clean = clamp(g.clean + 15);
       S.coins += 1;
       daily('cleaned');
+      sfx('tap');
       toast('フンをひろいました');
       renderView();
       save();
@@ -530,6 +540,7 @@
       S.stats.rehomed++;
       S.selected = S.geckos[0].id;
       closeSheet();
+      sfx('coin');
       toast(`${g.name}は新しい家族のもとへ。元気でね！（+${reward}）`);
       renderView();
       save();
@@ -628,6 +639,7 @@
   }
 
   function renderView() {
+    setHTML($('#soundBtn'), S.mute ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l4 6M21 9l-4 6"/></svg><span class="sr">音をオンにする</span>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg><span class="sr">音をオフにする</span>');
     setHTML($('#coins'), `<span class="coin" aria-hidden="true"></span><b>${S.coins}</b><span class="sr">コイン</span>`);
     const ready = S.eggs.filter(e => Date.now() >= e.hatchAt).length;
     const badge = $('#eggBadge');
@@ -1010,6 +1022,7 @@
       d.streak = (d.streak || 0) + 1;
       S.coins += r;
       S.food.cricket += 5;
+      sfx('coin');
       toast(`ごほうび ${r}コインとコオロギ5匹を受け取りました`);
       checkAch(); renderView(); save();
     },
@@ -1035,6 +1048,7 @@
       S.stats.orders = (S.stats.orders || 0) + 1;
       S.orders.splice(i, 1, makeOrder(Date.now()));
       closeSheet();
+      sfx('coin');
       toast(`${g.name}は${o.buyer}のもとへ。報酬 ${o.reward}コイン！`);
       checkAch(); renderView(); save();
     },
@@ -1044,6 +1058,7 @@
       if (!a || S.ach[a.id] || !a.test()) return;
       S.ach[a.id] = true;
       S.coins += a.reward;
+      sfx('coin');
       toast(`実績「${a.label}」の報酬 ${a.reward}コイン`);
       dexHTML = '';
       renderView(); save();
@@ -1083,6 +1098,7 @@
       if (err) { toast(err); return; }
       list.push({ t: editing.place, x: +x.toFixed(2), z: +z.toFixed(2), rot: 0 });
       S.decorInv[editing.place]--;
+      sfx('tap');
       toast(`${L3.DECOR[editing.place].name}を置きました`);
       setEditing({ sel: list.length - 1, place: null });
     } else if (editing.sel != null) {
@@ -1142,9 +1158,54 @@
       if (!d || S.coins < d.price) { toast('コインが足りません'); return; }
       S.coins -= d.price;
       S.decorInv[t.dataset.t] = (S.decorInv[t.dataset.t] || 0) + 1;
+      sfx('buy');
       toast(`${d.name}を買いました。ケースの「もようがえ」で置けます`);
       renderView(); save();
     },
+  });
+
+  // ---------- 効果音（その場で合成するので音声ファイルはいらない）
+  let actx = null;
+  function sfx(kind) {
+    if (S && S.mute) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+    } catch (e) { return; }
+    const t = actx.currentTime;
+    const tone = (f, d, type, vol, at, slide) => {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = type || 'sine';
+      o.frequency.setValueAtTime(f, t + (at || 0));
+      if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + (at || 0) + d);
+      g.gain.setValueAtTime(0.0001, t + (at || 0));
+      g.gain.exponentialRampToValueAtTime(vol || 0.15, t + (at || 0) + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + (at || 0) + d);
+      o.connect(g).connect(actx.destination);
+      o.start(t + (at || 0));
+      o.stop(t + (at || 0) + d + 0.03);
+    };
+    const noise = (d, vol, at, freq) => {
+      const buf = actx.createBuffer(1, Math.floor(actx.sampleRate * d), actx.sampleRate);
+      const ch = buf.getChannelData(0);
+      for (let i = 0; i < ch.length; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / ch.length);
+      const src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+      src.buffer = buf; f.type = 'bandpass'; f.frequency.value = freq || 2600; g.gain.value = vol;
+      src.connect(f).connect(g).connect(actx.destination);
+      src.start(t + (at || 0));
+    };
+    ({
+      tap: () => tone(880, 0.08, 'triangle', 0.1, 0, 1320),
+      eat: () => { noise(0.06, 0.5, 0, 2200); noise(0.05, 0.4, 0.09, 2800); noise(0.05, 0.3, 0.19, 2400); },
+      coin: () => { tone(1320, 0.09, 'square', 0.05); tone(1760, 0.2, 'square', 0.05, 0.08); },
+      buy: () => { tone(660, 0.1, 'triangle', 0.1); tone(990, 0.16, 'triangle', 0.1, 0.08); },
+      crack: () => noise(0.09, 0.7, 0, 1600),
+      hatch: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.28, 'triangle', 0.12, i * 0.1)),
+      lay: () => tone(420, 0.25, 'sine', 0.12, 0, 640),
+    })[kind]?.();
+  }
+  Object.assign(ACTIONS, {
+    toggleSound() { S.mute = !S.mute; if (!S.mute) sfx('tap'); renderView(); save(); },
   });
 
   // ---------- 起動
