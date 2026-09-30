@@ -90,8 +90,8 @@
     const body = z > Z_TAILBASE ? 1 : clamp(1 - (Z_TAILBASE - z) / 2.3, 0, 1);
     const hw = smooth(clamp((z - 1.25) / 0.2, 0, 1));
     const arch = Math.exp(-Math.pow((z + 0.05) / 0.9, 2));
-    p.ht *= lerp(1.05 + 0.12 * body + 0.1 * arch, 1.4, hw);
-    p.hb *= lerp(1.0 + 0.2 * body, 1.3, hw);
+    p.ht *= lerp(1.2 + 0.2 * body + 0.18 * arch, 1.5, hw);
+    p.hb *= lerp(1.1 + 0.3 * body, 1.38, hw);
     p.w *= lerp(1, 1.1, hw);
     p.y += 0.02 * body + 0.02 * hw;
     if (gravid) { const g = Math.exp(-Math.pow((z + 0.1) / 0.45, 2)); p.w *= 1 + 0.13 * g; p.hb *= 1 + 0.14 * g; }
@@ -1175,7 +1175,7 @@
     const scene = new T.Scene();
     scene.environment = makeEnvironment(renderer);
     const camera = new T.PerspectiveCamera(34, 4 / 3, 0.1, 100);
-    const HOME = { pos: V(0, 9.6, 8.4), look: V(0, 0, 0.2) };
+    const HOME = { pos: V(0, 6.2, 9.8), look: V(0, 0.2, -0.2) };
     camera.position.copy(HOME.pos);
     const camLook = HOME.look.clone();
     camera.lookAt(camLook);
