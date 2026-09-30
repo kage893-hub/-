@@ -1101,6 +1101,7 @@
     MODEL.geo = geo;
     // 目：左右それぞれ、モデルの目の盛り上がりを測って眼球を合わせる（左右で形が少しちがうため）
     const ER = 0.034;
+    const EYE_OUT = root.LEOPA_EYE_OUT || 0.009; // モデルの目の盛り上がりから、眼球をどれだけ外へ出すか
     MODEL.eyes = [[1, 0.805, 0.057], [-1, 0.8, 0.056]].map(([side, z0, y0]) => {
       let n = 0, cz = 0, cy = 0, tip = 0;
       for (let i = 0; i < pos.length / 3; i++) {
@@ -1110,7 +1111,7 @@
         n++; cz += z; cy += y; tip = Math.max(tip, Math.abs(x));
       }
       cz /= n || 1; cy /= n || 1;
-      return { side, C: toGame(side * (tip + 0.002 - ER), cy, cz), dir: V(side, 0.25, 0.3).normalize() };
+      return { side, C: toGame(side * (tip + EYE_OUT - ER), cy, cz), dir: V(side, 0.25, 0.3).normalize() };
     });
     MODEL.eyeR = ER * MS;
     MODEL.mouth = toGame(0, -0.03, 0.93);
