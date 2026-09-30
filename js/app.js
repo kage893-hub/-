@@ -682,6 +682,13 @@
     const growSide = g.growth >= GROWTH.max ? 'MAX' : Math.floor(g.growth);
     const block = pairBlock(g, now);
     setHTML($('#caseInfo'), `
+      ${editing ? editPanel(g) : `<div class="actions">
+        <button class="act primary" data-action="feedMenu">ごはん</button>
+        <button class="act" data-action="clean">おそうじ</button>
+        <button class="act" data-action="handle">ふれあう</button>
+      </div>
+      ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮を手伝う</button>' : ''}
+      ${dailyCard()}
       <div class="card gecko-card">
         <div class="gc-head">
           <div class="gc-title">
@@ -707,13 +714,7 @@
         </div>
         <p class="muted small">${st === 'adult' ? (g.growth >= GROWTH.max ? 'りっぱなおとなです' : 'おとなになりました。ペアリングできます') : `${STAGE_LABEL[st === 'baby' ? 'young' : 'adult']}まで あと ${Math.ceil(next - g.growth)}`}${g.hunger <= 30 ? ' ・ おなかが空いていると成長が止まります' : ''}</p>
       </div>
-      ${editing ? editPanel(g) : `${dailyCard()}
-      <div class="actions">
-        <button class="act primary" data-action="feedMenu">ごはん</button>
-        <button class="act" data-action="clean">おそうじ</button>
-        <button class="act" data-action="handle">ふれあう</button>
-      </div>
-      ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮を手伝う</button>' : ''}
+
       <div class="actions sub">
         <button class="act ghost" data-action="pairMenu">ペアリング${block ? '' : ' OK'}</button>
         <button class="act ghost" data-action="editStart">もようがえ</button>
@@ -1062,8 +1063,9 @@
   }
   function decorOk(g, x, z, t, skip) {
     const r = L3.DECOR[t].r;
-    if (Math.abs(x) > 5 - r - 0.1 || z < -3.75 + r + 0.1 || z > 3.75 - r - 0.1) return 'ケースのはしに寄りすぎです';
-    if (Math.hypot(x - 4.2, z + 3.0) < r + 0.7) return 'そこはトイレの場所です';
+    const TK = L3.TANK;
+    if (Math.abs(x) > TK.hw - r - 0.1 || z < -TK.hd + r + 0.1 || z > TK.hd - r - 0.1) return 'ケースのはしに寄りすぎです';
+    if (Math.hypot(x - 5.4, z + 3.8) < r + 0.7) return 'そこはトイレの場所です';
     for (let i = 0; i < decorOf(g).length; i++) {
       if (i === skip) continue;
       const d = decorOf(g)[i];

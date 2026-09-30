@@ -1101,7 +1101,8 @@
     MODEL.geo = geo;
     // 目：左右それぞれ、モデルの目の盛り上がりを測って眼球を合わせる（左右で形が少しちがうため）
     const ER = 0.034;
-    const EYE_OUT = root.LEOPA_EYE_OUT || 0.009; // モデルの目の盛り上がりから、眼球をどれだけ外へ出すか
+    // モデルの目の盛り上がりから、眼球をどれだけ外へ出すか（モデルの左右差に合わせて別々に）
+    const EYE_OUT = { 1: root.LEOPA_EYE_OUT_R ?? 0.014, '-1': root.LEOPA_EYE_OUT_L ?? 0.018 };
     MODEL.eyes = [[1, 0.805, 0.057], [-1, 0.8, 0.056]].map(([side, z0, y0]) => {
       let n = 0, cz = 0, cy = 0, tip = 0;
       for (let i = 0; i < pos.length / 3; i++) {
@@ -1111,7 +1112,7 @@
         n++; cz += z; cy += y; tip = Math.max(tip, Math.abs(x));
       }
       cz /= n || 1; cy /= n || 1;
-      return { side, C: toGame(side * (tip + EYE_OUT - ER), cy, cz), dir: V(side, 0.25, 0.3).normalize() };
+      return { side, C: toGame(side * (tip + EYE_OUT[side] - ER), cy, cz), dir: V(side, 0.25, 0.3).normalize() };
     });
     MODEL.eyeR = ER * MS;
     MODEL.mouth = toGame(0, -0.03, 0.93);
@@ -1531,7 +1532,9 @@
       },
     },
   };
-  const DEFAULT_DECOR = [{ t: 'rock', x: -3.3, z: -2.3, rot: 0 }, { t: 'dish', x: -3.8, z: 2.5, rot: 0 }, { t: 'plant', x: 1.3, z: -3.05, rot: 0 }];
+  const DEFAULT_DECOR = [{ t: 'rock', x: -4.4, z: -3.0, rot: 0 }, { t: 'dish', x: -5.0, z: 3.2, rot: 0 }, { t: 'plant', x: 1.8, z: -3.8, rot: 0 }];
+  // ケースの広さ（床の半分の幅・奥行き）
+  const TANK = { hw: 6.5, hd: 4.5 };
 
   // ======================================================
   // ケース
@@ -1556,7 +1559,7 @@
     const scene = new T.Scene();
     scene.environment = makeEnvironment(renderer);
     const camera = new T.PerspectiveCamera(34, 4 / 3, 0.1, 100);
-    const HOME = { pos: V(0, 6.2, 9.8), look: V(0, 0.2, -0.2) };
+    const HOME = { pos: V(0, 7.6, 12.6), look: V(0, 0.2, -0.4) };
     camera.position.copy(HOME.pos);
     const camLook = HOME.look.clone();
     camera.lookAt(camLook);
@@ -1566,12 +1569,12 @@
     sun.position.set(-3, 10, 5);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    Object.assign(sun.shadow.camera, { left: -7, right: 7, top: 6, bottom: -6, near: 1, far: 30 });
+    Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 8, bottom: -8, near: 1, far: 34 });
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.02;
     sun.shadow.radius = 5;
     const heat = new T.PointLight('#FFB060', 0.8, 9, 1.6);
-    heat.position.set(4.5, 3, -1);
+    heat.position.set(5.8, 3, -1);
     const rim = new T.DirectionalLight('#DDE8FF', 0.35);
     rim.position.set(2, 4, -8);
     scene.add(hemi, sun, heat, rim);
@@ -1579,14 +1582,14 @@
     // 床（ホット側がほんのり暖色）
     const sand = canvasTexture(sandCanvas(), { srgb: true });
     sand.flipY = true;
-    const floor = new T.Mesh(new T.PlaneGeometry(10, 7.5), phys('#ffffff', { map: sand, bumpMap: sand, bumpScale: 0.012, roughness: 1 }));
+    const floor = new T.Mesh(new T.PlaneGeometry(TANK.hw * 2, TANK.hd * 2), phys('#ffffff', { map: sand, bumpMap: sand, bumpScale: 0.012, roughness: 1 }));
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     scene.add(floor);
     // ガラスと枠（手前は低くして中が見えるように）
     const glass = phys('#D5E4DD', { transparent: true, opacity: 0.28, roughness: 0.05, clearcoat: 1 });
     const frame = phys('#2F3431', { roughness: 0.4 });
-    for (const [x, z, w, d, h] of [[0, -3.85, 10.3, 0.1, 2.2], [-5.1, 0, 0.1, 7.7, 2.2], [5.1, 0, 0.1, 7.7, 2.2], [0, 3.85, 10.3, 0.1, 0.5]]) {
+    for (const [x, z, w, d, h] of [[0, -TANK.hd - 0.1, TANK.hw * 2 + 0.3, 0.1, 2.2], [-TANK.hw - 0.1, 0, 0.1, TANK.hd * 2 + 0.2, 2.2], [TANK.hw + 0.1, 0, 0.1, TANK.hd * 2 + 0.2, 2.2], [0, TANK.hd + 0.1, TANK.hw * 2 + 0.3, 0.1, 0.5]]) {
       const m = new T.Mesh(new T.BoxGeometry(w, h, d), glass);
       m.position.set(x, h / 2, z);
       scene.add(m);
@@ -1616,7 +1619,7 @@
     blob.position.y = 0.012;
     scene.add(blob);
 
-    const BOUNDS = { x: 4.3, zMin: -3.2, zMax: 3.3 };
+    const BOUNDS = { x: TANK.hw - 0.7, zMin: -TANK.hd + 0.6, zMax: TANK.hd - 0.5 };
     let HIDE = null;
     let obstacles = [];
     let decorKey = '';
@@ -1678,7 +1681,7 @@
       for (let k = 0; k < 40; k++) { const x = rand(xa, xb), z = rand(za, zb); if (freeAt(x, z, pad)) return { x, z }; }
       return { x: rand(xa, xb), z: rand(za, zb) };
     }
-    const POOP_SPOTS = [[4.2, -3.0], [3.75, -3.2], [4.35, -2.55]];
+    const POOP_SPOTS = [[5.4, -3.8], [4.95, -4.0], [5.55, -3.35]];
 
     const st = {
       gk: null, id: null, key: '', size: 1, x: 0.5, z: 0.8, yaw: 0.4,
@@ -1737,7 +1740,7 @@
       const obj = buildFood(kind);
       let x, z;
       let tries = 0;
-      do { x = rand(-3.3, 3.8); z = rand(-2.2, 2.8); tries++; } while ((Math.hypot(x - st.x, z - st.z) < 3 || !freeAt(x, z, 0.4)) && tries < 60);
+      do { x = rand(-TANK.hw + 2, TANK.hw - 1.5); z = rand(-TANK.hd + 1.4, TANK.hd - 1); tries++; } while ((Math.hypot(x - st.x, z - st.z) < 3 || !freeAt(x, z, 0.4)) && tries < 60);
       obj.position.set(x, 0, z);
       obj.rotation.y = rand(0, 6.28);
       scene.add(obj);
@@ -1913,8 +1916,8 @@
         f.t -= dt;
         if (f.t <= 0) {
           const reach = f.kind === 'cricket' ? 1.4 : f.kind === 'dubia' ? 0.6 : 0.2;
-          const x1 = clamp(f.obj.position.x + rand(-reach, reach), -4.3, 4.3);
-          const z1 = clamp(f.obj.position.z + rand(-reach, reach), -3.2, 3.3);
+          const x1 = clamp(f.obj.position.x + rand(-reach, reach), -BOUNDS.x, BOUNDS.x);
+          const z1 = clamp(f.obj.position.z + rand(-reach, reach), BOUNDS.zMin, BOUNDS.zMax);
           f.obj.rotation.y = Math.atan2(x1 - f.obj.position.x, z1 - f.obj.position.z);
           f.hop = { x0: f.obj.position.x, z0: f.obj.position.z, x1, z1, k: 0, dur: f.kind === 'cricket' ? 0.35 : 1.2 };
           f.t = rand(0.9, 2.2);
@@ -1974,7 +1977,7 @@
             st.walkTime = 0;
             if (!st.night && Math.random() < 0.3 && HIDE) { st.mode = 'toHide'; st.target = { x: HIDE.x, z: HIDE.z }; }
             else if (!st.night && Math.random() < 0.12) { st.sleeping = true; st.wait = rand(12, 25); st.zzz = 0.8; }
-            else { st.mode = 'walk'; st.target = freePoint(1.4 * st.size, -3.2, 3.5, -1.8, 2.4); }
+            else { st.mode = 'walk'; st.target = freePoint(1.4 * st.size, -TANK.hw + 2, TANK.hw - 1.8, -TANK.hd + 1.9, TANK.hd - 1.3); }
           }
         }
       }
@@ -2077,8 +2080,8 @@
   const photoCache = new Map();
   function photo(look, opts) {
     if (!supported) return null;
-    const face = !!(opts && opts.face), side = !!(opts && opts.side);
-    const key = lookKey(look) + (face ? '|face' : '') + (side ? '|side' : '');
+    const face = !!(opts && (opts.face || opts.front)), side = !!(opts && opts.side), front = !!(opts && opts.front);
+    const key = lookKey(look) + (face ? '|face' : '') + (side ? '|side' : '') + (front ? '|front' : '');
     if (photoCache.has(key)) return photoCache.get(key);
     if (!pr) {
       const renderer = new T.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
@@ -2138,7 +2141,7 @@
       const tgt = h.clone().lerp(m, 0.35);
       const fwd = m.clone().sub(h).setY(0).normalize();
       const right = new T.Vector3(fwd.z, 0, -fwd.x);
-      pr.camera.position.copy(tgt).addScaledVector(fwd, 3.3).addScaledVector(right, -1.6).add(new T.Vector3(0, 0.9, 0));
+      pr.camera.position.copy(tgt).addScaledVector(fwd, 3.3).addScaledVector(right, front ? 0 : -1.6).add(new T.Vector3(0, front ? 0.35 : 0.9, 0));
       pr.camera.lookAt(tgt.x, tgt.y + 0.22, tgt.z);
     } else {
       const dist = Math.max(size.x, size.z) * (gk.glb ? 2.15 : 2.25);
@@ -2158,5 +2161,5 @@
   }
   function photoReady(look, opts) { return photoCache.get(photoKey(look, opts)) || null; }
 
-  root.Leopa3D = { supported, createTank, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR };
+  root.Leopa3D = { supported, createTank, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR, TANK };
 })(typeof window !== 'undefined' ? window : globalThis);
