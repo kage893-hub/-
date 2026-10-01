@@ -866,6 +866,40 @@
     const fn = ACTIONS[t.dataset.action];
     if (fn) { ev.preventDefault(); fn(t, ev); }
   });
+  // ---------- ギフトコード（コードそのものはソースに書かず、ハッシュで照合する）
+  const GIFTS = {
+    yqq9dl: { id: 'tomato', coins: 300, text: 'コイン300枚' },
+  };
+  const giftNorm = v => v.normalize('NFKC').trim().toUpperCase().replace(/\s+/g, '').replace(/[\u3041-\u3096]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60));
+  const giftHash = v => { let x = 2166136261; for (const c of v) { x ^= c.codePointAt(0); x = Math.imul(x, 16777619) >>> 0; } return x.toString(36); };
+  function giftSheet(msg) {
+    openSheet(`<h3 class="sheet-title">ギフトコード</h3>
+      <p class="small">お知らせなどで配られたギフトコードを入力すると、プレゼントが受け取れます。ひらがな・カタカナどちらでも大丈夫です。</p>
+      <form id="giftForm" class="rename">
+        <label for="giftInput">ギフトコード</label>
+        <input id="giftInput" maxlength="30" autocomplete="off" autocapitalize="characters" placeholder="コードを入力">
+        <button class="act primary" type="submit">受け取る</button>
+      </form>
+      ${msg ? `<p class="notice">${msg}</p>` : ''}
+      <button class="act" data-action="closeSheet">とじる</button>`);
+  }
+  ACTIONS.giftMenu = () => giftSheet();
+  document.addEventListener('submit', ev => {
+    if (ev.target.id !== 'giftForm') return;
+    ev.preventDefault();
+    const v = giftNorm($('#giftInput').value);
+    if (!v) return;
+    const gift = GIFTS[giftHash(v)];
+    S.gifts = S.gifts || {};
+    if (!gift) { giftSheet('コードがちがうようです。もう一度たしかめてね'); return; }
+    if (S.gifts[gift.id]) { giftSheet('このギフトコードは受け取りずみです'); return; }
+    S.gifts[gift.id] = Date.now();
+    S.coins += gift.coins || 0;
+    closeSheet();
+    sfx('hatch');
+    toast(`ギフトを受け取りました！ ${gift.text}`);
+    renderView(); save();
+  });
   document.addEventListener('submit', ev => {
     if (ev.target.id !== 'renameForm') return;
     ev.preventDefault();
@@ -1113,7 +1147,7 @@
       ${specialCard()}
       ${offers ? `<div class="offers">${offers}</div>` : '<p class="muted">売り切れです。次の入荷をお待ちください。</p>'}
       <p class="muted small">コインは、お世話・ふ化・里親に出すことでもらえます。</p>
-      <div class="danger-zone">${isStandalone() || inFrame ? '' : '<button class="act ghost sm" data-action="installMenu">ホーム画面に追加</button>'}<button class="act ghost sm" data-action="notifyMenu">おしらせ通知</button><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`);
+      <div class="danger-zone">${isStandalone() || inFrame ? '' : '<button class="act ghost sm" data-action="installMenu">ホーム画面に追加</button>'}<button class="act ghost sm" data-action="giftMenu">ギフトコード</button><button class="act ghost sm" data-action="notifyMenu">おしらせ通知</button><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`);
   }
 
   function welcome() {
