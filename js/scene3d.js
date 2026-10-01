@@ -1207,7 +1207,7 @@
 
   // 形の曲げ方（描画側 GLSL と、眼球などの位置合わせ用 JS で同じ式を使う）
   const DEFORM_GLSL = `
-    uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop, uTailFat, uTailLift, uBend;
+    uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop, uTailFat, uTailLift, uBend, uJaw, uWag;
     // 実物のレオパにあわせたしっぽ：長さは頭からお尻までの約0.8倍、いちばん太いところは首くらいの太さ
     #define TAIL_V -1.55
     #define TAIL_STRETCH 1.6
@@ -1232,6 +1232,13 @@
         q.y += max(0.0, -sin(ph)) * uWalk * 0.12 * reach;
         p = aPivot + q;
       }
+      // あくび：下あごを下へひらく
+      if (uJaw > 0.001 && aLeg < 0.5) {
+        float jy = 0.335 + (2.15 - p.z) * 0.06;
+        float jw = smoothstep(1.5, 1.78, p.z) * (1.0 - smoothstep(jy - 0.025, jy + 0.025, p.y));
+        vec3 hinge = vec3(0.0, 0.36, 1.58);
+        p = mix(p, hinge + rotX(p - hinge, uJaw), jw);
+      }
       float hz = smoothstep(0.98, 1.3, p.z);
       if (hz > 0.0) {
         vec3 pv = vec3(0.0, 0.42, 1.08);
@@ -1252,6 +1259,8 @@
       float tt = clamp((-1.4 - p.z) / 3.1, 0.0, 1.0);
       w += tt * tt * (uCurl * 1.4 + 0.12 * sin(uT * 1.2 - p.z * 1.5) * (1.0 - uWalk) + uHappy * 0.3 * sin(uT * 9.0 - p.z * 2.0));
       w += step(0.55, tt) * uStalk * 0.06 * sin(uT * 28.0 - p.z * 4.0);
+      // 興味があるときの、ゆっくりしたしっぽのゆらゆら
+      w += tt * tt * uWag * 0.35 * sin(uT * 3.2 - p.z * 1.2);
       // 曲がるときは、体が弓なりにしなる（頭は行き先へ、しっぽはあとからついてくる）
       float bz = p.z - 0.3;
       w += uBend * bz * bz * (bz > 0.0 ? 0.07 : 0.04);
@@ -1272,6 +1281,7 @@
     let w = U.uWalk.value * 0.16 * Math.sin(U.uPhase.value - q.z * 1.4) * (0.4 + 0.6 * smooth(clamp((1.2 - q.z) / 2.7, 0, 1))) * body;
     const tt = clamp((-1.4 - q.z) / 3.1, 0, 1);
     w += tt * tt * (U.uCurl.value * 1.4 + 0.12 * Math.sin(U.uT.value * 1.2 - q.z * 1.5) * (1 - U.uWalk.value) + U.uHappy.value * 0.3 * Math.sin(U.uT.value * 9 - q.z * 2));
+    if (U.uWag) w += tt * tt * U.uWag.value * 0.35 * Math.sin(U.uT.value * 3.2 - q.z * 1.2);
     const bz = q.z - 0.3;
     w += (U.uBend ? U.uBend.value : 0) * bz * bz * (bz > 0 ? 0.07 : 0.04);
     q.x += w;
@@ -1320,7 +1330,7 @@
     rough.wrapS = T.RepeatWrapping;
     const shed = false;
     const U = {};
-    for (const k of ['uT', 'uPhase', 'uWalk', 'uLook', 'uPitch', 'uTilt', 'uCurl', 'uStalk', 'uHappy', 'uBreathe', 'uDrop', 'uTailFat', 'uTailLift', 'uBend', 'uShedOn', 'uShedEdge']) U[k] = { value: 0 };
+    for (const k of ['uT', 'uPhase', 'uWalk', 'uLook', 'uPitch', 'uTilt', 'uCurl', 'uStalk', 'uHappy', 'uBreathe', 'uDrop', 'uTailFat', 'uTailLift', 'uBend', 'uJaw', 'uWag', 'uShedOn', 'uShedEdge']) U[k] = { value: 0 };
     // 脱皮中は古い皮で全体が白っぽい（ケースの中では少しずつ脱いでいく）
     U.uShedOn.value = look.shed ? 1 : 0; U.uShedEdge.value = 9;
     U.uTailFat.value = look.fat || 0;
@@ -1368,10 +1378,14 @@
     const tongue = new T.Mesh(new T.SphereGeometry(1, 20, 12), phys('#E36F86', { roughness: 0.28, clearcoat: 0.7 }));
     tongue.scale.setScalar(0.001);
     rootG.add(tongue);
+    // あくびで見える口の中
+    const mouthIn = new T.Mesh(new T.SphereGeometry(1, 20, 12), phys('#B04A5E', { roughness: 0.5 }));
+    mouthIn.scale.setScalar(0.001);
+    rootG.add(mouthIn);
     rootG.traverse(o => { if (o.isMesh && o !== mesh) o.castShadow = false; });
     const gk = {
       glb: true, root: rootG, mesh, U, eyes, lids, eyeMat, corneaMat, eyeTex, bones, mouth, legs: [],
-      owned: [], dilated: false, tongue,
+      owned: [], dilated: false, tongue, mouthIn,
     };
     pose(gk, restPose());
     return gk;
@@ -1381,7 +1395,7 @@
     const U = gk.U;
     U.uT.value = P.t; U.uPhase.value = P.phase; U.uWalk.value = P.walk; U.uLook.value = P.look;
     U.uPitch.value = P.pitch - 0.05; U.uTilt.value = P.tilt; U.uCurl.value = Math.min(P.curl, 1) * 0.9; U.uStalk.value = P.stalk;
-    U.uHappy.value = P.happy; U.uBreathe.value = P.breathe; U.uDrop.value = P.drop - 0.04; U.uBend.value = P.bend || 0;
+    U.uHappy.value = P.happy; U.uBreathe.value = P.breathe; U.uDrop.value = P.drop - 0.04; U.uBend.value = P.bend || 0; U.uJaw.value = (P.jaw || 0) * 0.3; U.uWag.value = P.wag || 0;
     const hz = 1;
     const headQ = new T.Quaternion().setFromEuler(new T.Euler(U.uPitch.value * hz, U.uLook.value * 0.6 * hz, U.uTilt.value * hz, 'ZXY'));
     for (const e of gk.eyes) {
@@ -1404,6 +1418,15 @@
       gk.tongue.rotateX(0.12 + 0.15 * tg);
       gk.tongue.scale.set(0.06, 0.024, hz);
     } else gk.tongue.scale.setScalar(0.001);
+    if (gk.mouthIn) {
+      const j = P.jaw || 0;
+      if (j > 0.02) {
+        const off = new T.Vector3(0, -0.035 - 0.05 * j, -0.15).applyQuaternion(headQ);
+        gk.mouthIn.position.copy(gk.mouth.position).add(off);
+        gk.mouthIn.quaternion.copy(headQ);
+        gk.mouthIn.scale.set(0.115, 0.025 + 0.095 * j, 0.21);
+      } else gk.mouthIn.scale.setScalar(0.001);
+    }
     gk.bones.tail.position.copy(deformPoint(MODEL.tailTip, U));
   }
 
@@ -2726,7 +2749,7 @@
       if (opt.refuse) {
         // 気づいて見るけれど、ぷいっと向きを変える
         if (!opt.quiet && !st.sleeping) { st.peek = clamp(angleTo(st.yaw, Math.atan2(x - st.x, z - st.z)), -0.7, 0.7); st.peekT = 1.6; st.refuseT = 1.7; }
-      } else if (st.sleeping) wake();
+      } else { if (st.sleeping) wake(); st.wagT = 1.6; if (st.act) endAct(); }
     }
     // 食べ残し：食べなかったえさの数を、保存されている数にそろえる
     function dropDish(f, later) {
@@ -2916,8 +2939,8 @@
         st.gk.bones.head.getWorldPosition(b);
         if (ray.ray.distanceToPoint(a) < 1.1 * st.size || ray.ray.distanceToPoint(b) < 0.9 * st.size) {
           if (st.sleeping) wake();
-          st.lick = 0.9;
-          st.tiltT = 1.2;
+          if (!st.hand && !st.pair && !st.act && Math.random() < 0.3) startAct('startle');
+          else { st.lick = 0.9; st.tiltT = 1.2; }
           handlers.onTapGecko && handlers.onTapGecko();
         }
       }
@@ -3265,6 +3288,7 @@
       let cx = st.x + f.x * (2.0 * S + len * 0.55), cz = st.z + f.z * (2.0 * S + len * 0.55);
       cx = clamp(cx, -BOUNDS.x + len * 0.3, BOUNDS.x - len * 0.3); cz = clamp(cz, BOUNDS.zMin + len * 0.3, BOUNDS.zMax - len * 0.3);
       placeHand(h, cx, cz, Math.atan2(cx - st.x, cz - st.z), 0);
+      st.act = null;
       st.hand = { phase: 'offer', hands: [h], cur: 0, t: 0, tame, shy: tame < 25 && Math.random() < 0.5, onT: 0, prevClose: st.close, stroke: 0 };
       st.mode = 'idle'; st.wait = 999;
       setClose(true); st.zoom = 1.35; st.elev = 0.5;
@@ -3423,7 +3447,7 @@
         phase: 0, walkW: 0, look: 0, pitch: 0, stalk: 0, happy: 0, lick: 0, tilt: 0, drop: 0.04, blinkT: 2, blinkV: 0, content: 0, onHand: true,
       };
       st.pair = { ph: 'enter', t: 0, all: 0, D, meet, hand, M, fLook: 0, fStill: false, heartT: 0, prevClose: st.close };
-      st.mode = 'idle'; st.wait = 999; st.meal = null; st.hunt = null;
+      st.mode = 'idle'; st.wait = 999; st.meal = null; st.hunt = null; st.act = null;
       setClose(false);
       pairSay('enter');
       return true;
@@ -3635,6 +3659,125 @@
       mateBlob.rotation.z = M.yaw;
     }
 
+    // ---------- レオパらしいしぐさ（あくび・伸び・ガラスぺろぺろ・トイレ・パトロールなど）
+    // st.act = { type, t, ph, ... }。歩いて行く段階（go）と、その場でする段階に分かれる
+    const ACT_POSE = { pitch: 0, drop: null, look: 0, tilt: 0, jaw: 0, wag: 0, blink: 0, churn: 0, tail: 0 };
+    function startAct(type, extra) {
+      if (st.hand || st.pair || st.meal || st.foods.some(f => !f.refuse) || st.sleeping) return false;
+      st.act = Object.assign({ type, t: 0, ph: 'do' }, extra || {});
+      st.mode = 'act';
+      return true;
+    }
+    function endAct() { st.act = null; st.mode = 'idle'; st.wait = rand(1.5, 4); }
+    function actGo(A, dt, nf) {
+      const step = moveToward(A.to.x, A.to.z, 0.8 * nf, dt);
+      A.goT = (A.goT || 0) + dt;
+      if (Math.hypot(A.to.x - st.x, A.to.z - st.z) < 0.18 || A.goT > 12) {
+        if (A.path && A.path.length) { A.to = A.path.shift(); A.goT = 0; return step; }
+        A.ph = 'do'; A.t = 0;
+      }
+      return step;
+    }
+    function stepAct(dt, S, nf) {
+      const A = st.act, a = ACT_POSE;
+      Object.assign(a, { pitch: 0, drop: null, look: 0, tilt: 0, jaw: 0, wag: 0, blink: 0, churn: 0, tail: 0 });
+      A.t += dt;
+      let step = 0;
+      if (A.ph === 'go') { step = actGo(A, dt, nf); return step; }
+      const k = (d) => Math.sin(Math.min(1, A.t / d) * Math.PI);
+      if (A.type === 'yawn') {
+        // くわっと大きくあくび
+        const o = Math.pow(k(1.8), 0.7);
+        a.jaw = 0.42 * o; a.pitch = -0.2 * o; a.blink = 0.7 * o;
+        if (A.t > 1.8) endAct();
+      } else if (A.type === 'stretch') {
+        // 前足をつっぱって、ぐーっと伸び
+        const o = k(2.2);
+        a.pitch = -0.22 * o; a.drop = 0.04 - 0.09 * o; a.blink = 0.4 * o;
+        if (A.t > 2.2) endAct();
+      } else if (A.type === 'wag') {
+        a.wag = Math.min(1, A.t * 2) * (A.t < 2.4 ? 1 : 0); a.look = A.side * 0.3;
+        if (A.t > 2.8) endAct();
+      } else if (A.type === 'eyelick') {
+        // 目のまわりをぺろり
+        if (A.t < 0.05) st.lick = 0.9;
+        a.look = A.side * 0.35; a.tilt = A.side * 0.18; a.pitch = -0.06;
+        if (A.t > 1.1) endAct();
+      } else if (A.type === 'startle') {
+        // びくっとかたまって、少しあとずさり
+        a.pitch = -0.1; a.drop = 0.02;
+        if (A.t > 0.35 && A.t < 0.95) { const v = 1.1 * dt; st.x -= Math.sin(st.yaw) * v; st.z -= Math.cos(st.yaw) * v; step = 0; }
+        if (A.t > 1.1) endAct();
+      } else if (A.type === 'glass') {
+        // ガラスの前で、舌でぺろぺろ確かめる
+        st.yaw += angleTo(st.yaw, 0) * Math.min(1, dt * 3);
+        a.pitch = -0.22;
+        A.lt = (A.lt || 0) - dt;
+        if (A.lt <= 0) { st.lick = 0.9; A.lt = rand(0.5, 0.9); }
+        if (A.t > 3.5) endAct();
+      } else if (A.type === 'dig') {
+        // 前足で床をかりかり
+        a.pitch = 0.14; a.churn = 1; a.drop = 0.07;
+        A.pt = (A.pt || 0) - dt;
+        if (A.pt <= 0) { const m = mouthWorld(); puff(m.x, m.z, S * 0.7); A.pt = 0.45; }
+        if (A.t > 2.6) endAct();
+      } else if (A.type === 'patrol') {
+        endAct();
+      } else if (A.type === 'flat') {
+        // おなかを床にぺったりつけて、のんびり日なたぼっこ
+        a.drop = 0.18; a.blink = 0.6; a.pitch = 0.06;
+        if (A.t > A.dur) endAct();
+      } else if (A.type === 'toilet') {
+        // トイレの場所で、しっぽを少し上げて…
+        st.yaw += angleTo(st.yaw, A.face) * Math.min(1, dt * 3);
+        a.drop = 0.1; a.tail = 0.5 * k(1.8);
+        if (A.t > 1.8) { const cb = A.cb; endAct(); if (cb) cb(); }
+      } else endAct();
+      return step;
+    }
+    // トイレ：いつもの隅へ歩いていって、フンをする（cb でフンを出す）
+    function toilet(cb) {
+      if (!st.gk || !startAct('toilet', { cb })) return false;
+      const S = 0.95 * st.size, [px, pz] = poopSpot(st.poops.length);
+      // おしり（体の中心から 1.5 くらい後ろ）がフンの場所に来るように、ケースのまんなかを向いて止まる
+      const face = Math.atan2(-px, -pz);
+      const x = clamp(px + Math.sin(face) * 1.5 * S, -BOUNDS.x + 1.4, BOUNDS.x - 1.4), z = clamp(pz + Math.cos(face) * 1.5 * S, BOUNDS.zMin + 1.4, BOUNDS.zMax - 1);
+      Object.assign(st.act, { ph: 'go', to: { x, z }, face });
+      return true;
+    }
+    // 歩きまわるしぐさを始める（パトロール・ガラス・ほる・ぺったり）
+    function startWalkAct(type) {
+      const S = 0.95 * st.size;
+      if (type === 'glass') {
+        const x = clamp(st.x + rand(-2, 2), -BOUNDS.x + 1.6, BOUNDS.x - 1.6), z = BOUNDS.zMax - 1.25 * S;
+        if (!freeAt(x, z, 0.8 * S)) return false;
+        return startAct('glass', { ph: 'go', to: { x, z } });
+      }
+      if (type === 'dig') {
+        const to = HIDE && HIDE.door ? { x: HIDE.door.x, z: HIDE.door.z } : freePoint(1.2 * S, -TK.hw + 2, TK.hw - 2, -TK.hd + 2, TK.hd - 1.5);
+        return startAct('dig', { ph: 'go', to });
+      }
+      if (type === 'flat') {
+        const to = freePoint(1.4 * S, 1.2, TK.hw - 1.8, -TK.hd + 1.9, TK.hd - 1.4);
+        return startAct('flat', { ph: 'go', to, dur: rand(8, 14) });
+      }
+      if (type === 'patrol') {
+        // ケースのふちにそって、ぐるっと歩く
+        const mx = BOUNDS.x - 1.5 * S, z0 = BOUNDS.zMin + 1.5 * S, z1 = BOUNDS.zMax - 1.3 * S;
+        const corners = [{ x: -mx, z: z0 }, { x: mx, z: z0 }, { x: mx, z: z1 }, { x: -mx, z: z1 }];
+        let i = 0, best = 1e9;
+        corners.forEach((c, j) => { const d = Math.hypot(c.x - st.x, c.z - st.z); if (d < best) { best = d; i = j; } });
+        const dir = Math.random() < 0.5 ? 1 : 3, n = 2 + Math.floor(Math.random() * 3);
+        const path = [];
+        for (let k = 0; k <= n; k++) {
+          const c = corners[(i + k * dir) % 4];
+          path.push(freeAt(c.x, c.z, 1.0 * S) ? c : freePoint(1.0 * S, c.x - 1.5, c.x + 1.5, c.z - 1.2, c.z + 1.2));
+        }
+        return startAct('patrol', { ph: 'go', to: path.shift(), path });
+      }
+      return false;
+    }
+
     // 岩や石の上では、足もとの高さに合わせて体を持ちあげ、坂なら体をかたむける
     function ground(g, dt, S, fast) {
       const sy = Math.sin(g.yaw), cy = Math.cos(g.yaw);
@@ -3722,13 +3865,16 @@
       } else if (st.shedAct && !st.sleeping) {
         st.stalk = 0; st.hunt = null;
         stepShedAct(dt, S);
+      } else if (st.act && !st.sleeping) {
+        st.stalk = 0; st.hunt = null;
+        step = stepAct(dt, S, nf);
       } else {
         st.stalk = 0; st.hunt = null;
         if (st.sleeping) {
           st.wait -= dt;
           st.zzz -= dt;
           if (st.zzz <= 0) { fx('z', 'zzz'); st.zzz = 1.8; }
-          if (st.wait <= 0) wake();
+          if (st.wait <= 0) { wake(); const r1 = Math.random(); if (r1 < 0.4) startAct('yawn'); else if (r1 < 0.75) startAct('stretch'); }
           if (HIDE) st.yaw += angleTo(st.yaw, HIDE.face) * Math.min(1, dt * 2);
         } else if (st.mode === 'drink' || st.mode === 'bask') {
           // 水をぺろぺろ飲む／石の横でじっとひなたぼっこ
@@ -3739,7 +3885,7 @@
             const w = st.target && st.target.water;
             if (w) { const my = mouthWorld().y; st.drinkPitch = clamp((st.drinkPitch || 0) + (my - (w.y + 0.04)) * dt * 6, -0.3, 0.8); }
           }
-          if (st.wait <= 0) { st.mode = 'idle'; st.wait = rand(1.5, 4); }
+          if (st.wait <= 0) { const was = st.mode; st.mode = 'idle'; st.wait = rand(1.5, 4); if (was === 'bask' && Math.random() < 0.4) startAct('yawn'); }
         } else if (st.mode === 'walk' || st.mode === 'toHide' || st.mode === 'toDrink' || st.mode === 'toBask') {
           // 本物のレオパのように、少し歩いては止まり、まわりを見てまた歩く
           if (st.pauseT > 0) {
@@ -3789,6 +3935,10 @@
             else if (stone && !st.night && r0 < 0.28) { st.mode = 'toBask'; st.target = { x: stone.x + rand(-0.3, 0.3), z: stone.z + rand(-0.3, 0.3), face: rand(0, 6.28) }; }
             else if ((!st.night || st.heatPref < 0) && Math.random() < (st.heatPref < 0 ? 0.5 : 0.3) && HIDE) { st.mode = 'toHide'; st.target = HIDE.tunnel ? { x: HIDE.door.x, z: HIDE.door.z, next: { x: HIDE.x, z: HIDE.z } } : { x: HIDE.x, z: HIDE.z }; }
             else if (!st.night && Math.random() < 0.12) { st.sleeping = true; st.wait = rand(12, 25); st.zzz = 0.8; seen('nap'); }
+            else if (st.night && Math.random() < 0.3 && startWalkAct('patrol')) { /* 夜はケースのふちをパトロール */ }
+            else if (Math.random() < 0.1 && startWalkAct('glass')) { /* ガラスをぺろぺろ */ }
+            else if (Math.random() < 0.08 && startWalkAct('dig')) { /* 床をかりかり */ }
+            else if (!st.night && st.heatPref >= 0 && Math.random() < 0.12 && startWalkAct('flat')) { /* 暖かい側でぺったり */ }
             else {
               // 寒いと暖かい側（右）へ、暑いと涼しい側（左）へ寄りがち
               let xa = -TK.hw + 2, xb = TK.hw - 1.8;
@@ -3828,9 +3978,12 @@
           if (pk > 0.02 && pk < 0.98 && r0 < 0.75) {
             if (Math.random() < 0.4) { st.shedAct = { type: 'rub', t: 0 }; seen('shedRub'); }
             else st.shedAct = { type: 'pull', t: 0, side: Math.random() < 0.5 ? -1 : 1 };
-          } else if (r0 < 0.45) { st.lick = 0.9; seen('lick'); }
-          else if (r0 < 0.85) { st.peek = rand(-0.7, 0.7); st.peekT = rand(1.2, 2.4); seen('look'); }
-          else { st.tiltT = 1.2; seen('tilt'); }
+          } else if (r0 < 0.3) { st.lick = 0.9; seen('lick'); }
+          else if (r0 < 0.58) { st.peek = rand(-0.7, 0.7); st.peekT = rand(1.2, 2.4); seen('look'); }
+          else if (r0 < 0.68) { st.tiltT = 1.2; seen('tilt'); }
+          else if (r0 < 0.78) startAct('yawn');
+          else if (r0 < 0.9) startAct('wag', { side: Math.random() < 0.5 ? -1 : 1 });
+          else startAct('eyelick', { side: Math.random() < 0.5 ? -1 : 1 });
           st.idleT = pk > 0 && pk < 1 ? rand(2, 4) : rand(4, 9);
         }
       }
@@ -3866,11 +4019,26 @@
       P.pitch = st.pitch + (st.eatPitch || 0) + (st.drinkPitch || 0) + Math.sin(st.phase * 2) * 0.035 * st.walkW;
       P.tilt = (st.tiltT > 0 ? Math.sin(Math.min(1, st.tiltT) * Math.PI) * 0.22 : 0) + (st.happy > 0 ? Math.sin(st.t * 7) * 0.12 : 0);
       P.bend = st.bend;
+      // しぐさの姿勢（なめらかに切りかえる）
+      {
+        const a = st.act && st.act.ph === 'do' ? ACT_POSE : null, f = Math.min(1, dt * 6);
+        st.ap = st.ap || { pitch: 0, drop: 0, look: 0, tilt: 0, jaw: 0, wag: 0, blink: 0, churn: 0, tail: 0, dw: 0 };
+        for (const key of ['pitch', 'look', 'tilt', 'jaw', 'wag', 'blink', 'churn', 'tail']) st.ap[key] = lerp(st.ap[key], a ? a[key] : 0, key === 'jaw' ? Math.min(1, dt * 10) : f);
+        st.ap.dw = lerp(st.ap.dw, a && a.drop != null ? 1 : 0, f);
+        if (a && a.drop != null) st.ap.drop = a.drop;
+        // えさを見つけたときも、しっぽがゆらゆら
+        if (st.wagT > 0) { st.wagT -= dt; st.ap.wag = Math.max(st.ap.wag, Math.min(1, st.wagT)); }
+        P.pitch += st.ap.pitch; P.look += st.ap.look; P.tilt += st.ap.tilt;
+        P.jaw = st.ap.jaw; P.wag = st.ap.wag;
+        // 前足でかりかり（その場で足を動かす）
+        if (st.ap.churn > 0.01) { st.phase += dt * 9 * st.ap.churn; P.phase = st.phase; P.walk = Math.max(P.walk, 0.55 * st.ap.churn); }
+        st.tailUp = st.ap.tail;
+      }
       P.curl = st.curl;
       P.stalk = st.stalk > 0 ? 1 : 0;
       P.happy = st.happy > 0 ? 1 : 0;
-      P.drop = st.drop;
-      P.blink = st.mode === 'bask' ? Math.max(st.blinkV, 0.55) : st.blinkV;
+      P.drop = lerp(st.drop, st.ap.drop, st.ap.dw);
+      P.blink = Math.max(st.mode === 'bask' ? Math.max(st.blinkV, 0.55) : st.blinkV, st.ap.blink);
       P.tongue = st.lick > 0 ? Math.sin((0.9 - st.lick) / 0.9 * Math.PI) : 0;
       P.breathe = Math.sin(st.t * (st.sleeping ? 1.4 : 2.4));
       P.sway = 1;
@@ -3883,7 +4051,7 @@
         // 頭の先から、しっぽの先まで、境目がだんだん下がっていく
         gk.U.uShedEdge.value = st.shedP == null && st.stuck ? -3.1 : pk < 0 ? 9 : 1.9 - pk * 5.8;
         gk.U.uTailFat.value = st.fat || 0;
-        gk.U.uTailLift.value = st.tailLift || 0;
+        gk.U.uTailLift.value = (st.tailLift || 0) + (st.tailUp || 0);
         if (gk.corneaMat) gk.corneaMat.opacity = st.shedP != null && pk < 0.12 ? 0.4 : 0.1;
       }
       gk.root.position.set(st.x, st.y, st.z);
@@ -3968,6 +4136,7 @@
       },
       setShed(p) { st.shedP = p; },
       setStuck(on) { st.stuck = !!on; },
+      toilet, startAct, startWalkAct,
       setLeftovers,
       // 水のよごれ（0：きれい 〜 1：よごれ）
       setWaterDirty(k) {

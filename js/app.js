@@ -264,7 +264,12 @@
       }
     }
     for (const g of S.geckos) {
-      if (g.poopAt && now >= g.poopAt) { g.poop = Math.min(3, g.poop + 1); g.clean = clamp(g.clean - 10); g.poopAt = 0; mile(g, 'poop', 'はじめてのフンをした（元気なしるし！）', false); }
+      if (g.poopAt && now >= g.poopAt) {
+        // 見ているケースなら、いつものトイレの場所へ歩いていってからフンをする
+        const doPoop = () => { if (!g.poopAt) return; g.poop = Math.min(3, g.poop + 1); g.clean = clamp(g.clean - 10); g.poopAt = 0; g._toilet = 0; mile(g, 'poop', 'はじめてのフンをした（元気なしるし！）', false); };
+        if (!g._toilet && tank && tank.toilet && g.id === tankGid && view === 'case' && !document.hidden && tank.toilet(() => { doPoop(); renderView(); save(); })) g._toilet = now;
+        else if (!g._toilet || now - g._toilet > 25000) doPoop();
+      }
       if (g.shedUntil && now >= g.shedUntil) finishShed(g);
       if (g.gravid && now >= g.gravid.layAt) layEggs(g, now);
       if (!g.waterAt) g.waterAt = now;
