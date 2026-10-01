@@ -1130,7 +1130,10 @@
   // 形の曲げ方（描画側 GLSL と、眼球などの位置合わせ用 JS で同じ式を使う）
   const DEFORM_GLSL = `
     uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop, uTailFat;
-    #define TAIL_BASE 1.25
+    // 実物のレオパにあわせたしっぽ：長さは頭からお尻までの約0.8倍、いちばん太いところは首くらいの太さ
+    #define TAIL_V -1.55
+    #define TAIL_STRETCH 1.6
+    #define TAIL_BASE 0.7
     varying float vLeoZ;
     attribute float aLeg;
     attribute vec3 aPivot;
@@ -1139,6 +1142,7 @@
     vec3 rotX(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(q.x, c * q.y - s * q.z, s * q.y + c * q.z); }
     vec3 rotZ(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(c * q.x - s * q.y, s * q.x + c * q.y, q.z); }
     vec3 leoDeform(vec3 p) {
+      if (p.z < TAIL_V) p.z = TAIL_V + (p.z - TAIL_V) * TAIL_STRETCH;
       if (aLeg > 0.5) {
         float off = (aLeg < 1.5 || aLeg > 3.5) ? 0.0 : 3.14159;
         float ph = uPhase + off;
@@ -1157,14 +1161,15 @@
       // しっぽの付け根の太さ（栄養をためている具合）
       // レオパらしい、栄養をためたぶりっと太いしっぽ（付け根から先へ、にんじんのように細くなる）
       if (aLeg < 0.5) {
-        float tf = smoothstep(0.0, 1.0, clamp((-1.05 - p.z) / 0.5, 0.0, 1.0)) * (1.0 - 0.88 * smoothstep(0.0, 1.0, clamp((-1.85 - p.z) / 1.45, 0.0, 1.0)));
+        float tu = clamp((TAIL_V + 0.15 - p.z) / 3.0, 0.0, 1.0);
+        float tf = smoothstep(0.0, 0.14, tu) * (1.0 - 0.92 * smoothstep(0.3, 1.0, tu));
         float tk = tf * (TAIL_BASE + uTailFat);
         p.x *= 1.0 + tk;
-        p.y = aCy + (p.y - aCy) * (1.0 + tk * 0.7);
+        p.y = aCy + (p.y - aCy) * (1.0 + tk * 0.35);
       }
       float body = 1.0 - smoothstep(0.8, 1.35, p.z);
       float w = uWalk * 0.16 * sin(uPhase - p.z * 1.4) * (0.4 + 0.6 * smoothstep(1.2, -1.5, p.z)) * body;
-      float tt = clamp((-1.4 - p.z) / 2.0, 0.0, 1.0);
+      float tt = clamp((-1.4 - p.z) / 3.1, 0.0, 1.0);
       w += tt * tt * (uCurl * 1.4 + 0.12 * sin(uT * 1.2 - p.z * 1.5) * (1.0 - uWalk) + uHappy * 0.3 * sin(uT * 9.0 - p.z * 2.0));
       w += step(0.55, tt) * uStalk * 0.06 * sin(uT * 28.0 - p.z * 4.0);
       p.x += w;
@@ -1174,6 +1179,7 @@
     }`;
   function deformPoint(p, U) {
     const q = p.clone();
+    if (q.z < -1.55) q.z = -1.55 + (q.z + 1.55) * 1.6;
     const hz = smooth(clamp((q.z - 0.98) / 0.32, 0, 1));
     if (hz > 0) {
       const pv = V(0, 0.42, 1.08);
@@ -1181,7 +1187,7 @@
     }
     const body = 1 - smooth(clamp((q.z - 0.8) / 0.55, 0, 1));
     let w = U.uWalk.value * 0.16 * Math.sin(U.uPhase.value - q.z * 1.4) * (0.4 + 0.6 * smooth(clamp((1.2 - q.z) / 2.7, 0, 1))) * body;
-    const tt = clamp((-1.4 - q.z) / 2, 0, 1);
+    const tt = clamp((-1.4 - q.z) / 3.1, 0, 1);
     w += tt * tt * (U.uCurl.value * 1.4 + 0.12 * Math.sin(U.uT.value * 1.2 - q.z * 1.5) * (1 - U.uWalk.value) + U.uHappy.value * 0.3 * Math.sin(U.uT.value * 9 - q.z * 2));
     q.x += w;
     q.y -= U.uDrop.value;
@@ -2509,7 +2515,7 @@
     function resolveObstacles() {
       const S = 0.95 * st.size;
       // 鼻先から尻尾の先まで、体にそって点を取る（尻尾は細いので余裕を小さく）
-      const pts = [[2.0, 0.22], [1.4, 0.34], [0.6, 0.4], [-0.2, 0.4], [-1.0, 0.34], [-1.8, 0.24], [-2.6, 0.14]];
+      const pts = [[2.0, 0.22], [1.4, 0.34], [0.6, 0.4], [-0.2, 0.4], [-1.0, 0.34], [-1.8, 0.3], [-2.6, 0.2], [-3.4, 0.12]];
       for (let it = 0; it < 4; it++) {
         for (const o of obstacles) {
           if (HIDE && !HIDE.tunnel && o === HIDE.ob && (st.sleeping || st.mode === 'toHide')) continue;
@@ -3216,7 +3222,7 @@
       blob.position.x = st.x;
       blob.position.y = 0.012 + st.y;
       blob.position.z = st.z;
-      blob.scale.set(2.2 * S, 4.2 * S, 1);
+      blob.scale.set(2.2 * S, 5.0 * S, 1);
       blob.rotation.z = st.yaw;
     }
 
@@ -3342,12 +3348,12 @@
     el.addEventListener('pointermove', e => {
       if (!touches.has(e.pointerId)) return;
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (touches.size === 2) { const [a, b] = [...touches.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); if (pinch) st.zoom = clamp(st.zoom * pinch / d, 0.45, 1.5); pinch = d; return; }
+      if (touches.size === 2) { const [a, b] = [...touches.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); if (pinch) st.zoom = clamp(st.zoom * pinch / d, 0.45, 2); pinch = d; return; }
       st.az -= (e.clientX - lx) * 0.012; st.el = clamp(st.el + (e.clientY - ly) * 0.006, 0.05, 1.3); lx = e.clientX; ly = e.clientY;
     });
     const up = e => { touches.delete(e.pointerId); if (touches.size < 2) pinch = 0; };
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
-    el.addEventListener('wheel', e => { e.preventDefault(); st.zoom = clamp(st.zoom * Math.exp(e.deltaY * 0.0015), 0.45, 1.5); }, { passive: false });
+    el.addEventListener('wheel', e => { e.preventDefault(); st.zoom = clamp(st.zoom * Math.exp(e.deltaY * 0.0015), 0.45, 2); }, { passive: false });
     // 見る位置のおすすめ：顔・全身・横
     const views = { face: { el: 0.2, zoom: 0.5 }, body: { az: 0.7, el: 0.38, zoom: 1 }, side: { az: Math.PI / 2, el: 0.12, zoom: 0.9 }, top: { az: 0.2, el: 1.25, zoom: 0.95 } };
     let last = performance.now();
