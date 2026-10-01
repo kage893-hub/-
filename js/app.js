@@ -369,8 +369,9 @@
           <button class="act primary sm" data-action="buyGecko" data-i="sp" ${S.coins < o.price || S.geckos.length >= S.cases ? 'disabled' : ''}>${o.price} コインでおむかえ</button>
         </div></div>`;
   }
-  const offerAt = i => i === 'sp' ? (S.special && !S.special.sold ? S.special.offer : null) : S.offers[Number(i)];
-  function takeOffer(i) { if (i === 'sp') S.special.sold = true; else S.offers.splice(Number(i), 1); }
+  const offerAt = i => i === 'sp' ? (S.special && !S.special.sold ? S.special.offer : null)
+    : i[0] === 'x' ? (S.expo && S.expo.stock[Number(i.slice(1))] && !S.expo.stock[Number(i.slice(1))].sold ? S.expo.stock[Number(i.slice(1))] : null) : S.offers[Number(i)];
+  function takeOffer(i) { if (i === 'sp') S.special.sold = true; else if (i[0] === 'x') S.expo.stock[Number(i.slice(1))].sold = true; else S.offers.splice(Number(i), 1); }
   function refreshOffers(now) {
     refreshSpecial(now);
     if (now < S.offersAt) return;
@@ -1121,6 +1122,7 @@
     rehomeMenu() {
       const g = selected();
       if (!g) return;
+      if (!S.license) { needLicense(() => {}); return; }
       if (S.geckos.length <= 1) { toast('さいごの1匹は手放せません'); return; }
       if (g.gravid) { toast('抱卵中は里親に出せません'); return; }
       ACTIONS.farewell(g, 'やさしい飼い主さん', Math.round(valueOf(g) * 0.8), `data-action="rehome" data-id="${g.id}"`);
@@ -1168,10 +1170,11 @@
     },
     dexTab(t) { S.dexTab = t.dataset.tab; renderView(); window.scrollTo(0, 0); },
     showMenu(t) {
-      const lv = SHOW_LEVELS[Number(t.dataset.lv)], day = todayKey(), th = themeOf(lv, day);
+      const lv = lvOf(t.dataset.lv), day = todayKey();
       if (!lv) return;
+      const th = themeOf(lv, day);
       const list = S.geckos.map(g => {
-        const why = showBlock(g, day), sc = showScore(g, th, day);
+        const why = lv === CHAMP ? (stageOf(g) === 'baby' ? 'ベビーはまだ出られません' : '') : showBlock(g, day), sc = showScore(g, th, day);
         return `<button class="row" data-action="showEnter" data-lv="${t.dataset.lv}" data-id="${g.id}" ${why ? 'disabled' : ''}>
           <span class="row-art">${A.swatch(g)}</span>
           <span class="row-main"><b>${esc(g.name)} ${sexMark(g)}</b><small>${esc(nameOf(g))} ・ ${STAGE_LABEL[stageOf(g)]}${why ? ' ・ ' + why : ''}</small></span>
@@ -1184,10 +1187,13 @@
         <button class="act" data-action="closeSheet">やめる</button>`);
     },
     showEnter(t) {
-      const lvI = Number(t.dataset.lv), lv = SHOW_LEVELS[lvI], day = todayKey(), th = themeOf(lv, day);
+      const lv = lvOf(t.dataset.lv), day = todayKey();
+      if (!lv) return;
+      const th = themeOf(lv, day), champ = lv === CHAMP;
       const g = S.geckos.find(x => x.id === t.dataset.id);
-      if (!g || !lv || showBlock(g, day)) return;
-      g.showDay = day;
+      if (!g || (champ ? stageOf(g) === 'baby' : showBlock(g, day))) return;
+      if (champ) { const E = expoState(Date.now()), info = expoInfo(Date.now()); if (!E || !info || !info.open || E.champ) return; E.champ = true; }
+      else g.showDay = day;
       const me = showScore(g, th, day);
       // ライバルは、大会の格に合わせた点数
       const r = prngApp(strHash(day + lv.id + g.id + 'rivals'));
@@ -1197,9 +1203,10 @@
       });
       const all = rivals.concat([{ name: g.name, total: me.total, me: true }]).sort((a, b) => b.total - a.total || (a.me ? -1 : 1));
       const rank = all.findIndex(x => x.me) + 1;
-      const coins = rank === 1 ? lv.reward : rank === 2 ? Math.round(lv.reward * 0.3) : rank === 3 ? 5 : 0;
+      const coins = rank === 1 ? lv.reward : rank === 2 ? Math.round(lv.reward * (champ ? 0.4 : 0.3)) : rank === 3 ? (champ ? 30 : 5) : 0;
       S.coins += coins;
       if (rank === 1) { S.showRec = S.showRec || {}; S.showRec[lv.id] = (S.showRec[lv.id] || 0) + 1; memo(g, `${lv.name}の${th.name}で優勝した！`, true); }
+      if (champ && rank <= 3) { const d0 = new Date(); S.trophies = (S.trophies || []).concat([{ rank, name: g.name, theme: th.name, date: `${d0.getMonth() + 1}/${d0.getDate()}` }]); }
       else if (rank <= 3) memo(g, `${lv.name}の${th.name}で${rank}位になった`);
       const d = new Date();
       S.shows = (S.shows || []).concat([{ name: g.name, rank, score: me.total, lv: lv.name, theme: th.name, coins, date: `${d.getMonth() + 1}/${d.getDate()}` }]).slice(-30);
@@ -1216,7 +1223,7 @@
           <ol class="show-rank">${all.map((x, i) => `<li class="${x.me ? 'me' : ''}"><span>${i + 1}位</span><b>${esc(x.name)}</b><small>${x.total}点</small></li>`).join('')}</ol>
           <div class="show-break"><span>見た目 <b>${Math.round(me.base * 0.85)}</b></span><span>お世話 <b>${me.cond >= 0 ? '+' : ''}${me.cond}</b></span><span>当日の調子 <b>${me.luck >= 0 ? '+' : ''}${me.luck}</b></span></div>
           <p class="small">審査員より：「${comment}。${cond}」</p>
-          ${coins ? `<p><b>${coins} コイン</b>もらいました！</p>` : '<p class="muted small">今回は入賞ならず。また明日チャレンジしよう</p>'}
+          ${coins ? `<p><b>${coins} コイン</b>もらいました！</p>` : `<p class="muted small">今回は入賞ならず。また${champ ? '来週' : '明日'}チャレンジしよう</p>`}
           <button class="act primary" data-action="closeSheet">とじる</button>
         </div>`);
         renderView();
@@ -1228,6 +1235,7 @@
       const own = cageOwn(), g = selected();
       if (!v) return;
       if (!own[id]) {
+        if (v.expo && view !== 'expo') { toast('レプタイルズショーの会場でだけ買えます'); return; }
         if (S.coins < v.price) { toast('コインが足りません'); return; }
         S.coins -= v.price; own[id] = 1; sfx('buy');
         toast(g ? `${v.name}を買って、${g.name}のケースに使いました` : `${v.name}を買いました`);
@@ -1357,6 +1365,7 @@
       const i = t.dataset.i;
       const o = offerAt(i);
       if (!o) return;
+      if (i[0] === 'x') { const info = expoInfo(Date.now()); if (!info || !info.open) { toast('ショーは終わりました'); return; } }
       if (S.geckos.length >= S.cases) { toast('空いているケースがありません'); return; }
       if (S.coins < o.price) { toast('コインが足りません'); return; }
       S.coins -= o.price;
@@ -1365,7 +1374,7 @@
       g.seed = o.seed;
       S.geckos.push(g);
       const fresh = register(g);
-      memo(g, 'ショップからおむかえした', true);
+      memo(g, i[0] === 'x' ? `レプタイルズショーの「${o.booth}」のブースからおむかえした` : 'ショップからおむかえした', true);
       S.selected = g.id;
       sfx('buy');
       save();
@@ -1500,6 +1509,7 @@
     badge.hidden = !ready;
     badge.textContent = ready;
     if (view === 'case') renderCase();
+    else if (view === 'expo') renderExpo();
     else if (view === 'eggs') renderEggs();
     else if (view === 'dex') renderDex();
     else renderShop();
@@ -1514,7 +1524,7 @@
   function traitRows(x) {
     const p = x.poly || {};
     return [{ name: 'タンジェリン度', v: x.tang, lo: '黄色', hi: 'オレンジ' }]
-      .concat(G.POLY.map(t => ({ name: t.name, v: p[t.key] === undefined ? 50 : p[t.key], lo: t.lo, hi: t.hi, quietLow: ['carrot', 'lav', 'aberrant'].includes(t.key) })));
+      .concat(G.POLY.map(t => ({ name: t.name, v: p[t.key] === undefined ? 50 : p[t.key], lo: t.lo, hi: t.hi, quietLow: ['carrot', 'lav', 'aberrant', 'mel'].includes(t.key) })));
   }
   function traitTable(x, compact) {
     const rows = traitRows(x);
@@ -1571,6 +1581,7 @@
       ${tutCoach()}
       ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮をうながす</button>' : ''}
       ${g.stuckShed ? '<button class="act wide mist" data-action="soak">ぬるま湯ケアで、のこった皮をとる</button>' : ''}
+      ${expoBanner()}
       ${installCard()}
       <div class="card gecko-card">
         <div class="gc-head">
@@ -1676,6 +1687,7 @@
   const RIVALS = ['ヤモリ堂', '荒野レプタイルズ', 'ひだまりブリーダーズ', 'しっぽ工房', 'みかん畑ファーム', 'ガラス屋さん', 'ナイトゲッコー', 'さばくのおうち', 'こもれびレプ', 'ぷにぷに舎'];
   const RNAMES = ['コハク', 'ネロ', 'ルビー', 'ソラ', 'マシュ', 'カカオ', 'ユキ', 'ヒノキ', 'モモ', 'ジン', 'アオ', 'キナ', 'レモ', 'ハク'];
   const strHash = str => { let h = 2166136261; for (const c of str) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; } return h; };
+  const lvOf = x => x === 'champ' ? CHAMP : SHOW_LEVELS[Number(x)];
   const themeOf = (lv, day) => SHOW_THEMES[(strHash(day + lv.id) >>> 3) % SHOW_THEMES.length];
   // コンディション：おなか・きれい・なれ度・体の大きさ
   function showCond(g) {
@@ -2064,6 +2076,7 @@
         return `<div class="ach${done ? ' done' : ''}"><span>${esc(a.label)}</span>${done ? '<small class="muted">受け取りずみ</small>'
           : `<button class="act ${ok ? 'primary' : ''} sm" data-action="claimAch" data-id="${a.id}" ${ok ? '' : 'disabled'}>${a.reward}</button>`}</div>`;
       }).join('')}</div>
+      ${(S.trophies || []).length ? `<h3 class="h3">レプタイルズショーのトロフィー</h3><div class="trophies">${S.trophies.slice().reverse().map(t => `<div class="trophy r${t.rank}"><span>${t.rank === 1 ? '🏆' : '🎀'}</span><b>${t.rank}位</b><small>${esc(t.name)} ・ ${esc(t.date)}</small></div>`).join('')}</div>` : ''}
       <h3 class="h3">おぼえた飼育のポイント <small class="muted">${Object.keys(LEARN).filter(k => (S.learned || {})[k]).length} / ${Object.keys(LEARN).length}</small></h3>
       <div class="learn-list">${Object.entries(LEARN).filter(([k]) => (S.learned || {})[k]).map(([k, L]) => `<div class="learn on"><b>✓ ${L.t}</b><p>${L.d}</p></div>`).join('')}
         ${Object.keys(LEARN).some(k => !(S.learned || {})[k]) ? `<div class="learn"><b>？？？ あと ${Object.keys(LEARN).filter(k => !(S.learned || {})[k]).length}こ</b><p>毎日のお世話の中で、少しずつおぼえていきます</p></div>` : ''}</div>
@@ -2085,6 +2098,7 @@
     orderMenu(t) {
       const o = S.orders[Number(t.dataset.i)];
       if (!o) return;
+      if (!S.license) { needLicense(() => {}); return; }
       const list = S.geckos.filter(g => fits(o, g));
       openSheet(`<h3 class="sheet-title">${esc(o.buyer)}の依頼</h3>
         <p>${esc(orderText(o))}をさがしています。ゆずると <b>${o.reward} コイン</b>。</p>
@@ -2163,7 +2177,7 @@
     return `<h3 class="h3">ケージの大きさ <small class="muted">${g ? `${esc(g.name)}のケースに使います` : ''}</small></h3>
       <div class="item-grid">${Object.entries(L3.CAGE_SIZES).map(([id, v]) => row('size', id, v)).join('')}</div>
       <h3 class="h3">ケージの見た目</h3>
-      <div class="item-grid">${Object.entries(L3.CAGE_THEMES).map(([id, v]) => row('theme', id, v)).join('')}</div>
+      <div class="item-grid">${Object.entries(L3.CAGE_THEMES).filter(([id, v]) => !v.expo || own[id]).map(([id, v]) => row('theme', id, v)).join('')}</div>
       <p class="muted small">一度買えば、どのケースでも使えます。ケースごとの切りかえは「もようがえ」からもできます。</p>`;
   }
   function decorOk(g, x, z, t, skip) {
@@ -2274,6 +2288,8 @@
       <span class="item-side ${/^\d+$/.test(side) ? 'price' : ''}">${side}</span>
     </button>`;
   }
+  // ショーの用品ブースでは、その週の10種類が半額
+  const decorPriceNow = id => (view === 'expo' && S.expo && S.expo.decor.includes(id) ? expoDecorPrice(id) : L3.DECOR[id].price);
   function interiorShop() {
     return `<h3 class="h3">家具 <small class="muted">買った家具は「もようがえ」で置けます</small></h3>
       <div class="item-grid">${Object.entries(L3.DECOR).map(([t, d]) => itemCard('decor', t, d, String(d.price))).join('')}</div>`;
@@ -2302,8 +2318,9 @@
       const g = selected();
       let info = '', btn = '';
       if (kind === 'decor') {
-        info = `${S.decorInv[id] ? `手持ち ${S.decorInv[id]}個 ・ ` : ''}${v.shelter ? 'もぐって眠れるシェルター' : 'ケースに置ける家具'}`;
-        btn = `<button class="act primary" data-action="buyDecor" data-t="${id}" ${S.coins < v.price ? 'disabled' : ''}>${v.price} コインで買う</button>`;
+        const pr = decorPriceNow(id);
+        info = `${S.decorInv[id] ? `手持ち ${S.decorInv[id]}個 ・ ` : ''}${v.shelter ? 'もぐって眠れるシェルター' : 'ケースに置ける家具'}${pr < v.price ? ` ・ ショー特価（いつもは ${v.price}）` : ''}`;
+        btn = `<button class="act primary" data-action="buyDecor" data-t="${id}" ${S.coins < pr ? 'disabled' : ''}>${pr} コインで買う</button>`;
       } else {
         const has = cageOwn()[id], on = g && cageOf(g)[kind] === id;
         info = kind === 'size' ? '同じ大きさのレオパと並べた見本です' : 'レギュラーサイズの見本です';
@@ -2322,8 +2339,9 @@
     },
     buyDecor(t) {
       const d = L3.DECOR[t.dataset.t];
-      if (!d || S.coins < d.price) { toast('コインが足りません'); return; }
-      S.coins -= d.price;
+      const pr = d ? decorPriceNow(t.dataset.t) : 0;
+      if (!d || S.coins < pr) { toast('コインが足りません'); return; }
+      S.coins -= pr;
       S.decorInv[t.dataset.t] = (S.decorInv[t.dataset.t] || 0) + 1;
       sfx('buy');
       toast(`${d.name}を買いました。ケースの「もようがえ」で置けます`);
@@ -3077,12 +3095,326 @@
     checkNotify(now);
     refreshOffers(now);
     refreshOrders(now);
+    expoTick(now);
     if (window.LeopaMusic) LeopaMusic.setSong(songKey());
     checkAch();
     renderView();
     // 裏に回っている画面は保存しない（前に出ている画面のデータを古いデータで上書きしないように）
     if (!document.hidden) save();
   }
+
+  // ======================================================
+  // レプタイルズショー：毎週日曜 10:00〜22:00。入場チケット 5コイン
+  // 水曜から、自分のブースに出す子を決められる
+  // ======================================================
+  const EXPO_OPEN = 10, EXPO_CLOSE = 22, EXPO_TICKET = 5;
+  const ymd = d => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  // いまの週のショーの情報（水〜日だけ。月・火は null）
+  function expoInfo(now) {
+    const d = new Date(now), dow = d.getDay(), h = d.getHours();
+    if (dow !== 0 && dow < 3) return null;
+    const sun = new Date(d); sun.setDate(d.getDate() + (dow === 0 ? 0 : 7 - dow));
+    const open = dow === 0 && h >= EXPO_OPEN && h < EXPO_CLOSE;
+    return { key: ymd(sun), open, over: dow === 0 && h >= EXPO_CLOSE, sunday: dow === 0, dow, h };
+  }
+  // ショー限定のケースの見た目（週ごとに入れかわる）
+  const EXPO_THEMES = ['expoGold', 'expoNight'];
+  function expoState(now) {
+    const info = expoInfo(now);
+    if (!info) return null;
+    if (!S.expo || S.expo.day !== info.key) {
+      const r = prngApp(strHash(info.key + 'expo'));
+      // 即売：ふだんのお店に並ばない、血統のいい子
+      const stock = [0, 1, 2, 3, 4, 5].map(i => {
+        const o = randomOffer();
+        const pick = r();
+        if (pick < 0.25) Object.assign(o.poly, { spots: Math.round(r() * 12), head: Math.round(r() * 15) });
+        else if (pick < 0.45) { o.tang = 72 + Math.round(r() * 22); o.poly.carrot = 50 + Math.round(r() * 40); }
+        else if (pick < 0.6) o.poly.mel = 70 + Math.round(r() * 25);
+        else if (pick < 0.75) o.poly.lav = 72 + Math.round(r() * 25);
+        else if (pick < 0.9) { o.genes.alb = 2; o.genes.ecl = 1 + (r() < 0.5 ? 1 : 0); }
+        else { o.genes.snow = 1; o.genes.bliz = 1; o.poly.aberrant = 70 + Math.round(r() * 25); }
+        o.growth = 60 + Math.round(r() * 60);
+        o.price = Math.round(valueOf(o) * 1.25);
+        o.booth = RIVALS[(i * 3 + Math.floor(r() * 10)) % RIVALS.length];
+        return o;
+      });
+      // 用品：家具10種類がいつもの半額
+      const ids = Object.keys(L3.DECOR).sort((a, b) => strHash(info.key + a) - strHash(info.key + b)).slice(0, 10);
+      S.expo = { day: info.key, ticket: false, stock, decor: ids, theme: EXPO_THEMES[strHash(info.key) % EXPO_THEMES.length], booth: [], sold: [], champ: false, seminar: false, noticed: false, done: false };
+    }
+    return S.expo;
+  }
+  // ブースの販売：開催中に少しずつ売れていく。閉場後にまとめて結果
+  function expoTick(now) {
+    const info = expoInfo(now), E = expoState(now);
+    if (!info || !E) return;
+    if (!E.noticed && (info.dow >= 3 || info.sunday) && !info.over) {
+      E.noticed = true;
+      setTimeout(() => toast(`今週の日曜日はレプタイルズショー！（${EXPO_OPEN}:00〜${EXPO_CLOSE}:00）自分のブースに出す子を決めよう`), 2500);
+      notify('expo' + E.day, '今週の日曜日はレプタイルズショー', 'ブースに出すレオパを決めておこう');
+    }
+    if (!(info.open || info.over) || E.done) return;
+    for (const b of E.booth) {
+      if (b.result) continue;
+      const g = S.geckos.find(x => x.id === b.id);
+      if (!g) { b.result = 'gone'; continue; }
+      if (!b.at) {
+        // 売れるかどうかと、売れる時刻を決める（値打ちの高い子ほど売れやすい）
+        const r = Math.random();
+        const p = clamp(0.45 + valueOf(g) / 400, 0.45, 0.92) * 100;
+        const start = Math.max(now, new Date(new Date(now).setHours(EXPO_OPEN, 0, 0, 0)).getTime());
+        const end = new Date(new Date(now).setHours(EXPO_CLOSE, 0, 0, 0)).getTime();
+        b.at = r * 100 < p ? start + Math.random() * Math.max(0, end - start - 30 * MIN) : -1;
+        b.price = Math.round(valueOf(g) * (1.15 + Math.random() * 0.45));
+      }
+      if (b.at > 0 && (now >= b.at || info.over) && S.geckos.length > 1) {
+        b.result = 'sold';
+        const who = `${pick(['ショーに来た', '遠くから来た', 'はじめて飼う', 'ベテランの'])}${pick(['ご家族', 'ブリーダーさん', 'お客さん'])}`;
+        sendAway(g, b.price, `レプタイルズショーで、${who}のもとへ旅立った`);
+        E.sold.push({ name: g.name, morph: nameOf(g), price: b.price, who });
+        toast(`ショーのブースで${g.name}が売れました！ ${who}のもとへ（+${b.price}）`);
+        sfx('coin');
+      } else if (info.over) b.result = 'unsold';
+    }
+    if (info.over) {
+      E.done = true;
+      const un = E.booth.filter(b => b.result === 'unsold').length;
+      if (E.booth.length) setTimeout(() => toast(`レプタイルズショーが終わりました。${E.sold.length}匹が新しいおうちへ${un ? `、${un}匹はおうちに帰ってきました` : ''}`), 1200);
+    }
+  }
+  // 生体を手放す（里親・依頼・ショー 共通）
+  function sendAway(g, reward, text) {
+    memo(g, text);
+    S.geckos = S.geckos.filter(x => x !== g);
+    S.coins += reward;
+    S.stats.rehomed++;
+    if (S.selected === g.id) S.selected = S.geckos[0] ? S.geckos[0].id : null;
+    if (S.expo) for (const b of S.expo.booth) if (b.id === g.id && !b.result) b.result = 'gone';
+  }
+
+  // ---- 販売ライセンス（本物の「動物取扱業」のような資格。一度とれば大丈夫）
+  const LQ = [
+    ['暖かい側の温度の目安は？', ['31〜33℃', '24〜26℃', '38〜40℃']],
+    ['ベビーのごはんの回数の目安は？', ['毎日', '週に1回', '月に1回']],
+    ['おとなのごはんの回数の目安は？', ['2〜3日に1回', '1日に3回', '2週間に1回']],
+    ['脱皮中のレオパにしてはいけないことは？', ['手に乗せてさわる', '湿度を保つ', 'そっと見守る']],
+    ['えさの大きさの目安は？', ['目と目の間の幅より小さい', '頭と同じくらい', '体の半分くらい']],
+    ['虫のえさにまぶす粉は？', ['カルシウム', 'さとう', 'しお']],
+    ['卵をインキュベーターに移すときに大切なことは？', ['上下の向きを変えない', '水で洗う', '手であたためてから移す']],
+    ['レオパが活発になる時間帯は？', ['夕方から夜', '朝はやく', 'お昼']],
+    ['食べ残したコオロギはどうする？', ['その日のうちに取り出す', '次の日まで入れておく', '水入れに入れる']],
+    ['het アルビノ同士から、アルビノの子が生まれる確率は？', ['25%', '50%', '100%']],
+    ['卵の温度が高めだと、多く生まれるのは？', ['オス', 'メス', '変わらない']],
+    ['1つのケースで飼うのは？', ['基本は1匹（オス同士はけんかする）', '何匹でもいっしょ', 'オス2匹がおすすめ']],
+    ['脱皮の皮が指先に残っていたら？', ['ぬるま湯でふやかしてとる', 'そのままにしておく', '引っぱってちぎる']],
+    ['ケースの湿度の目安は？', ['40〜60%', '90%以上', '10%以下']],
+    ['しっぽを強くつかむと？', ['自分で切ってしまうことがある（自切）', 'のびる', '色が変わる']],
+    ['体調がわるそうなときは？', ['爬虫類をみられる動物病院へ', 'ようすを見ずに薬をあげる', '人の病院へ']],
+    ['本物で、動物を販売するのに必要なのは？', ['第一種動物取扱業の登録', 'とくに何もいらない', '車の運転免許']],
+    ['おむかえしたばかりの子には？', ['1週間ほどはそっと見守る', 'すぐに毎日手に乗せる', 'ごはんをぬく']],
+  ];
+  let quiz = null;
+  const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  function needLicense(then) {
+    if (S.license) return then();
+    openSheet(`<p class="eyebrow">販売ライセンス</p><h3 class="sheet-title">レオパをゆずるには、資格が必要です</h3>
+      <p>本物でも、動物を販売するには「第一種動物取扱業」の登録と、動物の飼い方をよく知っている「動物取扱責任者」が必要です。</p>
+      <p>このゲームでは、レオパの飼い方クイズ <b>8問中7問以上</b> 正解で、ライセンスがもらえます。一度とれば、ずっと使えます。</p>
+      <p class="muted small">里親に出す・ブリーダー依頼・ショーのブースで、ライセンスが必要です。</p>
+      <div class="actions"><button class="act" data-action="closeSheet">あとで</button><button class="act primary" data-action="licenseStart">クイズに挑戦する</button></div>`);
+  }
+  function quizSheet() {
+    const q = quiz.qs[quiz.i];
+    openSheet(`<p class="eyebrow">${quiz.kind === 'license' ? '販売ライセンス' : '飼育セミナー'} ・ ${quiz.i + 1} / ${quiz.qs.length}</p>
+      <h3 class="sheet-title">${q.q}</h3>
+      <div class="list">${q.opts.map((o, k) => `<button class="row" data-action="quizAns" data-k="${k}"><span class="row-main"><b>${o}</b></span></button>`).join('')}</div>
+      <p class="muted small">正解 ${quiz.ok} 問</p>`);
+  }
+  function startQuiz(kind, n) {
+    quiz = { kind, i: 0, ok: 0, qs: shuffle(LQ).slice(0, n).map(([q, a]) => { const opts = shuffle(a); return { q, opts, ans: opts.indexOf(a[0]) }; }) };
+    quizSheet();
+  }
+
+  // ---- 会場の画面
+  const EXPO_TABS = [['sale', '即売'], ['booth', 'わたしのブース'], ['champ', 'チャンピオン大会'], ['goods', '用品'], ['seminar', 'セミナー']];
+  const CHAMP = { id: 'champ', name: 'ショー チャンピオン大会', mark: '特別', mean: 84, reward: 200, note: '週に1回だけ' };
+  const expoDecorPrice = id => Math.ceil(L3.DECOR[id].price / 2);
+  const BULK = 3, BULK_OFF = 0.75;
+  function expoBanner() {
+    const now = Date.now(), info = expoInfo(now);
+    if (!info) return '';
+    const E = expoState(now);
+    if (info.open) return `<button class="expo-banner open" data-action="expoEnter"><span class="expo-tag">本日開催</span><b>レプタイルズショー</b><small>${EXPO_OPEN}:00〜${EXPO_CLOSE}:00 ・ ${E.ticket ? '入場ずみ' : `入場 ${EXPO_TICKET}コイン`}</small></button>`;
+    if (info.over) return '';
+    const n = E.booth.filter(b => !b.result).length;
+    return `<div class="expo-banner soon"><span class="expo-tag">${info.sunday ? `きょう ${EXPO_OPEN}:00から` : '今週の日曜日'}</span><b>レプタイルズショー</b>
+      <small>めずらしいレオパの即売や、チャンピオン大会があります。自分のブースに出す子も決めておこう（${n} / 3匹）</small>
+      <button class="act sm" data-action="expoBooth">ブースに出す子を決める</button></div>`;
+  }
+  function renderExpo() {
+    const now = Date.now(), info = expoInfo(now), E = expoState(now);
+    if (!info || !info.open || !E || !E.ticket) { switchView('case'); return; }
+    const tab = S.expoTab || 'sale';
+    const tabs = `<div class="shop-tabs expo-tabs" role="tablist">${EXPO_TABS.map(([k, n]) => `<button role="tab" aria-selected="${tab === k}" class="${tab === k ? 'on' : ''}" data-action="expoTab" data-tab="${k}">${n}</button>`).join('')}</div>`;
+    let body = '';
+    if (tab === 'sale') {
+      body = `<p class="muted small">ブリーダーさんたちが、今日だけの子を連れてきています。1匹ずつの早い者勝ち。</p>
+        <div class="offers">${E.stock.map((o, i) => {
+          const morph = nameOf(o);
+          const hets = G.hets(o.genes);
+          return `<div class="offer${o.sold ? ' sold' : ''}">
+            <div class="offer-art" data-action="viewOffer" data-i="x${i}">${portrait(o, stageOf(o), morph)}</div>
+            <div class="offer-main">
+              <small class="muted">${esc(o.booth)} のブース</small>
+              <b>${esc(morph)}</b>
+              <small class="muted">${o.sex === 'M' ? '♂ オス' : '♀ メス'} ・ ${STAGE_LABEL[stageOf(o)]}</small>
+              ${hets.length ? `<small class="het-line">${hets.map(h => 'het ' + h).join(' / ')}</small>` : ''}
+              ${unseen(o) ? '<small class="new-line">図鑑にまだいない</small>' : ''}
+              ${traitTable(o, true)}
+              ${o.sold ? '<span class="pill">売り切れ</span>' : `<button class="act sm" data-action="viewOffer" data-i="x${i}">じっくり見る</button>
+              <button class="act primary sm" data-action="buyGecko" data-i="x${i}" ${S.coins < o.price || S.geckos.length >= S.cases ? 'disabled' : ''}>${o.price} コインでおむかえ</button>`}
+            </div></div>`;
+        }).join('')}</div>
+        <div class="card guide"><h3 class="h3">ショーでおむかえするときは</h3><p>見た目だけで選ばず、元気か（目がすんでいる・しっぽがふっくら）をよく見ます。ケースの準備ができていないなら、その日は買わないのも大切です。持ち帰るときは、寒すぎ・暑すぎに気をつけます。</p></div>`;
+    } else if (tab === 'booth') {
+      body = `<p class="muted small">自分で育てた子を、最大3匹までブースに出せます。ショーのあいだに、お客さんが来ると売れていきます。売れなかった子は、閉場後におうちに帰ってきます。</p>
+        <div class="list">${E.booth.length ? E.booth.map(b => {
+          const g = S.geckos.find(x => x.id === b.id);
+          const name = g ? g.name : (E.sold.find(s => s.name) || {}).name || '';
+          const st = b.result === 'sold' ? '<span class="pill good">売れた！</span>' : b.result === 'unsold' ? '<span class="pill">おうちに帰る</span>' : '<span class="pill info">展示中</span>';
+          return `<div class="row static"><span class="row-art">${g ? A.swatch(g) : ''}</span><span class="row-main"><b>${esc(g ? g.name : '（旅立ちました）')}</b><small>${g ? esc(nameOf(g)) : ''}</small></span><span class="row-side">${st}</span></div>`;
+        }).join('') : '<p class="muted small">ブースに出している子はいません。</p>'}</div>
+        ${E.sold.length ? `<h3 class="h3">売れた子</h3><div class="list">${E.sold.map(s => `<div class="row static"><span class="row-main"><b>${esc(s.name)}</b><small>${esc(s.morph)} ・ ${esc(s.who)}のもとへ</small></span><span class="row-side">+${s.price}</span></div>`).join('')}</div>` : ''}
+        <button class="act" data-action="expoBooth">ブースに出す子を変える</button>`;
+    } else if (tab === 'champ') {
+      const day = todayKey(), th = themeOf(CHAMP, day);
+      body = `<div class="card show-card champ">
+          <div class="show-head"><span class="pill pink">特別</span><b>${CHAMP.name}</b><span class="row-side price">${CHAMP.reward}</span></div>
+          <p class="show-theme">今週の部門：<b>${th.name}</b></p>
+          <p class="muted small">審査のポイント：${th.point}</p>
+          <p class="muted small">全国のトップブリーダーが集まる、週に1回だけの大会。エントリーは1週間に1匹まで。優勝 ${CHAMP.reward}コインとトロフィー、2位・3位はリボンがもらえます。</p>
+          ${E.champ ? '<p class="notice">今週はもうエントリーしました。また来週！</p>' : '<button class="act primary sm" data-action="showMenu" data-lv="champ">エントリーする</button>'}
+        </div>
+        ${(S.trophies || []).length ? `<h3 class="h3">トロフィーとリボン</h3><div class="trophies">${S.trophies.slice().reverse().map(t => `<div class="trophy r${t.rank}"><span>${t.rank === 1 ? '🏆' : '🎀'}</span><b>${t.rank}位</b><small>${esc(t.name)} ・ ${esc(t.date)}</small></div>`).join('')}</div>` : ''}`;
+    } else if (tab === 'goods') {
+      const th = L3.CAGE_THEMES[E.theme], has = cageOwn()[E.theme];
+      body = `<h3 class="h3">ショー限定のケース</h3>
+        <div class="item-grid">${itemCard('theme', E.theme, th, has ? '持っている' : String(th.price))}</div>
+        <p class="muted small">ショーの会場でしか買えない見た目です。買ったあとは「もようがえ」からいつでも使えます。</p>
+        <h3 class="h3">ごはんのまとめ買い <small class="muted">${Math.round((1 - BULK_OFF) * 100)}%おトク</small></h3>
+        <div class="list">${Object.entries(FOODS).map(([k, F]) => {
+          const price = Math.round(F.price * BULK * BULK_OFF);
+          return `<button class="row" data-action="expoBulk" data-kind="${k}" ${S.coins < price ? 'disabled' : ''}>
+            <span class="row-art">${A.food(k)}</span>
+            <span class="row-main"><b>${F.name} ${F.pack * BULK}${F.unit || '匹'}</b><small>いつもは ${F.price * BULK} コイン ・ いま ${S.food[k] || 0}${F.unit || '匹'}</small></span>
+            <span class="row-side price">${price}</span></button>`;
+        }).join('')}</div>
+        <h3 class="h3">家具 10種類が半額</h3>
+        <div class="item-grid">${E.decor.map(t => itemCard('decor', t, L3.DECOR[t], String(expoDecorPrice(t)))).join('')}</div>`;
+    } else {
+      body = `<div class="card guide"><h3 class="h3">ブリーダーさんの飼育セミナー</h3>
+          <p>本物のレオパの飼い方クイズです。3問出題、1問正解ごとに5コイン。セミナーは1回のショーで1度だけ。</p>
+          ${E.seminar ? '<p class="notice">今週のセミナーは受講しました。また来週！</p>' : '<button class="act primary" data-action="seminarStart">セミナーを受ける</button>'}
+        </div>`;
+    }
+    setHTML($('#view-expo'), `
+      <div class="expo-head"><button class="act ghost sm" data-action="expoLeave">← 会場を出る</button></div>
+      <div class="expo-hero"><span class="expo-tag">本日開催 ${EXPO_OPEN}:00〜${EXPO_CLOSE}:00</span><b>レプタイルズショー</b><small>レオパ好きが集まる、週に1度のお祭り</small></div>
+      ${tabs}${body}`);
+    if (tab === 'goods') fillThumbs();
+  }
+  Object.assign(ACTIONS, {
+    expoEnter() {
+      const now = Date.now(), info = expoInfo(now), E = expoState(now);
+      if (!info || !info.open || !E) { toast(`レプタイルズショーは日曜日の${EXPO_OPEN}:00〜${EXPO_CLOSE}:00です`); return; }
+      if (E.ticket) { switchView('expo'); return; }
+      openSheet(`<p class="eyebrow">レプタイルズショー</p><h3 class="sheet-title">入場チケット ${EXPO_TICKET}コイン</h3>
+        <p>今日いちにち、何度でも出入りできます。</p>
+        <div class="actions"><button class="act" data-action="closeSheet">やめる</button><button class="act primary" data-action="expoTicket" ${S.coins < EXPO_TICKET ? 'disabled' : ''}>チケットを買って入場</button></div>`);
+    },
+    expoTicket() {
+      const E = expoState(Date.now());
+      if (!E || S.coins < EXPO_TICKET) { toast('コインが足りません'); return; }
+      S.coins -= EXPO_TICKET; E.ticket = true;
+      closeSheet(); sfx('buy'); save();
+      switchView('expo');
+      toast('ようこそ、レプタイルズショーへ！');
+    },
+    expoLeave() { switchView('case'); },
+    expoTab(t) { S.expoTab = t.dataset.tab; renderView(); window.scrollTo(0, 0); },
+    expoBooth() {
+      const now = Date.now(), info = expoInfo(now), E = expoState(now);
+      if (!info || info.over || !E) { toast('ブースを決められるのは、水曜日から日曜日のショーが終わるまでです'); return; }
+      needLicense(() => {
+        const on = new Set(E.booth.filter(b => !b.result).map(b => b.id));
+        openSheet(`<p class="eyebrow">わたしのブース（${on.size} / 3匹）</p><h3 class="sheet-title">ショーに出す子をえらぶ</h3>
+          <p class="muted small">出した子は、ショーのあいだに売れると新しいおうちへ旅立ちます。売れなかったら帰ってきます。</p>
+          <div class="list">${S.geckos.map(g => {
+            const why = g.gravid ? '抱卵中' : stageOf(g) === 'baby' ? 'ベビーはまだ出せません' : '';
+            return `<button class="row${on.has(g.id) ? ' on' : ''}" data-action="boothToggle" data-id="${g.id}" ${why ? 'disabled' : ''}>
+              <span class="row-art">${A.swatch(g)}</span>
+              <span class="row-main"><b>${esc(g.name)} ${sexMark(g)}</b><small>${esc(nameOf(g))}${why ? ' ・ ' + why : ` ・ 目安 ${Math.round(valueOf(g) * 1.15)}〜${Math.round(valueOf(g) * 1.6)}コイン`}</small></span>
+              <span class="row-side">${on.has(g.id) ? '<span class="pill good">出す</span>' : ''}</span></button>`;
+          }).join('')}</div>
+          <button class="act" data-action="closeSheet">とじる</button>`);
+      });
+    },
+    boothToggle(t) {
+      const E = expoState(Date.now()); if (!E) return;
+      const g = S.geckos.find(x => x.id === t.dataset.id); if (!g) return;
+      const i = E.booth.findIndex(b => b.id === g.id && !b.result);
+      if (i >= 0) { E.booth.splice(i, 1); save(); ACTIONS.expoBooth(); return; }
+      if (E.booth.filter(b => !b.result).length >= 3) { toast('ブースに出せるのは3匹までです'); return; }
+      if (S.geckos.length - E.booth.filter(b => !b.result).length <= 1) { toast('さいごの1匹は出せません'); return; }
+      // 売れたらおわかれになるので、先に確認する
+      ACTIONS.farewell(g, 'ショーのお客さん', Math.round(valueOf(g) * 1.15), `data-action="boothAdd" data-id="${g.id}"`);
+      const note = document.querySelector('#sheetBody .notice');
+      if (note) note.textContent = `ブースに出すと、ショーで売れたときに${g.name}は新しいおうちへ旅立ちます。売れなかったら帰ってきます。出しますか？`;
+      const b = document.querySelector('#sheetBody [data-action="boothAdd"]'); if (b) b.textContent = 'ブースに出す';
+    },
+    boothAdd(t) {
+      const E = expoState(Date.now()); if (!E) return;
+      if (!E.booth.some(b => b.id === t.dataset.id && !b.result)) E.booth.push({ id: t.dataset.id });
+      save(); toast('ブースに出しました'); ACTIONS.expoBooth();
+    },
+    licenseStart() { startQuiz('license', 8); },
+    seminarStart() {
+      const E = expoState(Date.now());
+      if (!E || E.seminar) return;
+      startQuiz('seminar', 3);
+    },
+    quizAns(t) {
+      if (!quiz) return;
+      const q = quiz.qs[quiz.i], k = Number(t.dataset.k), ok = k === q.ans;
+      if (ok) quiz.ok++;
+      sfx(ok ? 'coin' : 'tap');
+      toast(ok ? '正解！' : `ざんねん。正解は「${q.opts[q.ans]}」`);
+      quiz.i++;
+      if (quiz.i < quiz.qs.length) { quizSheet(); return; }
+      const Q = quiz; quiz = null;
+      if (Q.kind === 'license') {
+        if (Q.ok >= 7) {
+          S.license = Date.now();
+          openSheet(`<p class="eyebrow">販売ライセンス</p><h3 class="sheet-title">合格！ ライセンスをもらいました</h3><p>${Q.ok} / ${Q.qs.length} 問正解。これで、里親に出す・ブリーダー依頼・ショーのブースが使えます。</p><button class="act primary" data-action="closeSheet">とじる</button>`);
+          sfx('hatch');
+        } else openSheet(`<p class="eyebrow">販売ライセンス</p><h3 class="sheet-title">${Q.ok} / ${Q.qs.length} 問正解。あと少し！</h3><p>7問以上の正解で合格です。図鑑の「実績」にある「おぼえた飼育のポイント」を読んで、また挑戦しよう。</p><div class="actions"><button class="act" data-action="closeSheet">とじる</button><button class="act primary" data-action="licenseStart">もう一度挑戦</button></div>`);
+      } else {
+        const E = expoState(Date.now()); if (E) E.seminar = true;
+        const coins = Q.ok * 5; S.coins += coins;
+        openSheet(`<p class="eyebrow">飼育セミナー</p><h3 class="sheet-title">${Q.ok} / ${Q.qs.length} 問正解</h3><p>${coins ? `<b>${coins} コイン</b>もらいました！` : 'また来週、挑戦しよう'}</p><button class="act primary" data-action="closeSheet">とじる</button>`);
+      }
+      save(); renderView();
+    },
+    expoBulk(t) {
+      const k = t.dataset.kind, F = FOODS[k];
+      const price = Math.round(F.price * BULK * BULK_OFF);
+      if (S.coins < price) { toast('コインが足りません'); return; }
+      S.coins -= price; S.food[k] = (S.food[k] || 0) + F.pack * BULK;
+      sfx('buy'); toast(`${F.name}を${F.pack * BULK}${F.unit || '匹'}まとめ買いしました`);
+      renderView(); save();
+    },
+  });
 
   S = load();
   window.__leopaState = () => S; // 動作確認用

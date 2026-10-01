@@ -1972,6 +1972,9 @@
     desert: { name: 'デザート', price: 120, desc: '赤い砂と岩の背景で、ふるさとの荒野ふうに', floor: 'sand', tint: '#E7AE7E', frame: '#3A2E26', back: 'rock' },
     dino: { name: '恐竜時代', price: 150, desc: '火山の背景とシダの森、足あとの残る大地。太古の世界へタイムスリップ', floor: 'dinofloor', tint: '#ffffff', frame: '#5B4A3A', back: 'volcano', thick: true, dino: true },
     candy: { name: 'おかしの家', price: 150, desc: 'クッキーの床、チョコの壁、キャンディの柱。あまーいおうち', floor: 'cookie', tint: '#ffffff', frame: '#F7A8C4', back: 'choco', thick: true, candy: true },
+    // レプタイルズショーの会場でだけ買える
+    expoGold: { name: 'ショー限定・ゴールド', price: 180, desc: 'チャンピオンの気分。金色のフレームと木の背面パネル（レプタイルズショー限定）', floor: 'sand', tint: '#FFF1D2', frame: '#C9A13B', back: 'wood', thick: true, expo: true },
+    expoNight: { name: 'ショー限定・ミッドナイト', price: 180, desc: '夜空のような紺色のフレーム。月あかりの砂（レプタイルズショー限定）', floor: 'sand', tint: '#C8D2F0', frame: '#1F2C4C', back: 'rock', thick: true, expo: true },
   };
   // ケージ用の模様（一度作ったら使い回す）
   const cageTexCache = {};

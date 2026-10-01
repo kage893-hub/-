@@ -35,7 +35,7 @@
     { key: 'carrot', name: 'しっぽのオレンジ', lo: 'なし', hi: '濃い' },
     { key: 'lav', name: 'ラベンダー', lo: 'なし', hi: '濃い' },
     { key: 'aberrant', name: '模様の乱れ', lo: 'ふつう', hi: '乱れる' },
-    { key: 'mel', name: '黒さ', lo: 'ふつう', hi: 'まっくろ' },
+    { key: 'mel', name: '黒さ', lo: 'ふつう', hi: '黒い' },
   ];
   const TANG_HIGH = 70;
   const TANG_MID = 40;
