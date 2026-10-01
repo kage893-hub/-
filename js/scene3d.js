@@ -3747,12 +3747,15 @@
             st.yaw += angleTo(st.yaw, Math.atan2(st.target.x - st.x, st.target.z - st.z)) * Math.min(1, dt * 0.8);
           } else {
             step = moveToward(st.target.x, st.target.z, 0.85 * nf, dt);
-            st.burst = (st.burst == null ? rand(1.2, 3) : st.burst) - dt;
+            st.burst = (st.burst == null ? rand(3, 6) : st.burst) - dt;
             if (st.burst <= 0 && Math.hypot(st.target.x - st.x, st.target.z - st.z) > 1.2) {
-              st.burst = st.night ? rand(2, 4.5) : rand(1.2, 3);
-              st.pauseT = st.night ? rand(0.3, 0.8) : rand(0.5, 1.4);
-              if (Math.random() < 0.35) st.lick = 0.9;
-              else { st.peek = rand(-0.6, 0.6); st.peekT = st.pauseT; }
+              st.burst = st.night ? rand(4, 8) : rand(3, 6);
+              // 毎回ではなく、ときどき立ち止まる
+              if (Math.random() < (st.night ? 0.3 : 0.5)) st.pauseT = st.night ? rand(0.3, 0.7) : rand(0.4, 1.0);
+              if (st.pauseT > 0) {
+                if (Math.random() < 0.35) st.lick = 0.9;
+                else { st.peek = rand(-0.6, 0.6); st.peekT = st.pauseT; }
+              }
             }
           }
           if (Math.hypot(st.target.x - st.x, st.target.z - st.z) < 0.15) {
