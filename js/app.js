@@ -11,19 +11,29 @@
   const SAVE_KEY = 'leopa-together-v1';
   const MIN = 60 * 1000, HOUR = 60 * MIN;
   const RATE = { hunger: 5, clean: 3 }; // 1時間あたりに減る量
-  const GROWTH = { perHour: 6, young: 50, adult: 140, max: 260, shedEvery: 35 };
+  // 1倍速＝実際のレオパの成長（ベビーからアダルトまで約9か月）。速さはゲーム中に選べる
+  const GROWTH = { perHour: 0.0216, young: 50, adult: 140, max: 260, shedEvery: 12 };
+  const DAYMS = 24 * HOUR;
+  const SPEEDS = [
+    { x: 1, name: '1倍速', note: '実際のレオパの成長速度', cost: 0 },
+    { x: 3, name: '3倍速', note: 'おすすめの速度', cost: 0 },
+    { x: 12, name: '12倍速', note: 'ブリーダーモード', cost: 300 },
+  ];
+  const speedX = () => (S && S.speed) || 3;
+  // 実際の日数をゲーム内の時間に直す（抱卵・ふ化・おやすみも成長と同じ速さで進む）
+  const realDays = d => d * DAYMS / speedX();
   const EGG_CAP = 12, CASE_MAX = 12;
 
   const FOODS = {
-    cricket: { name: 'コオロギ', hunger: 15, growth: 3, price: 10, pack: 10, desc: '定番のごはん。ぴょんぴょん跳ねる' },
-    dubia: { name: 'デュビア', hunger: 25, growth: 5, price: 15, pack: 5, desc: '栄養たっぷり。動きがゆっくりで食べやすい' },
-    worm: { name: 'ミルワーム', hunger: 18, growth: 8, price: 8, pack: 5, desc: 'みんな大好き。脂肪が多いのでおやつに' },
+    cricket: { name: 'コオロギ', hunger: 15, growth: 3, price: 5, pack: 10, desc: '定番のごはん。ぴょんぴょん跳ねる' },
+    dubia: { name: 'デュビア', hunger: 25, growth: 5, price: 8, pack: 5, desc: '栄養たっぷり。動きがゆっくりで食べやすい' },
+    worm: { name: 'ミルワーム', hunger: 18, growth: 8, price: 4, pack: 5, desc: 'みんな大好き。脂肪が多いのでおやつに' },
   };
   // 卵の温度で性別と日数が変わる（温度依存性決定）
   const TEMPS = [
-    { t: 27, label: '27℃', note: 'メスが多い', mins: 60, pMale: 0.1 },
-    { t: 29.5, label: '29.5℃', note: 'オスメス半々', mins: 45, pMale: 0.5 },
-    { t: 32, label: '32℃', note: 'オスが多い', mins: 30, pMale: 0.9 },
+    { t: 27, label: '27℃', note: 'メスが多い', days: 75, pMale: 0.1 },
+    { t: 29.5, label: '29.5℃', note: 'オスメス半々', days: 58, pMale: 0.5 },
+    { t: 32, label: '32℃', note: 'オスが多い', days: 40, pMale: 0.9 },
   ];
   const NAMES = ['きなこ', 'マロン', 'ゆず', 'こはく', 'ぽてと', 'みかん', 'だいず', 'あんず', 'ごま', 'ちくわ', 'むぎ', 'ぷりん', 'すず', 'こむぎ', 'はな', 'そら', 'くるみ', 'おもち', 'たまき', 'ぽん', 'レモン', 'ココア', 'しらたま', 'のり', 'べに'];
   const TIPS = [
@@ -56,6 +66,7 @@
   const pct = p => (p * 100 >= 10 || p === 0 ? Math.round(p * 100) : (p * 100).toFixed(1).replace(/\.0$/, '')) + '%';
   function fmtLeft(ms) {
     const m = Math.max(1, Math.ceil(ms / MIN));
+    if (m >= 1440) { const d = Math.floor(m / 1440), h = Math.round((m % 1440) / 60); return `${d}日${h ? h + '時間' : ''}`; }
     if (m >= 60) { const h = Math.floor(m / 60); return `${h}時間${m % 60 ? (m % 60) + '分' : ''}`; }
     return `${m}分`;
   }
@@ -169,13 +180,14 @@
 
   // ---------- 時間の流れ（アプリを閉じていた間もまとめて進める）
   function simulate(now) {
+    if (!S.speed) S.speed = 3;
     const dtH = (now - S.lastTick) / HOUR;
     if (dtH > 0) {
       for (const g of S.geckos) {
         const fedH = Math.max(0, Math.min(dtH, (g.hunger - 30) / RATE.hunger));
         g.hunger = clamp(g.hunger - RATE.hunger * dtH);
         g.clean = clamp(g.clean - RATE.clean * dtH);
-        if (fedH > 0) grow(g, fedH * GROWTH.perHour * heatInfo(heatOf(g)).growth, now);
+        if (fedH > 0) grow(g, fedH * GROWTH.perHour * speedX() * heatInfo(heatOf(g)).growth, now);
       }
       S.lastTick = now;
       for (const g of S.geckos) { recordWeight(g, now); checkMilestones(g); }
@@ -207,12 +219,12 @@
       S.eggs.push({
         id: 'e' + (S.nextId++), genes: child.genes, tang: child.tang, poly: child.poly,
         sex: Math.random() < temp.pMale ? 'M' : 'F', temp: temp.t,
-        laidAt: now, hatchAt: now + temp.mins * MIN, mom: g.name, dad: dad.name,
+        laidAt: now, hatchAt: now + realDays(temp.days), mom: g.name, dad: dad.name,
         gen: Math.max(g.gen, dad.gen || 1) + 1,
       });
     }
     g.gravid = null;
-    g.restUntil = now + 60 * MIN;
+    g.restUntil = now + realDays(14);
     sfx('lay');
     toast(`${g.name}が卵を2個産みました！インキュベーターに移しました`);
     memo(g, `${dad.name}とのあいだに、卵を2個産んだ`);
@@ -361,7 +373,7 @@
     mile(g, 'eat', `はじめての${FOODS[kind].name}をぱくっと食べた`, true);
     const F = FOODS[kind];
     g.hunger = clamp(g.hunger + F.hunger);
-    grow(g, F.growth * heatInfo(heatOf(g)).growth, Date.now());
+    grow(g, F.growth * (GROWTH.perHour / 6) * speedX() * heatInfo(heatOf(g)).growth, Date.now());
     g.tame = clamp(g.tame + 1);
     S.coins += 1;
     daily('fed');
@@ -598,10 +610,10 @@
       const mom = g.sex === 'F' ? g : p, dad = g.sex === 'F' ? p : g;
       memo(mom, `${dad.name}とペアリングした`);
       memo(dad, `${mom.name}とペアリングした`);
-      mom.gravid = { layAt: now + 10 * MIN, dad: { name: dad.name, genes: Object.assign({}, dad.genes), tang: dad.tang, poly: Object.assign({}, dad.poly), gen: dad.gen } };
-      dad.restUntil = now + 20 * MIN;
+      mom.gravid = { layAt: now + realDays(28), dad: { name: dad.name, genes: Object.assign({}, dad.genes), tang: dad.tang, poly: Object.assign({}, dad.poly), gen: dad.gen } };
+      dad.restUntil = now + realDays(3);
       closeSheet();
-      toast(`ペアリング成功！${mom.name}は約10分後に卵を産みます`);
+      toast(`ペアリング成功！${mom.name}は約${fmtLeft(realDays(28))}後に卵を産みます`);
       renderView();
       save();
     },
@@ -632,6 +644,17 @@
     },
     temp(t) { S.incTemp = Number(t.dataset.t); renderView(); save(); },
     hatch(t) { hatch(t.dataset.id); },
+    setSpeed(t) {
+      const v = SPEEDS.find(x => x.x === Number(t.dataset.x));
+      if (!v) return;
+      if (v.cost && !S.speedOpen) {
+        if (S.coins < v.cost) { toast('コインが足りません'); return; }
+        S.coins -= v.cost; S.speedOpen = true;
+      }
+      S.speed = v.x;
+      toast(`せいちょうの速さを${v.name}にしました`);
+      renderView(); save();
+    },
     buyFood(t) {
       const k = t.dataset.kind, F = FOODS[k];
       if (S.coins < F.price) { toast('コインが足りません'); return; }
@@ -672,6 +695,22 @@
       if (L3.supported && el) {
         viewer = L3.createViewer(el, { genes: G.normGenes(o.genes), tang: o.tang, poly: o.poly, seed: o.seed || 1, stage: st });
       }
+    },
+    viewGecko(t) {
+      const g = S.geckos.find(x => x.id === t.dataset.id);
+      if (!g) return;
+      const morph = nameOf(g), hets = G.hets(g.genes), st = stageOf(g);
+      openSheet(`<div class="viewer-sheet">
+        <p class="eyebrow">${esc(g.name)} ${g.sex === 'M' ? '♂' : '♀'}</p>
+        <h3 class="morph big">${esc(morph)}</h3>
+        <div class="viewer3d" id="offerViewer">${L3.supported ? '' : portrait(g, st, morph)}</div>
+        ${L3.supported ? `<div class="viewer-btns">${[['face', '顔'], ['body', '全身'], ['side', '横'], ['top', '上']].map(([k, n]) => `<button class="chip" data-action="viewAngle" data-v="${k}">${n}</button>`).join('')}</div><p class="muted tiny">ドラッグで回転・ピンチで拡大</p>` : ''}
+        <p class="muted">${STAGE_LABEL[st]} ・ ${ageDays(g)}日目 ・ 体重 ${weightOf(g)}g ・ 第${g.gen}世代</p>
+        ${hets.length ? `<p class="het-line">${hets.map(h => 'het ' + h).join(' / ')}</p>` : ''}
+        ${traitTable(g)}
+        <div class="sheet-actions"><button class="act" data-action="closeSheet">とじる</button></div></div>`);
+      const el = $('#offerViewer');
+      if (L3.supported && el) viewer = L3.createViewer(el, { genes: G.normGenes(g.genes), tang: g.tang, poly: g.poly, seed: g.seed || 1, stage: st, gravid: !!g.gravid });
     },
     viewAngle(t) { if (viewer) viewer.view(t.dataset.v); },
     buyGecko(t) {
@@ -721,7 +760,7 @@
     },
     welcomeDone() { S.welcomed = true; save(); closeSheet(); },
   };
-  function casePrice() { return 60 + 40 * (S.cases - 4); }
+  function casePrice() { return 30 + 20 * (S.cases - 4); }
 
   document.addEventListener('click', ev => {
     const t = ev.target.closest('[data-action]');
@@ -869,10 +908,11 @@
         </div>
         ${weightCard(g)}
         ${datesCard(g)}
-        <p class="muted small">${st === 'adult' ? (g.growth >= GROWTH.max ? 'りっぱなおとなです' : 'おとなになりました。ペアリングできます') : `${STAGE_LABEL[st === 'baby' ? 'young' : 'adult']}まで あと ${Math.ceil(next - g.growth)}`}${g.hunger <= 30 ? ' ・ おなかが空いていると成長が止まります' : ''}</p>
+        <p class="muted small">${st === 'adult' ? (g.growth >= GROWTH.max ? 'りっぱなおとなです' : 'おとなになりました。ペアリングできます') : `${STAGE_LABEL[st === 'baby' ? 'young' : 'adult']}まで あと${fmtLeft((next - g.growth) / (GROWTH.perHour * speedX() * heatInfo(heatOf(g)).growth) * HOUR)}ほど（ごはんを食べていれば）`}${g.hunger <= 30 ? ' ・ おなかが空いていると成長が止まります' : ''}</p>
       </div>
 
       <div class="actions sub">
+        <button class="act ghost" data-action="viewGecko" data-id="${g.id}">くわしく見る</button>
         <button class="act ghost" data-action="pairMenu">ペアリング${block ? '' : ' OK'}</button>
         <button class="act ghost" data-action="camera">カメラで撮る</button>
         <button class="act ghost" data-action="album">アルバム</button>
@@ -904,7 +944,7 @@
       <div class="card">
         <div class="label" id="tempLabel">温度（次に産まれる卵から）</div>
         <div class="seg" role="radiogroup" aria-labelledby="tempLabel">${TEMPS.map(t => `<button role="radio" aria-checked="${t.t === S.incTemp}" class="${t.t === S.incTemp ? 'on' : ''}" data-action="temp" data-t="${t.t}"><b>${t.label}</b><small>${t.note}</small></button>`).join('')}</div>
-        <p class="muted small">レオパは卵の温度で性別が決まります。${temp.label}だと約${temp.mins}分でふ化します。</p>
+        <p class="muted small">レオパは卵の温度で性別が決まります。${temp.label}だと約${fmtLeft(realDays(temp.days))}でふ化します（いまは${speedX()}倍速）。</p>
       </div>
       ${gravids.length ? `<div class="card soft">${gravids.map(g => `<div>♀ ${esc(g.name)} が抱卵中 ・ ${full ? 'インキュベーターが空くのを待っています' : `産卵まで あと${fmtLeft(g.gravid.layAt - now)}`}</div>`).join('')}</div>` : ''}
       ${eggs ? `<div class="egg-grid">${eggs}</div>` : `<div class="card empty"><div class="egg-art">${A.egg()}</div><p>まだ卵はありません。<br>アダルトのオスとメスを「ペアリング」してみよう。</p></div>`}
@@ -963,6 +1003,7 @@
           <span class="row-main"><b>${F.name} ${F.pack}匹</b><small>いま ${S.food[k]}匹 ・ ${F.desc}</small></span>
           <span class="row-side price">${F.price}</span>
         </button>`).join('')}</div>
+      ${speedShop()}
       ${interiorShop()}
       <h3 class="h3">ケース <small class="muted">${S.geckos.length} / ${S.cases} 使用中</small></h3>
       <div class="list">
@@ -1302,6 +1343,17 @@
         : '<p class="muted small">しまった家具や、ショップで買った家具がここに並びます。</p>'}
       <button class="act primary wide" data-action="editDone">もようがえをおわる</button>
     </div>`;
+  }
+  function speedShop() {
+    return `<h3 class="h3">せいちょうの速さ <small class="muted">ごはん・抱卵・ふ化の進み方もかわります</small></h3>
+      <div class="list">${SPEEDS.map(v => {
+        const open = !v.cost || S.speedOpen;
+        const on = speedX() === v.x;
+        return `<button class="row${on ? ' on' : ''}" data-action="setSpeed" data-x="${v.x}" ${on || (!open && S.coins < v.cost) ? 'disabled' : ''}>
+          <span class="row-main"><b>${v.name}${on ? '（いま）' : ''}</b><small>${v.note}</small></span>
+          ${open ? '' : `<span class="row-side price">${v.cost}</span>`}
+        </button>`;
+      }).join('')}</div>`;
   }
   function interiorShop() {
     return `<h3 class="h3">インテリア <small class="muted">買った家具は「もようがえ」で置けます</small></h3>

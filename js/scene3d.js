@@ -1466,7 +1466,7 @@
   }
   const DECOR = {
     rock: {
-      name: '岩シェルター', price: 60, r: 1.45, shelter: { x: 0.25, z: 2.75 },
+      name: '岩シェルター', price: 30, r: 1.45, shelter: { x: 0.25, z: 2.75 },
       desc: '中にもぐって眠れる。定番のかくれ家',
       build() {
         const g = new T.Group();
@@ -1481,7 +1481,7 @@
       },
     },
     wet: {
-      name: 'ウェットシェルター', price: 80, r: 1.15, shelter: { x: 0, z: 2.35 },
+      name: 'ウェットシェルター', price: 40, r: 1.15, shelter: { x: 0, z: 2.35 },
       desc: '上に水をためて中をしっとり。脱皮の味方',
       build() {
         const g = new T.Group();
@@ -1498,7 +1498,7 @@
       },
     },
     cork: {
-      name: 'コルクバーク', price: 50, r: 1.2, shelter: { x: 0, z: 2.3 },
+      name: 'コルクバーク', price: 25, r: 1.2, shelter: { x: 0, z: 2.3 },
       desc: '木の皮のトンネル。自然な雰囲気に',
       build() {
         const g = new T.Group();
@@ -1514,7 +1514,7 @@
       },
     },
     log: {
-      name: '流木', price: 40, r: 1.1,
+      name: '流木', price: 20, r: 1.1,
       desc: '白っぽい流木。ケースの主役に',
       build() {
         const g = new T.Group();
@@ -1530,7 +1530,7 @@
       },
     },
     stone: {
-      name: '平たい石', price: 30, r: 0.85,
+      name: '平たい石', price: 15, r: 0.85,
       desc: 'ひなたぼっこ用の石。ホット側にどうぞ',
       build() {
         const s = new T.Mesh(rockGeometry(), phys('#8C857C', { roughness: 0.85, bumpMap: sandTex(), bumpScale: 0.03 }));
@@ -1539,12 +1539,12 @@
       },
     },
     plant: {
-      name: '多肉植物', price: 25, r: 0.55,
+      name: '多肉植物', price: 13, r: 0.55,
       desc: '小さなエケベリア。ケースに彩りを',
       build: () => buildPlant(),
     },
     dish: {
-      name: '水入れ', price: 20, r: 0.95,
+      name: '水入れ', price: 10, r: 0.95,
       desc: 'いつでも新鮮なお水を',
       build() {
         const g = new T.Group();
