@@ -17,6 +17,7 @@
  *      carrot   : しっぽのオレンジ（キャロットテール）
  *      lav      : ラベンダー（紫がかった灰色）
  *      aberrant : 模様の乱れ（ジャングル → ストライプ）
+ *      mel      : 黒さ（とても黒いとブラックナイト。アルビノには出ない）
  */
 (function (root) {
   'use strict';
@@ -34,11 +35,12 @@
     { key: 'carrot', name: 'しっぽのオレンジ', lo: 'なし', hi: '濃い' },
     { key: 'lav', name: 'ラベンダー', lo: 'なし', hi: '濃い' },
     { key: 'aberrant', name: '模様の乱れ', lo: 'ふつう', hi: '乱れる' },
+    { key: 'mel', name: '黒さ', lo: 'ふつう', hi: 'まっくろ' },
   ];
   const TANG_HIGH = 70;
   const TANG_MID = 40;
   const T = {
-    hypo: 22, superHypo: 8, baldy: 10, carrot: 50, jungle: 60, stripe: 82, lav: 70,
+    hypo: 22, superHypo: 8, baldy: 10, carrot: 50, jungle: 60, stripe: 82, lav: 70, night: 85,
   };
 
   const c100 = v => Math.max(0, Math.min(100, Math.round(v)));
@@ -62,6 +64,7 @@
       carrot: c100(4 + Math.abs(gauss(rng)) * 14),
       lav: c100(22 + gauss(rng) * 18),
       aberrant: c100(20 + gauss(rng) * 15),
+      mel: c100(6 + Math.abs(gauss(rng)) * 9),
     };
   }
   function normPoly(p, rng) {
@@ -105,11 +108,12 @@
     const g = normGenes(genes);
     const pattern = g.bliz !== 2;
     const t = [];
+    if (poly && poly.mel >= T.night && g.alb !== 2) t.push('ブラックナイト');
     if (poly && pattern) {
       if (poly.spots < T.superHypo) t.push('スーパーハイポ');
       else if (poly.spots < T.hypo) t.push('ハイポ');
     }
-    if (tang >= TANG_HIGH) t.push('タンジェリン');
+    if (tang >= TANG_HIGH && !(poly && poly.mel >= T.night)) t.push('タンジェリン');
     if (poly) {
       if (poly.carrot >= T.carrot) t.push('キャロットテール');
       if (pattern && poly.spots < T.superHypo && poly.head < T.baldy) t.push('ボールディ');
@@ -187,7 +191,7 @@
   // ---------- 図鑑
   const noVisual = g => { g = normGenes(g); return !g.snow && g.alb !== 2 && g.ecl !== 2 && g.bliz !== 2; };
   const hasPattern = g => normGenes(g).bliz !== 2;
-  const P = (o) => Object.assign({ spots: 60, blotch: 45, head: 60, carrot: 5, lav: 20, aberrant: 18 }, o);
+  const P = (o) => Object.assign({ spots: 60, blotch: 45, head: 60, carrot: 5, lav: 20, aberrant: 18, mel: 8 }, o);
   const mendelEntry = (name, genes, hint, tang) => ({
     id: name, name, hint, rep: { genes, tang: tang || 15, poly: P({}) },
     test: (g, t) => mendelName(g, t) === name,
@@ -202,6 +206,7 @@
     { id: 'SHTCTB', name: 'SHTCTB', hint: 'スーパーハイポ・タンジェリン・キャロットテール・ボールディ。ラインブリードの頂点', rep: { genes: {}, tang: 90, poly: P({ spots: 2, head: 3, carrot: 85 }) }, test: (g, t, p) => hasPattern(g) && p.spots < T.superHypo && t >= TANG_HIGH && p.carrot >= T.carrot && p.head < T.baldy },
     { id: 'ジャングル', name: 'ジャングル', hint: '模様が不規則につながる。模様の乱れを選別', rep: { genes: {}, tang: 40, poly: P({ aberrant: 70, blotch: 70 }) }, test: (g, t, p) => hasPattern(g) && p.aberrant >= T.jungle && p.aberrant < T.stripe },
     { id: 'ストライプ', name: 'ストライプ', hint: '背中にすじ模様。ジャングルをさらに選別', rep: { genes: {}, tang: 45, poly: P({ aberrant: 92, blotch: 60 }) }, test: (g, t, p) => hasPattern(g) && p.aberrant >= T.stripe },
+    { id: 'ブラックナイト', name: 'ブラックナイト', hint: '全身がまっくろになる。黒さの強い子同士を何代も選別しよう（アルビノには出ない）', rep: { genes: {}, tang: 10, poly: P({ mel: 95, spots: 70 }) }, test: (g, t, p) => p.mel >= T.night && g.alb !== 2 },
     { id: 'ラベンダー', name: 'ラベンダー', hint: '紫がかった灰色がのる。ラベンダーの濃い子を選別', rep: { genes: {}, tang: 20, poly: P({ lav: 90 }) }, test: (g, t, p) => p.lav >= T.lav },
     mendelEntry('マックスノー', { snow: 1 }, '共優性。マックスノー×ノーマルで50%'),
     mendelEntry('スーパーマックスノー', { snow: 2 }, 'マックスノー同士で25%。目が真っ黒になる'),

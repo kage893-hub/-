@@ -25,9 +25,11 @@
   const EGG_CAP = 12, CASE_MAX = 12;
 
   const FOODS = {
-    cricket: { name: 'コオロギ', hunger: 15, growth: 3, price: 5, pack: 10, desc: '定番のごはん。ぴょんぴょん跳ねる' },
+    cricketS: { name: 'コオロギS', hunger: 9, growth: 2, price: 4, pack: 10, desc: '小さめのコオロギ。ベビーにちょうどいい大きさ' },
+    cricket: { name: 'コオロギM', hunger: 15, growth: 3, price: 5, pack: 10, desc: '定番のごはん。ヤングやおとな向けの大きさ。ぴょんぴょん跳ねる' },
     dubia: { name: 'デュビア', hunger: 25, growth: 5, price: 8, pack: 5, desc: '栄養たっぷり。動きがゆっくりで食べやすい' },
     worm: { name: 'ミルワーム', hunger: 18, growth: 8, price: 4, pack: 5, desc: 'みんな大好き。脂肪が多いのでおやつに' },
+    paste: { name: '練り餌', hunger: 14, growth: 3, price: 12, pack: 10, unit: '回分', desc: '粉を水でねった人工フード。栄養のバランスがよく、カルシウム入り。においになれるまで食べないことも' },
   };
   // 卵の温度で性別と日数が変わる（温度依存性決定）
   const TEMPS = [
@@ -108,6 +110,10 @@
     s.decorInv = s.decorInv || {};
     if (s.calc == null) { s.calc = 10; s.dust = true; }
     s.layBox = s.layBox || [];
+    if (s.food && s.food.cricketS == null) { s.food.cricketS = 10; s.food.paste = 3; }
+    // 「黒さ」が増えたので、前からいる子には少しだけの値を入れる
+    for (const x of [...s.geckos, ...s.eggs, ...(s.offers || []), ...s.layBox, ...(s.special && s.special.offer ? [s.special.offer] : [])]) if (x.poly && x.poly.mel == null) x.poly.mel = Math.round(4 + Math.random() * 12);
+    for (const g of s.geckos) if (g.gravid && g.gravid.dad && g.gravid.dad.poly && g.gravid.dad.poly.mel == null) g.gravid.dad.poly.mel = 8;
     s.learned = s.learned || {};
     // 最初にお店からおむかえした2匹（アルバムに「ヤモリ堂」の記録がある子）にしるしをつける
     if (!s.starterFlag) { s.starterFlag = true; for (const g of s.geckos) if (((s.albums || {})[g.id] || { entries: [] }).entries.some(e => (e.text || '').includes('「ヤモリ堂」からおむかえした'))) g.starter = true; }
@@ -180,7 +186,7 @@
   }
   function freshState() {
     S = {
-      v: 2, coins: 60, cases: 4, incTemp: 29.5, food: { cricket: 20, dubia: 3, worm: 3 },
+      v: 2, coins: 60, cases: 4, incTemp: 29.5, food: { cricketS: 10, cricket: 20, dubia: 3, worm: 3, paste: 3 },
       tut: { step: 0 }, geckos: [], eggs: [], dex: {}, names: {}, decorInv: { grass: 1 }, decorV3: true, selected: null, offers: [], offersAt: 0,
       lastTick: Date.now(), nextId: 1, welcomed: false, stats: { hatched: 0, rehomed: 0 },
       calc: 10, dust: true, layBox: [], learned: {}, starterFlag: true,
@@ -332,6 +338,7 @@
     { genes: { alb: 2 }, tang: 82, poly: { carrot: 65, spots: 10 }, note: '選び抜かれたオレンジの血統' },
     { genes: {}, tang: 30, poly: { lav: 85, spots: 20 }, note: 'ラベンダーがとても濃い血統' },
     { genes: { ecl: 1, bliz: 1 }, poly: { aberrant: 85 }, note: '模様が大きく乱れた一点もの（het つき）' },
+    { genes: {}, tang: 8, poly: { mel: 80, spots: 70 }, note: '黒さがとても強い血統。ブラックナイトまであと少し' },
   ];
   function refreshSpecial(now) {
     const wk = weekKey(now);
@@ -524,6 +531,8 @@
   // ======================================================
   const HUNGER_K = { baby: 1.2, young: 1, adult: 0.65 };
   const boneOf = g => (g.bone == null ? 50 : g.bone);
+  // 体の大きさにくらべて大きすぎるえさ（ベビーにはコオロギS）
+  const tooBig = (k, g) => stageOf(g) === 'baby' && (k === 'cricket' || k === 'dubia');
   const hasDish = g => decorOf(g).some(d => L3.DECOR[d.t] && L3.DECOR[d.t].drink);
   const hasWet = g => decorOf(g).some(d => /^wet/.test(d.t));
   const waterDirty = (g, now) => hasDish(g) && now - (g.waterAt || now) > realDays(1);
@@ -534,15 +543,26 @@
   }
   // まなんだ飼育のポイント（がんばりきろくに並ぶ）
   const LEARN = {
-    shed: '脱皮中はさわらない', meal: '食後すぐはさわらない', nap: '昼はねかせてあげる', newcomer: 'おむかえ直後はそっと',
-    appetite: '脱皮前は食欲が落ちる', size: 'えさは目と目の間より小さく', calcium: 'カルシウムをまぶす', leftover: '食べ残しは取り出す',
-    water: '水は毎日とりかえる', stuck: '脱皮の皮のこりはぬるま湯で', humid: '湿度を保つ', sick: '体調がわるいときは病院へ', egg: '卵の上下を変えない',
+    shed: { t: '脱皮中はさわらない', d: '脱皮のあいだは皮がやわらかく、体もびんかんです。さわると皮がうまくぬげなくなることも。体が白っぽくなったら、ぬぎおわるまでそっと見守ります。' },
+    meal: { t: '食後すぐはさわらない', d: '食べたものを消化しているあいだにさわると、吐きもどしてしまうことがあります。ごはんのあと1日くらいは、ふれあいはお休みにします。' },
+    nap: { t: '昼はねかせてあげる', d: 'レオパは夕方から夜に活発になる生き物です。昼はかくれ家で休んでいることが多いので、起こさないようにします。' },
+    newcomer: { t: 'おむかえ直後はそっと', d: '新しいおうちになれるまで、1週間ほどかかります。まずはごはんを食べてくれるのを待ってから、少しずつふれあいます。' },
+    appetite: { t: '脱皮前は食欲が落ちる', d: '脱皮の前は食べないことがよくあります。病気ではないので、あわてずに脱皮が終わるのを待ちます。' },
+    size: { t: 'えさは目と目の間より小さく', d: 'えさは、レオパの目と目の間の幅より小さいものが目安です。ベビーにはコオロギS、大きくなったらコオロギMやデュビアをあげます。' },
+    paste: { t: '練り餌はなれるまで時間がかかる', d: '練り餌（人工フード）は、においになれるまで食べないことがあります。ピンセットで目の前にゆらしてあげると、食べてくれることがあります。' },
+    calcium: { t: 'カルシウムをまぶす', d: 'コオロギなどの虫だけではカルシウムが足りません。ごはんに粉をまぶしてあげないと、骨が弱くなる病気（くる病）になることがあります。' },
+    leftover: { t: '食べ残しは取り出す', d: '食べ残したコオロギは、寝ているレオパをかじってしまうことがあります。食べなかったえさは、その日のうちに取り出します。' },
+    water: { t: '水は毎日とりかえる', d: '水入れの水は、よごれていなくても毎日とりかえます。いつでもきれいな水が飲めるようにしておきます。' },
+    stuck: { t: '脱皮の皮のこりはぬるま湯で', d: '指先やしっぽの先に皮が残ると、しめつけて血が通わなくなることがあります。ぬるま湯でふやかして、やさしくとってあげます。' },
+    humid: { t: '湿度を保つ', d: 'ケースの湿度は40〜60%くらいが目安です。ウェットシェルターを置いておくと、湿度が保たれて脱皮もうまくいきます。' },
+    sick: { t: '体調がわるいときは病院へ', d: 'いつもとちがう様子のときは、爬虫類をみてもらえる動物病院へ。みてもらえる病院は少ないので、おむかえする前に探しておきます。' },
+    egg: { t: '卵の上下を変えない', d: '卵は産まれてから向きを変えると、中の赤ちゃんが育たなくなることがあります。上にしるしをつけて、向きを変えずにそっと移します。' },
   };
   function learn(key) {
     S.learned = S.learned || {};
     if (S.learned[key]) return;
     S.learned[key] = Date.now();
-    setTimeout(() => toast(`飼育のポイントをおぼえた！「${LEARN[key]}」`), 1600);
+    setTimeout(() => toast(`飼育のポイントをおぼえた！「${LEARN[key].t}」 実績で説明が読めるよ`), 1600);
   }
   const CARE_RULES = {
     shed: { title: '脱皮中は、そっと見守ろう', why: '脱皮中は皮がやわらかく、体もびんかんです。さわると皮がうまくぬげなくなることがあります。ぬぎおわるまで待ってあげよう。', tame: 3 },
@@ -617,8 +637,8 @@
     if (!bar) {
       bar = document.createElement('div');
       bar.id = 'handBar'; bar.className = 'hand-bar';
-      bar.innerHTML = '<button class="act" data-action="handWalk">手から手へ</button><button class="act primary" data-action="handDown">おろす</button><p class="hand-hint">背中を指でなでてみよう</p>';
-      $('#tank').appendChild(bar);
+      bar.innerHTML = '<p class="hand-hint">レオパの背中を指でなでてみよう</p><button class="act" data-action="handWalk">手から手へ</button><button class="act primary" data-action="handDown">おろす</button>';
+      $('#tankBars').appendChild(bar);
     }
   }
   function onHandling(type) {
@@ -649,7 +669,7 @@
       bar = document.createElement('div');
       bar.id = 'pairBar'; bar.className = 'hand-bar pair-bar';
       bar.innerHTML = '<p class="pair-say" id="pairSay"></p><button class="act ghost" data-action="pairSkip">スキップ</button>';
-      $('#tank').appendChild(bar);
+      $('#tankBars').appendChild(bar);
     }
   }
   function onPairing(ev) {
@@ -672,14 +692,16 @@
   }
   function applyEat(g, kind, dust) {
     mile(g, 'eat', `はじめての${FOODS[kind].name}をぱくっと食べた`, true);
-    g.bone = clamp(boneOf(g) + (dust ? 8 : -3));
+    // 練り餌にはカルシウムが入っている
+    g.bone = clamp(boneOf(g) + (dust ? 8 : kind === 'paste' ? 5 : -3));
+    if (kind === 'paste') g.pasteOk = (g.pasteOk || 0) + 1;
     if (dust) learn('calcium');
     g.fedAt = Date.now();
     g.wormRun = kind === 'worm' ? (g.wormRun || 0) + 1 : 0;
     const F = FOODS[kind];
     g.hunger = clamp(g.hunger + F.hunger);
     // しっぽの栄養：ミルワームは脂肪が多いので、たくさんあげるとぽっちゃりに
-    g.cond = clamp((g.cond == null ? 55 : g.cond) + ({ cricket: 1.2, dubia: 1.6, worm: 3.2 })[kind] - (g.cond > 70 && kind !== 'worm' ? 0.6 : 0));
+    g.cond = clamp((g.cond == null ? 55 : g.cond) + ({ cricketS: 0.8, cricket: 1.2, dubia: 1.6, worm: 3.2, paste: 1 })[kind] - (g.cond > 70 && kind !== 'worm' ? 0.6 : 0));
     grow(g, F.growth * (GROWTH.perHour / 6) * speedX() * heatInfo(heatOf(g)).growth, Date.now());
     g.tame = clamp(g.tame + 1);
     S.coins += 1;
@@ -817,8 +839,8 @@
         <div class="list">${Object.entries(FOODS).map(([k, F]) => `
           <button class="row" data-action="feed" data-kind="${k}" ${full || !S.food[k] ? 'disabled' : ''}>
             <span class="row-art">${A.food(k)}</span>
-            <span class="row-main"><b>${F.name}${k === 'dubia' && stageOf(g) === 'baby' ? ' <span class="tag warn">まだ大きい</span>' : ''}</b><small>${F.desc}</small></span>
-            <span class="row-side">のこり ${S.food[k]}</span>
+            <span class="row-main"><b>${F.name}${tooBig(k, g) ? ' <span class="tag warn">まだ大きい</span>' : ''}</b><small>${F.desc}</small></span>
+            <span class="row-side">のこり ${S.food[k] || 0}</span>
           </button>`).join('')}</div>
         <p class="muted small">${{ baby: 'ベビーは毎日', young: 'ヤングは1〜2日に1回', adult: 'おとなは2〜3日に1回' }[stageOf(g)]}が目安。えさは目と目の間の幅より小さいものを選ぼう。なくなったらショップで買えます。</p>`);
     },
@@ -831,16 +853,20 @@
       if (g.hunger + pendingHunger() >= 90) { toast('おなかいっぱいみたい'); return; }
       S.food[k]--;
       closeSheet();
-      const dust = !!S.dust && S.calc > 0;
+      // 練り餌にはもともとカルシウムが入っているので、まぶさない
+      const dust = !!S.dust && S.calc > 0 && k !== 'paste';
       if (dust) S.calc--;
       // 食べないことがある：ベビーに大きすぎるえさ／脱皮の前
       const sp = g.shedUntil ? shedProgress(g, Date.now()) : -1;
-      const refuse = k === 'dubia' && stageOf(g) === 'baby' ? 'size' : sp >= 0 && sp < 0.6 && Math.random() < 0.5 ? 'appetite' : '';
+      // 練り餌は、においになれるまで食べないことがある（ピンセットで目の前にゆらすと食べてくれる）
+      const pasteNo = k === 'paste' && !(g.pasteOk > 0) && S.feedMode !== 'tw' && Math.random() < 0.6;
+      const refuse = tooBig(k, g) ? 'size' : sp >= 0 && sp < 0.6 && Math.random() < 0.5 ? 'appetite' : pasteNo ? 'paste' : '';
       if (refuse) {
         g.left = (g.left || []).concat(k);
-        learn(refuse);
+        learn(refuse === 'paste' ? 'paste' : refuse);
         if (tank) { tank.setLeftovers(g.left); }
         toast(refuse === 'size' ? `${FOODS[k].name}は大きすぎて食べられないみたい。えさは目と目の間の幅より小さいものを。食べ残しはタップして取り出そう`
+          : refuse === 'paste' ? `${g.name}は練り餌のにおいに、まだなれていないみたい。ピンセットで目の前にゆらすと、食べてくれることがあるよ`
           : `${g.name}は脱皮の前で、食欲がないみたい。食べ残しはタップして取り出そう`);
         renderView(); save();
         return;
@@ -1272,8 +1298,8 @@
       const k = t.dataset.kind, F = FOODS[k];
       if (S.coins < F.price) { toast('コインが足りません'); return; }
       S.coins -= F.price;
-      S.food[k] += F.pack;
-      toast(`${F.name}を${F.pack}匹買いました`);
+      S.food[k] = (S.food[k] || 0) + F.pack;
+      toast(`${F.name}を${F.pack}${F.unit || '匹'}買いました`);
       renderView(); save();
     },
     buyCase() {
@@ -1759,7 +1785,7 @@
       <div class="list">${Object.entries(FOODS).map(([k, F]) => `
         <button class="row" data-action="buyFood" data-kind="${k}" ${S.coins < F.price ? 'disabled' : ''}>
           <span class="row-art">${A.food(k)}</span>
-          <span class="row-main"><b>${F.name} ${F.pack}匹</b><small>いま ${S.food[k]}匹 ・ ${F.desc}</small></span>
+          <span class="row-main"><b>${F.name} ${F.pack}${F.unit || '匹'}</b><small>いま ${S.food[k] || 0}${F.unit || '匹'} ・ ${F.desc}</small></span>
           <span class="row-side price">${F.price}</span>
         </button>`).join('')}
         <button class="row" data-action="buyCalc" ${S.coins < 15 ? 'disabled' : ''}>
@@ -2010,7 +2036,8 @@
           : `<button class="act ${ok ? 'primary' : ''} sm" data-action="claimAch" data-id="${a.id}" ${ok ? '' : 'disabled'}>${a.reward}</button>`}</div>`;
       }).join('')}</div>
       <h3 class="h3">おぼえた飼育のポイント <small class="muted">${Object.keys(LEARN).filter(k => (S.learned || {})[k]).length} / ${Object.keys(LEARN).length}</small></h3>
-      <div class="learn-list">${Object.entries(LEARN).map(([k, n]) => `<span class="learn${(S.learned || {})[k] ? ' on' : ''}">${(S.learned || {})[k] ? '✓ ' + n : '？？？'}</span>`).join('')}</div>
+      <div class="learn-list">${Object.entries(LEARN).filter(([k]) => (S.learned || {})[k]).map(([k, L]) => `<div class="learn on"><b>✓ ${L.t}</b><p>${L.d}</p></div>`).join('')}
+        ${Object.keys(LEARN).some(k => !(S.learned || {})[k]) ? `<div class="learn"><b>？？？ あと ${Object.keys(LEARN).filter(k => !(S.learned || {})[k]).length}こ</b><p>毎日のお世話の中で、少しずつおぼえていきます</p></div>` : ''}</div>
       <p class="muted small">お世話をしていると、本物のレオパの飼い方で大切なことをおぼえていきます。</p>`;
   }
   Object.assign(ACTIONS, {

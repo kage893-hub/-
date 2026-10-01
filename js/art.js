@@ -21,7 +21,7 @@
     };
   }
 
-  function colors(genes, tang, stage) {
+  function colors(genes, tang, stage, poly) {
     const s = genes.snow || 0, a = genes.alb === 2, e = genes.ecl === 2, b = genes.bliz === 2;
     let base = mix('#E9C64C', '#EE7A2A', Math.max(0, tang - 15) / 85);
     if (stage === 'baby' && !s && !b) base = mix(base, '#F2D34E', 0.3);
@@ -35,6 +35,12 @@
     if (b) { base = s ? mix(base, '#F4F2EC', 0.5) : mix(base, '#EFE7CF', 0.55); tail = mix(base, '#F2EEE6', 0.3); }
     if (b && a && e) { base = '#F6F4EE'; tail = '#F4F2EC'; }
 
+    // 黒さ（ブラックナイトの血統）：体も模様も黒くしずむ。アルビノには出ない
+    const mel = poly && poly.mel != null ? poly.mel : 0;
+    if (mel > 30 && !a) {
+      const k = Math.min(1, (mel - 30) / 55), m = k * k * (3 - 2 * k) * 0.97;
+      base = mix(base, '#141210', m); tail = mix(tail, '#1C1917', m * 0.95); spot = mix(spot, '#050404', m);
+    }
     if (e) { solid = true; eye = a ? '#8E2231' : '#151515'; }
     else if (s === 2) { solid = true; eye = '#161616'; }
     else if (a) { eye = '#E2C1BC'; pupil = '#B4535A'; }
@@ -91,7 +97,7 @@
     opt = opt || {};
     const id = 'lg' + (++uid);
     const stage = opt.stage || 'adult';
-    const c = colors(g.genes, g.tang, stage);
+    const c = colors(g.genes, g.tang, stage, g.poly);
 
     const legs = LEGS.map(([cls, d, [ex, ey], origin, front]) => {
       const dir = front ? -1 : 1;
@@ -123,17 +129,34 @@
   }
 
   function swatch(g) {
-    const c = colors(g.genes, g.tang, 'adult');
+    const c = colors(g.genes, g.tang, 'adult', g.poly);
     const dots = c.pattern ? `<circle cx="7" cy="8" r="1.8" fill="${c.spot}"/><circle cx="13" cy="11" r="1.6" fill="${c.spot}"/><circle cx="9" cy="14" r="1.3" fill="${c.spot}"/>` : '';
     return `<svg class="swatch" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="${c.base}" stroke="${c.outline}" stroke-width="1.2"/>${dots}</svg>`;
   }
 
+  // レオパの卵：白くて少し細長い、やわらかい革のような殻（つやは少なめ）。
   // mark：上下がわかるように、えんぴつでつけたしるし
   function egg(mark) {
-    return `<svg class="egg-svg" viewBox="0 0 60 80" aria-hidden="true"><ellipse cx="30" cy="44" rx="21" ry="29" fill="#F7F2E6" stroke="#D6CBB5" stroke-width="2"/><ellipse cx="23" cy="32" rx="5" ry="8" fill="#fff" opacity=".75"/><circle cx="38" cy="55" r="1.2" fill="#DCD2BE"/><circle cx="33" cy="62" r="1" fill="#DCD2BE"/>${mark ? '<path d="M25 24 L35 24 M30 19 L30 29" stroke="#55524C" stroke-width="2.4" stroke-linecap="round"/>' : ''}</svg>`;
+    const id = 'eg' + (++uid);
+    const r = prng(uid * 97 + 13);
+    let dots = '';
+    for (let i = 0; i < 26; i++) {
+      const a = r() * Math.PI * 2, d = Math.sqrt(r());
+      dots += `<circle cx="${(30 + Math.cos(a) * d * 17).toFixed(1)}" cy="${(43 + Math.sin(a) * d * 28).toFixed(1)}" r="${(0.4 + r() * 0.8).toFixed(2)}" fill="#C9BFA9" opacity="${(0.25 + r() * 0.35).toFixed(2)}"/>`;
+    }
+    return `<svg class="egg-svg" viewBox="0 0 60 80" aria-hidden="true"><defs>
+        <radialGradient id="${id}g" cx="38%" cy="32%" r="75%"><stop offset="0" stop-color="#FFFEFA"/><stop offset=".55" stop-color="#F3EEE2"/><stop offset=".85" stop-color="#E2D9C6"/><stop offset="1" stop-color="#CFC4AC"/></radialGradient>
+        <clipPath id="${id}c"><path d="M30 10 C43 10 48 28 48 45 C48 63 40 75 30 75 C20 75 12 63 12 45 C12 28 17 10 30 10 Z"/></clipPath>
+      </defs>
+      <ellipse cx="31" cy="76.5" rx="15" ry="2.6" fill="#000" opacity=".1"/>
+      <path d="M30 10 C43 10 48 28 48 45 C48 63 40 75 30 75 C20 75 12 63 12 45 C12 28 17 10 30 10 Z" fill="url(#${id}g)" stroke="#CDBFA4" stroke-width="1.2"/>
+      <g clip-path="url(#${id}c)">${dots}<ellipse cx="22" cy="30" rx="5" ry="9" fill="#fff" opacity=".45"/></g>
+      ${mark ? '<path d="M25 22 L35 22 M30 17 L30 27" stroke="#55524C" stroke-width="2.2" stroke-linecap="round"/>' : ''}</svg>`;
   }
 
   const FOOD_SVG = {
+    cricketS: '<svg viewBox="0 0 40 30" aria-hidden="true"><g transform="translate(9 6) scale(.62)"><g stroke="#5A3B1C" stroke-width="2" stroke-linecap="round" fill="none"><path d="M16 18 L8 27 M24 18 L32 28 M18 12 L11 4 M26 12 L35 5"/><path d="M8 13 Q1 6 3 1 M8 17 Q1 22 2 28" stroke-width="1.3"/></g><ellipse cx="23" cy="15" rx="11" ry="6" fill="#8A5A2B"/><circle cx="11" cy="15" r="4.5" fill="#6B4320"/></g></svg>',
+    paste: '<svg viewBox="0 0 40 30" aria-hidden="true"><ellipse cx="20" cy="22" rx="16" ry="5" fill="#E9E4DA" stroke="#C9C1B2" stroke-width="1"/><path d="M9 20 Q10 11 17 10 Q20 6 24 10 Q31 11 31 20 Q20 23 9 20 Z" fill="#B5793F"/><ellipse cx="16" cy="13" rx="3" ry="1.5" fill="#D9A46E" opacity=".7"/></svg>',
     cricket: '<svg viewBox="0 0 40 30" aria-hidden="true"><g stroke="#5A3B1C" stroke-width="1.6" stroke-linecap="round" fill="none"><path d="M16 18 L8 27 M24 18 L32 28 M18 12 L11 4 M26 12 L35 5"/><path d="M8 13 Q1 6 3 1 M8 17 Q1 22 2 28" stroke-width="1"/></g><ellipse cx="23" cy="15" rx="11" ry="6" fill="#8A5A2B"/><circle cx="11" cy="15" r="4.5" fill="#6B4320"/></svg>',
     dubia: '<svg viewBox="0 0 40 30" aria-hidden="true"><ellipse cx="20" cy="15" rx="13" ry="10" fill="#5E3A22"/><g stroke="#3E2515" stroke-width="1" fill="none"><path d="M9 11 Q20 8 31 11 M8 15 Q20 12 32 15 M9 19 Q20 17 31 19"/></g><ellipse cx="20" cy="6" rx="6" ry="3" fill="#7A4E2E"/></svg>',
     worm: '<svg viewBox="0 0 40 30" aria-hidden="true"><path d="M5 18 Q14 8 22 15 T36 12" stroke="#C99A3E" stroke-width="7" stroke-linecap="round" fill="none"/><path d="M9 14 v6 M14 11 v6 M19 12 v6 M24 14 v6 M29 13 v6" stroke="#9C7427" stroke-width="1"/></svg>',

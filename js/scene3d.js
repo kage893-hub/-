@@ -283,7 +283,7 @@
     if (opts && opts.repeat) { t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(opts.repeat, opts.repeat); }
     return t;
   }
-  const DEFAULT_POLY = { spots: 60, blotch: 45, head: 60, carrot: 5, lav: 20, aberrant: 18 };
+  const DEFAULT_POLY = { spots: 60, blotch: 45, head: 60, carrot: 5, lav: 20, aberrant: 18, mel: 6 };
   const rgba = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
 
   /* 体の色と模様。横 = 胴まわり（0 と 1 がおなか、0.5 が背中）、縦 = 鼻先→しっぽの先
@@ -296,8 +296,11 @@
     const st = look.stage;
     const poly = Object.assign({}, DEFAULT_POLY, look.poly || {});
     const scale = W / 1024;
-    const belly = A.mix(pal.base, '#FFF9EF', 0.74);
+    const melK = Math.min(1, Math.max(0, ((look.poly && look.poly.mel) || 0) - 30) / 60);
+    const belly = A.mix(pal.base, '#FFF9EF', 0.74 * (1 - melK * 0.7));
     const lavCol = '#A898B8';
+    // 3D モデルでは、モデルの実際のまわりの長さで丸の横幅を決める（丸が丸く見えるように）
+    const circ = look.model && MODEL.perimAt ? MODEL.perimAt : circumference;
 
     const around = (cols) => {
       const g = ctx.createLinearGradient(0, 0, W, 0);
@@ -307,7 +310,7 @@
     const X = u => u * W, Y = z => zToV(z) * H;
     // 世界の長さ rw の丸を、その位置の太さに合わせて描く
     const blob = (u, z, rw, col, alpha, rot, stretch) => {
-      const C = Math.max(0.35, circumference(z));
+      const C = Math.max(0.35, circ(z));
       ctx.globalAlpha = alpha;
       ctx.fillStyle = col;
       ctx.beginPath();
@@ -406,61 +409,77 @@
     }
 
     // ---- ヒョウ柄
+    // 本物のレオパの斑点：ふちのはっきりした黒い丸っこい点が、重ならずに散らばる。
+    // 背中は大きめ・わき腹は小さくまばら・頭は細かい点。ジャングル／ストライプだけはつながる。
     const spotA = !pal.pattern ? 0 : st === 'baby' ? 0 : st === 'young' ? 0.72 : 1;
     if (spotA > 0) {
-      const sizeMul = 0.55 + poly.blotch / 100 * 0.85;
-      const parts = 1 + Math.floor(poly.blotch / 50);
-      const alpha = spotA * (pal.spot === '#A0704A' ? 0.85 : 0.95);
-      const drawSpot = (u, z, rw) => {
-        if (jungle && !stripe && r() < 0.6) {
-          // ジャングル：斑点が不規則につながる
-          blob(u, z, rw * 0.9, pal.spot, alpha, r() * Math.PI, 2.4 + r() * 1.5);
-          return;
+      const sizeMul = 0.6 + poly.blotch / 100 * 0.9;
+      const alpha = spotA * (pal.spot === '#A0704A' ? 0.85 : 0.96);
+      const placed = [];
+      const fits = (u, z, rw, gap) => {
+        const C = Math.max(0.35, circ(z));
+        for (const q of placed) {
+          if (Math.abs(q.z - z) > 0.4) continue;
+          let du = Math.abs(q.u - u); du = Math.min(du, 1 - du);
+          if (Math.hypot(du * C, q.z - z) < (q.rw + rw) * gap) return false;
         }
-        const C = Math.max(0.35, circumference(z));
-        for (let k = 0; k < parts; k++) {
-          const du = (r() - 0.5) * rw * 1.5 / C, dz = (r() - 0.5) * rw * 1.5;
-          blob(u + du, z + dz, rw * (0.55 + r() * 0.5), pal.spot, alpha, r() * 3);
+        return true;
+      };
+      // ふちが少しだけゆらいだ、丸っこい点
+      const spot = (u, z, rw, stretch) => {
+        const C = Math.max(0.35, circ(z));
+        const n = 9, ph = r() * 6.28, pts = [];
+        for (let i = 0; i < n; i++) {
+          const a = i / n * Math.PI * 2;
+          const rr = rw * (0.84 + 0.16 * Math.sin(a * 2 + ph) + 0.08 * Math.sin(a * 3 + ph * 2) + (r() - 0.5) * 0.3);
+          pts.push([X(u) + Math.cos(a) * rr / C * W * (stretch || 1), Y(z) + Math.sin(a) * rr / LEN * H]);
+        }
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = pal.spot;
+        ctx.beginPath();
+        const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+        let m0 = mid(pts[n - 1], pts[0]);
+        ctx.moveTo(m0[0], m0[1]);
+        for (let i = 0; i < n; i++) { const m = mid(pts[i], pts[(i + 1) % n]); ctx.quadraticCurveTo(pts[i][0], pts[i][1], m[0], m[1]); }
+        ctx.fill();
+        placed.push({ u, z, rw });
+      };
+      // 決めた範囲に、重ならないように n 個までまく
+      const scatter = (n, zTop, zBot, spread, size, gap, edgeThin) => {
+        for (let tries = 0, k = 0; k < n && tries < n * 25; tries++) {
+          let z = zTop - r() * (zTop - zBot);
+          // 子どものころの帯のあたりに、少しだけ集まる
+          if (bandZ.length && r() < 0.3) { const b = bandZ[Math.floor(r() * bandZ.length)]; const zz = (b[0] + b[1]) / 2 + (r() - 0.5) * 0.25; if (zz <= zTop && zz >= zBot) z = zz; }
+          const side = (r() * 2 - 1);
+          const u = 0.5 + side * spread;
+          const edge = Math.abs(side);
+          if (edgeThin && r() < edge * edge * 0.55) continue;
+          const rw = size(z) * (0.6 + Math.pow(r(), 1.6) * 0.95) * (edgeThin ? 1 - edge * 0.4 : 1);
+          if (!fits(u, z, rw, gap)) continue;
+          spot(u, z, rw, 1 + (r() - 0.5) * 0.45);
+          k++;
         }
       };
-      const bodyN = poly.spots < 8 ? 0 : Math.round(330 * Math.pow(poly.spots / 60, 1.35) * scale);
-      for (let i = 0; i < bodyN; i++) {
-        let z;
-        if (r() < 0.6 && bandZ.length) {
-          const b = bandZ[Math.floor(r() * Math.min(3, bandZ.length))];
-          z = (b[0] + b[1]) / 2 + (r() + r() - 1) * 0.2;
-        } else z = 1.25 - r() * (1.25 - Z_TAILBASE);
-        z = clamp(z, Z_TAILBASE, 1.25);
-        let u = 0.5 + (r() + r() - 1) * 0.36;
-        if (stripe) u = (r() < 0.5 ? 0.42 : 0.58) + (r() - 0.5) * 0.05;
-        const region = (z > 1.0 ? 0.65 : 1) * (Math.abs(u - 0.5) > 0.22 ? 0.72 : 1);
-        drawSpot(u, z, (0.03 + r() * 0.045) * sizeMul * region);
-      }
-      // おとなのしっぽには黒い横帯（斑点が帯状に並ぶ）
-      if (!jungle && !stripe) {
-        const barN = Math.round(4 + poly.spots / 25);
-        for (let k = 0; k < barN; k++) {
-          const zc = Z_TAILBASE - 0.25 - k * (2.2 / barN);
-          const C = circumference(zc);
-          for (let i = 0; i < 16 * scale * (0.4 + poly.spots / 100); i++) {
-            drawSpot(0.5 + (r() - 0.5) * 0.7, zc + (r() - 0.5) * 0.12, (0.03 + r() * 0.03) * sizeMul * clamp(C / 2.2, 0.4, 1));
-          }
+      if (jungle || stripe) {
+        // ジャングル・ストライプ：斑点が不規則につながる
+        const bodyN = poly.spots < 8 ? 0 : Math.round(220 * Math.pow(poly.spots / 60, 1.3) * scale);
+        for (let i = 0; i < bodyN; i++) {
+          const z = 1.25 - r() * (1.25 - Z_TAILBASE + 1.6);
+          let u = 0.5 + (r() + r() - 1) * 0.36;
+          if (stripe) u = (r() < 0.5 ? 0.42 : 0.58) + (r() - 0.5) * 0.05;
+          blob(u, z, (0.03 + r() * 0.04) * sizeMul, pal.spot, alpha, (r() - 0.5) * 0.6, stripe ? 1.4 : 2.2 + r() * 1.6);
         }
+      } else {
+        // 胴：背中を中心に
+        const bodyN = poly.spots < 8 ? 0 : Math.round(165 * Math.pow(poly.spots / 60, 1.25));
+        scatter(bodyN, 1.22, Z_TAILBASE, 0.36, () => 0.05 * sizeMul, 1.35, true);
+        // しっぽ：太さに合わせて小さくなる。ハイポでも少し残る
+        const tailN = Math.round(70 * (0.3 + 0.7 * poly.spots / 100));
+        scatter(tailN, Z_TAILBASE - 0.05, Z_TAILBASE - 2.3, 0.4, z => 0.036 * sizeMul * clamp(circ(z) / 2.4, 0.45, 1.1), 1.6, true);
       }
-      // しっぽの斑点は、ハイポでも少し残る
-      const tailN = Math.round(120 * (0.3 + 0.7 * poly.spots / 100) * scale);
-      for (let i = 0; i < tailN; i++) {
-        const z = Z_TAILBASE - r() * 2.3;
-        const u = 0.5 + (r() + r() - 1) * 0.4;
-        drawSpot(u, z, (0.025 + r() * 0.04) * sizeMul * clamp(circumference(z) / 2.8, 0.4, 1));
-      }
-      // 頭の斑点（少ないとボールディ）
-      const headN = poly.head < 10 ? 0 : Math.round(80 * Math.pow(poly.head / 60, 1.2) * scale);
-      for (let i = 0; i < headN; i++) {
-        const z = 1.3 + r() * 0.82;
-        const u = 0.5 + (r() + r() - 1) * 0.3;
-        blob(u, z, (0.01 + r() * 0.018) * (0.7 + poly.blotch / 250), pal.spot, alpha, r() * 3);
-      }
+      // 頭：細かい点（少ないとボールディ）
+      const headN = poly.head < 10 ? 0 : Math.round(70 * Math.pow(poly.head / 60, 1.2));
+      scatter(headN, 2.1, 1.3, 0.3, z => (0.014 + (2.1 - z) * 0.012) * (0.75 + poly.blotch / 220), 1.7, false);
     }
     // 抱卵中はおなかの横に卵が透ける
     if (look.gravid) {
@@ -760,7 +779,7 @@
   /* look: { genes, tang, poly, seed, stage, gravid, shed }  quality: 'high' | 'photo' */
   function buildGecko(look, quality) {
     if (MODEL.geo) return buildGeckoGLB(look, quality);
-    const pal = A.colors(look.genes, look.tang, look.stage);
+    const pal = A.colors(look.genes, look.tang, look.stage, look.poly);
     const hi = quality !== 'photo';
     const W = hi ? 1024 : 768, H = hi ? 1536 : 1152;
     const colorTex = canvasTexture(skinCanvas(pal, look, W, H), { srgb: true });
@@ -1010,7 +1029,7 @@
   }
   function lookKey(look) {
     const p = look.poly || {};
-    return [MODEL.geo ? 'm' : 'p', look.genes.snow, look.genes.alb, look.genes.ecl, look.genes.bliz, look.tang, p.spots, p.blotch, p.head, p.carrot, p.lav, p.aberrant, look.seed, look.stage, !!look.gravid, !!look.shed].join('|');
+    return [MODEL.geo ? 'm' : 'p', look.genes.snow, look.genes.alb, look.genes.ecl, look.genes.bliz, look.tang, p.spots, p.blotch, p.head, p.carrot, p.lav, p.aberrant, p.mel, look.seed, look.stage, !!look.gravid, !!look.shed].join('|');
   }
 
   // ======================================================
@@ -1074,6 +1093,55 @@
       for (let d = 0; d < 8; d++) for (const kk of [k - d, k + d]) if (bins[kk]) return (bins[kk][0] + bins[kk][1]) / 2;
       return 0;
     };
+    // 輪切りごとに、体のまわりの長さにそって u を決める（平たい体でも模様がのびたり縮んだりしないように）
+    const NB = 48, ring = {};
+    for (let i = 0; i < n; i++) {
+      const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+      if (legOf(x, y, z)) continue;
+      const k = Math.round(z / BIN), dy = y - centerY(z);
+      const th = Math.atan2(dy, x), b = Math.floor(((th + Math.PI / 2 + 4 * Math.PI) % (2 * Math.PI)) / (2 * Math.PI) * NB) % NB;
+      const R0 = ring[k] || (ring[k] = new Float32Array(NB));
+      R0[b] = Math.max(R0[b], Math.hypot(x, dy));
+    }
+    const arc = {};
+    for (const k in ring) {
+      const R0 = ring[k];
+      // 空いた区画は、となりの値でうめる
+      for (let pass = 0; pass < NB; pass++) {
+        let left = false;
+        for (let b = 0; b < NB; b++) if (!R0[b]) { const a = R0[(b + NB - 1) % NB], c = R0[(b + 1) % NB]; if (a || c) R0[b] = a && c ? (a + c) / 2 : a || c; else left = true; }
+        if (!left) break;
+      }
+      const cum = new Float32Array(NB + 1);
+      for (let b = 0; b < NB; b++) {
+        const t0 = -Math.PI / 2 + b / NB * 2 * Math.PI, t1 = t0 + 2 * Math.PI / NB;
+        const r0 = R0[b], r1 = R0[(b + 1) % NB];
+        cum[b + 1] = cum[b] + Math.hypot(r1 * Math.cos(t1) - r0 * Math.cos(t0), r1 * Math.sin(t1) - r0 * Math.sin(t0));
+      }
+      arc[k] = cum;
+    }
+    const arcAt = k => { for (let d = 0; d < 8; d++) for (const kk of [k - d, k + d]) if (arc[kk]) return arc[kk]; return null; };
+    const uOf = (th, z) => {
+      const cum = arcAt(Math.round(z / BIN));
+      if (!cum) return thToU(th);
+      const f = (((th + Math.PI / 2) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) / (2 * Math.PI) * NB;
+      const b = Math.min(NB - 1, Math.floor(f));
+      return (cum[b] + (cum[b + 1] - cum[b]) * (f - b)) / cum[NB];
+    };
+    // 模様を描くときに使う、まわりの長さ（模様の z の単位で）
+    const perim = [];
+    for (const k in arc) {
+      const gz = Number(k) * BIN * MS + MZ, zc = canonZ(gz);
+      const sl = (canonZ(gz + 0.02) - canonZ(gz - 0.02)) / 0.04;
+      perim.push([zc, arc[k][NB] * MS * sl]);
+    }
+    perim.sort((a, b) => a[0] - b[0]);
+    const sm = perim.map((p, i) => { let s = 0, w = 0; for (let j = Math.max(0, i - 2); j <= Math.min(perim.length - 1, i + 2); j++) { s += perim[j][1]; w++; } return [p[0], s / w]; });
+    MODEL.perimAt = zc => {
+      if (zc <= sm[0][0]) return Math.max(0.2, sm[0][1]);
+      for (let i = 1; i < sm.length; i++) if (sm[i][0] >= zc) return Math.max(0.2, lerp(sm[i - 1][1], sm[i][1], (zc - sm[i - 1][0]) / (sm[i][0] - sm[i - 1][0])));
+      return Math.max(0.2, sm[sm.length - 1][1]);
+    };
     const g = new T.BufferGeometry();
     const P = new Float32Array(n * 3), UV = new Float32Array(n * 2), LEG = new Float32Array(n), PV = new Float32Array(n * 3), CY = new Float32Array(n);
     for (let i = 0; i < n; i++) {
@@ -1083,7 +1151,7 @@
       const leg = legOf(x, y, z);
       // 脚は体の横と同じ色・模様にする（おなかの白にならないように）
       const th = leg ? (x > 0 ? 0.35 : Math.PI - 0.35) + (y + 0.05) * 3 * (x > 0 ? 1 : -1) : Math.atan2(y - centerY(z), x);
-      UV[i * 2] = thToU(th);
+      UV[i * 2] = leg ? thToU(th) : uOf(th, z);
       UV[i * 2 + 1] = zToV(canonZ(q.z));
       LEG[i] = leg;
       CY[i] = toGame(0, centerY(z), z).y;
@@ -1225,7 +1293,7 @@
     return t;
   }
   function buildGeckoGLB(look, quality) {
-    const pal = A.colors(look.genes, look.tang, look.stage);
+    const pal = A.colors(look.genes, look.tang, look.stage, look.poly);
     const hi = quality !== 'photo';
     const W = hi ? 1024 : 768, H = hi ? 1536 : 1152;
     // 描いた模様は覚えておき、同じ子に切りかえたときは描き直さない
@@ -1372,9 +1440,20 @@
   // ======================================================
   // えさ・フン・ケースの小物
   // ======================================================
+  const isCricket = k => k === 'cricket' || k === 'cricketS';
   function buildFood(kind) {
     const g = new T.Group();
-    if (kind === 'cricket') {
+    if (kind === 'cricketS') {
+      // 小さいコオロギ
+      const c = buildFood('cricket');
+      c.scale.setScalar(0.62);
+      g.add(c);
+    } else if (kind === 'paste') {
+      // 練り餌：ぽってりした小さなかたまり
+      const m = phys('#B5793F', { roughness: 0.55, clearcoat: 0.25 });
+      const b = new T.Mesh(new T.SphereGeometry(0.17, 16, 10), m); b.scale.set(1, 0.55, 1); b.position.y = 0.06; g.add(b);
+      const t = new T.Mesh(new T.SphereGeometry(0.09, 12, 8), m); t.position.set(0.04, 0.13, -0.02); t.scale.set(1, 0.7, 1); g.add(t);
+    } else if (kind === 'cricket') {
       const brown = phys('#7A4E26', { roughness: 0.4, clearcoat: 0.3 }), dark = phys('#4F3217', { roughness: 0.5 });
       const b = new T.Mesh(new T.SphereGeometry(0.13, 16, 12), brown); b.scale.set(1, 0.8, 1.9); b.position.y = 0.12; g.add(b);
       const h = new T.Mesh(new T.SphereGeometry(0.09, 14, 10), dark); h.position.set(0, 0.14, 0.24); g.add(h);
@@ -2616,16 +2695,30 @@
       obj.position.set(x, 0, z);
       obj.rotation.y = rand(0, 6.28);
       scene.add(obj);
-      st.foods.push({ kind, obj, t: rand(0.4, 1), hop: null, dust: !!opt.dust, refuse: !!opt.refuse });
+      const food = { kind, obj, t: rand(0.4, 1), hop: null, dust: !!opt.dust, refuse: !!opt.refuse };
+      if (kind === 'paste') {
+        // 練り餌は小さなお皿にのせて置く
+        const dish = new T.Mesh(new T.CylinderGeometry(0.3, 0.26, 0.06, 24), phys('#E9E4DA', { roughness: 0.4, clearcoat: 0.5 }));
+        dish.position.set(x, 0.03, z); dish.castShadow = dish.receiveShadow = true;
+        scene.add(dish);
+        food.dish = dish;
+        obj.position.y = 0.06;
+      }
+      st.foods.push(food);
       if (opt.refuse) {
         // 気づいて見るけれど、ぷいっと向きを変える
         if (!opt.quiet && !st.sleeping) { st.peek = clamp(angleTo(st.yaw, Math.atan2(x - st.x, z - st.z)), -0.7, 0.7); st.peekT = 1.6; st.refuseT = 1.7; }
       } else if (st.sleeping) wake();
     }
     // 食べ残し：食べなかったえさの数を、保存されている数にそろえる
+    function dropDish(f, later) {
+      if (!f.dish) return;
+      const d = f.dish; f.dish = null;
+      if (later) setTimeout(() => { scene.remove(d); disposeTree(d); }, later); else { scene.remove(d); disposeTree(d); }
+    }
     function setLeftovers(kinds) {
       const have = st.foods.filter(f => f.refuse);
-      for (let i = kinds.length; i < have.length; i++) { const f = have[i]; st.foods.splice(st.foods.indexOf(f), 1); scene.remove(f.obj); disposeTree(f.obj); }
+      for (let i = kinds.length; i < have.length; i++) { const f = have[i]; st.foods.splice(st.foods.indexOf(f), 1); scene.remove(f.obj); disposeTree(f.obj); dropDish(f); }
       for (let i = have.length; i < kinds.length; i++) spawnFood(kinds[i], { refuse: true, quiet: true });
     }
     function takeFoods() {
@@ -2633,7 +2726,7 @@
       if (st.shedAct && st.shedAct.flake) scene.remove(st.shedAct.flake);
       st.shedAct = null;
       const kinds = st.foods.map(f => ({ kind: f.kind, dust: f.dust, refuse: f.refuse }));
-      st.foods.forEach(f => { scene.remove(f.obj); disposeTree(f.obj); });
+      st.foods.forEach(f => { scene.remove(f.obj); disposeTree(f.obj); dropDish(f); });
       st.foods = [];
       return kinds;
     }
@@ -2788,7 +2881,7 @@
         const f = st.foods[i];
         if (f.held || !f.refuse) continue;
         if (ray.ray.distanceToPoint(f.obj.position) < 0.8) {
-          st.foods.splice(i, 1); scene.remove(f.obj); disposeTree(f.obj);
+          st.foods.splice(i, 1); scene.remove(f.obj); disposeTree(f.obj); dropDish(f);
           handlers.onTakeFood && handlers.onTakeFood(f.kind);
           return;
         }
@@ -2849,20 +2942,21 @@
           const k = Math.min(1, f.hop.k);
           f.obj.position.x = lerp(f.hop.x0, f.hop.x1, k);
           f.obj.position.z = lerp(f.hop.z0, f.hop.z1, k);
-          f.obj.position.y = f.kind === 'cricket' ? Math.sin(Math.PI * k) * 0.55 : 0;
+          f.obj.position.y = isCricket(f.kind) ? Math.sin(Math.PI * k) * (f.kind === 'cricketS' ? 0.35 : 0.55) : 0;
           if (k >= 1) f.hop = null;
           continue;
         }
+        if (f.kind === 'paste') continue; // 練り餌は動かない
         if (f.kind === 'worm') f.obj.rotation.y += Math.sin(st.t * 6) * dt * 1.5;
         f.t -= dt;
         if (f.t <= 0) {
-          const reach = f.kind === 'cricket' ? 1.4 : f.kind === 'dubia' ? 0.6 : 0.2;
+          const reach = f.kind === 'cricket' ? 1.4 : f.kind === 'cricketS' ? 1.0 : f.kind === 'dubia' ? 0.6 : 0.2;
           const x1 = clamp(f.obj.position.x + rand(-reach, reach), -BOUNDS.x, BOUNDS.x);
           const z1 = clamp(f.obj.position.z + rand(-reach, reach), BOUNDS.zMin, BOUNDS.zMax);
           f.t = rand(0.9, 2.2);
           if (heightAt(x1, z1) > 0.05 || !freeAt(x1, z1, 0.2)) continue;
           f.obj.rotation.y = Math.atan2(x1 - f.obj.position.x, z1 - f.obj.position.z);
-          f.hop = { x0: f.obj.position.x, z0: f.obj.position.z, x1, z1, k: 0, dur: f.kind === 'cricket' ? 0.35 : 1.2 };
+          f.hop = { x0: f.obj.position.x, z0: f.obj.position.z, x1, z1, k: 0, dur: isCricket(f.kind) ? 0.35 : 1.2 };
           f.t = rand(0.9, 2.2);
         }
       }
@@ -2899,7 +2993,8 @@
       const i = st.foods.indexOf(food);
       if (i >= 0) st.foods.splice(i, 1);
       food.hop = null;
-      const chews = food.kind === 'worm' ? 3 : food.kind === 'dubia' ? 5 : 4;
+      dropDish(food, 3000);
+      const chews = food.kind === 'worm' ? 3 : food.kind === 'dubia' ? 5 : food.kind === 'cricketS' || food.kind === 'paste' ? 2 : 4;
       st.meal = { obj: food.obj, kind: food.kind, t: 0, ph: 'hold', chews, s0: food.obj.scale.x };
       seen('strike');
       if (food.held && st.tw) { food.held = false; st.tw.food = null; st.tw.doneAt = performance.now(); seen('tweezers'); }
@@ -3589,7 +3684,7 @@
           st.eatPitch = -0.1;
           if (H.t > H.wait && Math.abs(angleTo(st.yaw, aim)) < 0.3) {
             // コオロギは気配に気づいて跳ねて逃げることがある
-            if (food.kind === 'cricket' && Math.random() < 0.3) hopAway(food);
+            if (isCricket(food.kind) && Math.random() < 0.3) hopAway(food);
             H.ph = 'strike'; H.t = 0; H.speed = (dMouth + 0.3) / 0.15; H.left = dMouth + 0.15;
             puff(mp.x, mp.z, S);
           }

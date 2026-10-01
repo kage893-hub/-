@@ -594,15 +594,20 @@ body.full-view .sheet-wrap { z-index: 55; }
 .seg.two { grid-template-columns: 1fr 1fr; }
 
 /* ふれあい（手に乗せる） */
-.hand-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 9; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(transparent, rgba(30, 24, 14, .4)); }
-.hand-bar .act { flex: 0 1 140px; padding-block: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, .18); }
-.hand-hint { width: 100%; margin: 0; text-align: center; font-size: 11.5px; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
-.pair-bar { align-items: center; }
-.pair-say { flex: 1 1 100%; margin: 0; text-align: center; color: #fff; font-weight: 700; text-shadow: 0 1px 4px rgba(0, 0, 0, .55); }
+.tank-bars:empty { display: none; }
+/* ふれあい・ペアリング中のボタンは、ケースの下に出して、レオパにかぶらないようにする */
+.hand-bar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; padding: 10px 4px 2px; }
+.hand-bar .act { flex: 1 1 130px; max-width: 200px; padding-block: 9px; }
+.hand-hint { width: 100%; margin: 0; text-align: center; font-size: 12.5px; color: var(--muted); }
+.pair-say { flex: 1 1 100%; margin: 0; text-align: center; color: var(--ink); font-weight: 700; }
 .pair-say.pop { animation: pairPop .5s ease-out; }
 @keyframes pairPop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.pair-bar .act { flex: 0 1 120px; background: rgba(255, 255, 255, .85); }
-.tank:has(.hand-bar) .cam-btn, .tank:has(.hand-bar) .thermo { opacity: 0; pointer-events: none; }
+.pair-bar .act { flex: 0 1 120px; }
+/* 全画面のときは、画面の下のはしに小さく重ねる（とじる・ごはんのボタンのかわりに出す） */
+body.full-view .tank-bars { position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(transparent, rgba(30, 24, 14, .45)); }
+body.full-view .tank-bars .act { flex: 0 1 120px; padding-block: 7px; font-size: 14px; box-shadow: 0 2px 8px rgba(0, 0, 0, .18); }
+body.full-view .tank-bars .hand-hint, body.full-view .tank-bars .pair-say { color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
+body.full-view:has(#tankBars > *) .full-bar, body.full-view:has(#tankBars > *) .full-shutter { display: none; }
 .credits { margin: 0; padding-left: 1.2em; display: grid; gap: 8px; font-size: 13px; line-height: 1.6; }
 .credits a { color: var(--info); }
 
@@ -612,8 +617,8 @@ body.full-view .sheet-wrap { z-index: 55; }
 .set-label { margin: 4px 0 6px; font-weight: 700; }
 /* 全画面のときだけ出す、いつでも撮れるシャッター */
 .full-shutter { display: none; }
-body.full-view .full-shutter { display: grid; position: absolute; z-index: 9; right: calc(14px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); background: rgba(0, 0, 0, .18); box-shadow: 0 2px 10px rgba(0, 0, 0, .25); }
-body.full-view .tank.camera-on .full-shutter, body.full-view .tank:has(.hand-bar) .full-shutter { display: none; }
+body.full-view .full-shutter { display: grid; position: absolute; z-index: 9; right: calc(18px + env(safe-area-inset-right, 0px)); bottom: calc(76px + env(safe-area-inset-bottom, 0px)); background: rgba(0, 0, 0, .18); box-shadow: 0 2px 10px rgba(0, 0, 0, .25); }
+body.full-view .tank.camera-on .full-shutter { display: none; }
 .tank.flash::after { content: ''; position: absolute; inset: 0; z-index: 20; background: #fff; pointer-events: none; animation: camFlash .35s ease-out forwards; }
 @keyframes camFlash { from { opacity: .85; } to { opacity: 0; } }
 /* ひらがなモードは、文字を少し大きく、行間を広く */
@@ -636,6 +641,9 @@ html.kids .pill { white-space: normal; }
 .laybox { border: 2px dashed var(--accent); }
 .lay-eggs { display: flex; gap: 10px; margin: 8px 0; }
 .lay-eggs .egg-art { width: 48px; }
-.learn-list { display: flex; flex-wrap: wrap; gap: 6px; }
-.learn { font-size: 12.5px; padding: 4px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--muted, #8A8273); }
-.learn.on { background: #EAF4E4; border-color: #BFDDB0; color: #3D6B2E; font-weight: 700; }
+.learn-list { display: grid; gap: 8px; }
+.learn { padding: 10px 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+.learn b { display: block; font-size: 14px; }
+.learn p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.7; }
+.learn.on { background: rgba(76, 140, 80, .1); border-color: rgba(76, 140, 80, .35); color: var(--ink); }
+.learn.on b { color: var(--good); }
