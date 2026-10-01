@@ -1129,7 +1129,7 @@
 
   // 形の曲げ方（描画側 GLSL と、眼球などの位置合わせ用 JS で同じ式を使う）
   const DEFORM_GLSL = `
-    uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop, uTailFat;
+    uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop, uTailFat, uTailLift;
     // 実物のレオパにあわせたしっぽ：長さは頭からお尻までの約0.8倍、いちばん太いところは首くらいの太さ
     #define TAIL_V -1.55
     #define TAIL_STRETCH 1.6
@@ -1143,6 +1143,8 @@
     vec3 rotZ(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(c * q.x - s * q.y, s * q.x + c * q.y, q.z); }
     vec3 leoDeform(vec3 p) {
       if (p.z < TAIL_V) p.z = TAIL_V + (p.z - TAIL_V) * TAIL_STRETCH;
+      // 坂をのぼるときは、しっぽが床にめりこまないように持ちあげる
+      if (p.z < TAIL_V) p.y += (TAIL_V - p.z) / 2.93 * uTailLift;
       if (aLeg > 0.5) {
         float off = (aLeg < 1.5 || aLeg > 3.5) ? 0.0 : 3.14159;
         float ph = uPhase + off;
@@ -1235,7 +1237,7 @@
     rough.wrapS = T.RepeatWrapping;
     const shed = false;
     const U = {};
-    for (const k of ['uT', 'uPhase', 'uWalk', 'uLook', 'uPitch', 'uTilt', 'uCurl', 'uStalk', 'uHappy', 'uBreathe', 'uDrop', 'uTailFat', 'uShedOn', 'uShedEdge']) U[k] = { value: 0 };
+    for (const k of ['uT', 'uPhase', 'uWalk', 'uLook', 'uPitch', 'uTilt', 'uCurl', 'uStalk', 'uHappy', 'uBreathe', 'uDrop', 'uTailFat', 'uTailLift', 'uShedOn', 'uShedEdge']) U[k] = { value: 0 };
     // 脱皮中は古い皮で全体が白っぽい（ケースの中では少しずつ脱いでいく）
     U.uShedOn.value = look.shed ? 1 : 0; U.uShedEdge.value = 9;
     U.uTailFat.value = look.fat || 0;
@@ -3204,6 +3206,18 @@
         const hf = heightAt(st.x + sy * 1.3 * S, st.z + cy * 1.3 * S), hm = heightAt(st.x, st.z), hb = heightAt(st.x - sy * 1.1 * S, st.z - cy * 1.1 * S);
         st.y = lerp(st.y || 0, Math.max(hm, (hf + hb) / 2), Math.min(1, dt * 8));
         st.slope = lerp(st.slope || 0, clamp(Math.atan2(hf - hb, 2.4 * S), -0.8, 0.8), Math.min(1, dt * 6));
+        // しっぽの途中と先が、足もとの床や岩より下にならない高さを計算して、しっぽを持ちあげる
+        const cs = Math.cos(st.slope), sn = Math.sin(st.slope);
+        let lift = 0;
+        const dropM = (st.drop || 0) - 0.04;
+        for (const [k, yb] of [[0.35, 0.03], [0.65, 0.005], [1, 0]]) {
+          const zl = -1.55 - k * 2.93;
+          const wx = st.x + sy * zl * S * cs, wz = st.z + cy * zl * S * cs;
+          const wy = st.y + S * ((yb - dropM) * cs + zl * sn);
+          const need = (heightAt(wx, wz) + 0.02 - wy) / S / k;
+          if (need > lift) lift = need;
+        }
+        st.tailLift = lerp(st.tailLift || 0, Math.min(lift, 3), Math.min(1, dt * 10));
       }
       if (st.y > 0.6) seen('climb');
       if (moving && st.night) seen('night');
@@ -3213,6 +3227,7 @@
         // 頭の先から、しっぽの先まで、境目がだんだん下がっていく
         gk.U.uShedEdge.value = pk < 0 ? 9 : 1.9 - pk * 5.8;
         gk.U.uTailFat.value = st.fat || 0;
+        gk.U.uTailLift.value = st.tailLift || 0;
         if (gk.corneaMat) gk.corneaMat.opacity = st.shedP != null && pk < 0.12 ? 0.4 : 0.1;
       }
       gk.root.position.set(st.x, st.y, st.z);
