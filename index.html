@@ -34,6 +34,12 @@
         <button class="thermo" data-action="heater" aria-label="ヒーターの温度を調整">ホット側 32℃ ／ クール側 26℃</button>
         <p id="tankEmpty" class="tank-empty" hidden>ケースは空っぽです。ショップでおむかえしよう</p>
         <div class="tank-name" id="tankName"></div>
+        <button class="full-btn" data-action="fullView" aria-label="全画面で見る"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        <div class="full-bar" id="fullBar">
+          <button class="act primary" data-action="feedMenu">ごはん</button>
+          <button class="act" data-action="fullRotate" id="fullRotate" hidden>横向き</button>
+          <button class="act" data-action="fullView">とじる</button>
+        </div>
         <div class="tank-loading" id="tankLoading"><span class="spinner" aria-hidden="true"></span>レオパを準備中…</div>
       </div>
       <div id="caseInfo"></div>

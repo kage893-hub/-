@@ -3058,7 +3058,10 @@
         camera.position.lerp(_c, Math.min(1, dt * 3));
         camLook.lerp(_t, Math.min(1, dt * 4));
       } else {
-        camera.position.lerp(HOME.pos, Math.min(1, dt * 3));
+        // 縦長の画面（全画面の縦持ちなど）では、ケースの左右が切れないように少し引く
+        const fit = camera.aspect < 1.2 ? (4 / 3) / camera.aspect * 1.32 : 1;
+        _c.copy(HOME.pos).sub(HOME.look).multiplyScalar(fit).add(HOME.look);
+        camera.position.lerp(_c, Math.min(1, dt * 3));
         camLook.lerp(st.gk ? _t.set(st.x * 0.18, 0, st.z * 0.12 + 0.2) : HOME.look, Math.min(1, dt * 2));
       }
       camera.lookAt(camLook);
@@ -3103,7 +3106,7 @@
         st.heatPref = temp <= 30 ? 1 : temp >= 34 ? -1 : 0;
         heat.intensity = 0.8 * st.heatGlow;
       },
-      _st: st, _hide: () => HIDE, refreshDecor, setCage, setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
+      _st: st, _cam: camera, _hide: () => HIDE, refreshDecor, setCage, setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
       pendingFoods: () => st.foods.map(f => f.kind),
       lick() { st.lick = 0.9; },
       happy() { st.happy = 1.4; if (st.sleeping) wake(); },

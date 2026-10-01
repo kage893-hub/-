@@ -1143,7 +1143,7 @@
         <button class="act ghost" data-action="editStart">もようがえ</button>
         <button class="act ghost" data-action="rehomeMenu">里親に出す</button>
       </div>
-      <p class="tip"><b>まめちしき</b>${TIPS[tipIndex]}</p>`}`);
+      <p class="tip"><b>まめちしき</b><span>${TIPS[tipIndex]}</span></p>`}`);
   }
 
   function renderEggs() {
@@ -1247,7 +1247,12 @@
       return `<div class="dex-card${got ? '' : ' locked'}"><div class="dex-art">${art}</div><b>${esc(d.name)}</b><small class="muted">${esc(d.hint)}</small></div>`;
     }).join('');
     const dtab = S.dexTab || 'dex';
-    const dtabs = `<div class="shop-tabs two" role="tablist">${[['dex', '図鑑'], ['show', '品評会']].map(([k, n]) => `<button role="tab" aria-selected="${dtab === k}" class="${dtab === k ? 'on' : ''}" data-action="dexTab" data-tab="${k}">${n}</button>`).join('')}</div>`;
+    const dtabs = `<div class="shop-tabs three" role="tablist">${[['dex', '図鑑'], ['show', '品評会'], ['rec', '実績・アルバム']].map(([k, n]) => `<button role="tab" aria-selected="${dtab === k}" class="${dtab === k ? 'on' : ''}" data-action="dexTab" data-tab="${k}">${n}</button>`).join('')}</div>`;
+    if (dtab === 'rec') {
+      const html = `<h2 class="h2">実績・アルバム</h2>${dtabs}${albumList()}${achSection()}`;
+      if (html !== dexHTML) { setHTML($('#view-dex'), html); dexHTML = html; }
+      return;
+    }
     if (dtab === 'show') {
       const html = `<h2 class="h2">品評会</h2>${dtabs}${showPage()}`;
       if (html !== dexHTML) { setHTML($('#view-dex'), html); dexHTML = html; }
@@ -1256,8 +1261,6 @@
     const html = `
       <h2 class="h2">モルフ図鑑 <small class="muted">${found} / ${G.DEX.length}</small></h2>
       ${dtabs}
-      ${albumList()}
-      ${achSection()}
       <h3 class="h3">モルフ</h3>
       <div class="dex-grid">${cards}</div>
       ${extra.length ? `<h3 class="h3">これまでに出会ったモルフ名 <small class="muted">${extra.length}種</small></h3><div class="tags">${extra.map(n => `<span class="tag">${esc(n)}</span>`).join('')}</div>` : ''}
@@ -1312,6 +1315,7 @@
           ${S.cases >= CASE_MAX ? '' : `<span class="row-side price">${casePrice()}</span>`}
         </button>
       </div>
+      <h3 class="h3">せってい</h3>
       <div class="danger-zone">${isStandalone() || inFrame ? '' : '<button class="act ghost sm" data-action="installMenu">ホーム画面に追加</button>'}<button class="act ghost sm" data-action="giftMenu">ギフトコード</button><button class="act ghost sm" data-action="notifyMenu">おしらせ通知</button><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`,
     };
     setHTML($('#view-shop'), `<h2 class="h2">ショップ</h2>${tabs}${(sec[tab] || sec.leopa)()}`);
@@ -2330,6 +2334,33 @@
     heater: heaterSheet,
     heatUp() { const g = selected(); if (g && heatOf(g) < HEAT_MAX) { g.heat = heatOf(g) + 1; save(); renderView(); heaterSheet(); } },
     heatDown() { const g = selected(); if (g && heatOf(g) > HEAT_MIN) { g.heat = heatOf(g) - 1; save(); renderView(); heaterSheet(); } },
+  });
+
+  // ---------- 全画面でレオパを見る（スマホを横にしても見られる）
+  const isFull = () => document.body.classList.contains('full-view');
+  function setFull(on) {
+    document.body.classList.toggle('full-view', on);
+    const rot = $('#fullRotate');
+    if (rot) rot.hidden = !(on && screen.orientation && screen.orientation.lock);
+    if (on) {
+      const el = document.documentElement;
+      if (el.requestFullscreen && !document.fullscreenElement) el.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+    } else {
+      if (screen.orientation && screen.orientation.unlock) try { screen.orientation.unlock(); } catch (e) { /* noop */ }
+      if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    }
+    window.scrollTo(0, 0);
+  }
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && isFull()) setFull(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && isFull() && $('#sheet').hidden) setFull(false); });
+  Object.assign(ACTIONS, {
+    fullView() { setFull(!isFull()); },
+    fullRotate(t) {
+      const o = screen.orientation;
+      if (!o || !o.lock) return;
+      const land = /landscape/.test(o.type);
+      o.lock(land ? 'portrait' : 'landscape').then(() => { t.textContent = land ? '横向き' : '縦向き'; }).catch(() => toast('この端末では、スマホを横にすると横画面になります'));
+    },
   });
 
   // ---------- ホーム画面に追加する案内
