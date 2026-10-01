@@ -110,10 +110,40 @@
   }
   // 保存は操作が落ちついてからまとめて1回（アプリを閉じるときはすぐ保存）
   let saveTimer = null;
+  // 控えから戻すときや、ほかの画面（別のタブ・ホーム画面のアプリ）が新しく保存したときは、
+  // この画面の古いデータで上書きしないように保存を止める
+  let saveLocked = false, saveFailShown = false;
+  const STAMP_KEY = 'leopa-save-stamp';
+  const INSTANCE = Math.random().toString(36).slice(2);
+  const readStamp = () => { try { return JSON.parse(localStorage.getItem(STAMP_KEY) || 'null'); } catch (e) { return null; } };
+  let lastStamp = (readStamp() || { at: 0 }).at;
+  function otherSavedNewer() {
+    const st = readStamp();
+    return !!(st && st.id !== INSTANCE && st.at > lastStamp);
+  }
+  function reloadForNewer() {
+    saveLocked = true;
+    if (document.hidden) return;
+    toast('ほかの画面で進めたデータがあるので、読みこみなおします');
+    setTimeout(() => location.reload(), 1200);
+  }
   function saveNow() {
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* 保存できない環境でも遊べる */ }
+    if (saveLocked || !S) return;
+    if (otherSavedNewer()) { reloadForNewer(); return; }
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(S));
+      lastStamp = Date.now();
+      localStorage.setItem(STAMP_KEY, JSON.stringify({ id: INSTANCE, at: lastStamp }));
+      saveFailShown = false;
+    } catch (e) {
+      // 容量いっぱいなど。だまって失敗すると進みが消えてしまうので、一度だけ知らせる
+      if (!saveFailShown) { saveFailShown = true; toast('セーブできませんでした。アルバムの写真を減らすか、「セーブデータの控え」をとってください'); }
+    }
   }
+  window.__leopaSave = () => ({ INSTANCE, lastStamp, stamp: readStamp(), saveLocked }); // 動作確認用
+  window.addEventListener('storage', e => { if (e.key === STAMP_KEY && otherSavedNewer()) reloadForNewer(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && saveLocked && otherSavedNewer()) location.reload(); });
   function save() { if (!saveTimer) saveTimer = setTimeout(saveNow, 1500); }
   window.addEventListener('pagehide', () => saveNow());
   // アルバムの写真は、ふだんのデータとは別に1枚ずつしまう（保存を軽くするため）
@@ -2004,6 +2034,9 @@
       const obj = pendingBackup;
       if (!obj) return;
       try {
+        // この画面の保存を止めてから置きかえる（閉じるときの自動保存で、戻したデータが上書きされないように）
+        saveLocked = true;
+        if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
         // 写真を先に戻してから、本体を置きかえる（途中で失敗したら、いまのデータは変えない）
         const old = Object.keys(localStorage).filter(k => k.startsWith('leopa-photo-'));
         const keep = {};
@@ -2017,8 +2050,11 @@
           for (const [k, v] of Object.entries(keep)) { try { localStorage.setItem(k, v); } catch (err) { /* noop */ } }
           throw e;
         }
+        lastStamp = Date.now();
+        localStorage.setItem(STAMP_KEY, JSON.stringify({ id: INSTANCE, at: lastStamp }));
         location.reload();
       } catch (e) {
+        saveLocked = false;
         toast('もどせませんでした（保存できる量をこえたかもしれません）。いまのデータはそのままです');
       }
     },
@@ -2466,7 +2502,8 @@
     if (window.LeopaMusic) LeopaMusic.setSong(songKey());
     checkAch();
     renderView();
-    save();
+    // 裏に回っている画面は保存しない（前に出ている画面のデータを古いデータで上書きしないように）
+    if (!document.hidden) save();
   }
 
   S = load();
