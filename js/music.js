@@ -93,7 +93,7 @@
     for (const n of notes) {
       for (const det of [-6, 6]) {
         const o = ctx.createOscillator();
-        o.type = 'triangle';
+        o.type = 'sine';
         o.frequency.value = midi(n);
         o.detune.value = det;
         o.connect(lp);
@@ -122,23 +122,33 @@
     cv.buffer = buf;
     return cv;
   }
-  let revCache = null;
+  let irCache = null; // 響きの波形だけ使い回す（部品そのものは曲ごと）
   function makeBus(ctx, dest, volume) {
     const master = ctx.createGain();
     master.gain.value = volume;
     const dry = ctx.createGain(); dry.gain.value = 0.8;
     const wet = ctx.createGain(); wet.gain.value = 0.38;
-    if (!revCache || revCache.context !== ctx) revCache = makeReverb(ctx, 2.8);
+    if (!irCache || irCache.ctx !== ctx) irCache = { ctx, buf: makeReverb(ctx, 2.2).buffer };
+    const rev = ctx.createConvolver();
+    rev.buffer = irCache.buf;
+    // 音割れ防止：大きな音を自動でおさえるコンプレッサーと、低すぎる音をカットするフィルター
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 55;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -20; comp.knee.value = 24; comp.ratio.value = 6; comp.attack.value = 0.004; comp.release.value = 0.25;
     dry.connect(master);
     wet.connect(master);
-    master.connect(dest);
+    master.connect(hp);
+    hp.connect(comp);
+    comp.connect(dest);
     const input = ctx.createGain();
     input.connect(dry);
     const send = ctx.createGain();
+    send.gain.value = 0.9;
     input.connect(send);
-    send.connect(revCache);
-    revCache.connect(wet);
-    return { input, master };
+    send.connect(rev);
+    rev.connect(wet);
+    return { input, master, nodes: [rev, comp, hp] };
   }
 
   const BAR = 8; // 1小節 = 8分音符 8 つ
@@ -165,7 +175,7 @@
     const song = SONGS[key];
     const bus = makeBus(ctx, ctx.destination, 0);
     bus.master.gain.setValueAtTime(0, ctx.currentTime);
-    bus.master.gain.linearRampToValueAtTime(vol, ctx.currentTime + 2.5);
+    bus.master.gain.linearRampToValueAtTime(vol * 0.85, ctx.currentTime + 2.5);
     return { key, song, bus, step: 0, nextT: ctx.currentTime + 0.15 };
   }
   function fadeOut(p) {
@@ -173,12 +183,14 @@
     g.cancelScheduledValues(ctx.currentTime);
     g.setValueAtTime(g.value, ctx.currentTime);
     g.linearRampToValueAtTime(0, ctx.currentTime + 2.5);
-    setTimeout(() => { try { p.bus.master.disconnect(); } catch (e) { /* noop */ } }, 6000);
+    setTimeout(() => { try { p.bus.master.disconnect(); p.bus.nodes.forEach(n => n.disconnect()); } catch (e) { /* noop */ } }, 6500);
   }
   function pump() {
     if (!cur) return;
     const stepSec = 60 / cur.song.bpm / 2;
-    while (cur.nextT < ctx.currentTime + 0.4) {
+    // 画面が忙しくて作業が遅れても、音が途切れないように 1.2 秒先まで並べておく
+    if (cur.nextT < ctx.currentTime) cur.nextT = ctx.currentTime + 0.05;
+    while (cur.nextT < ctx.currentTime + 1.2) {
       playStep(ctx, cur.bus.input, cur.song, cur.step++, cur.nextT);
       cur.nextT += stepSec;
     }
@@ -192,7 +204,7 @@
     if (timer && cur && cur.key === wantKey) return true;
     if (cur) fadeOut(cur);
     cur = makePlayer(wantKey);
-    if (!timer) timer = setInterval(pump, 100);
+    if (!timer) timer = setInterval(pump, 250);
     return true;
   }
   function setSong(key) {
@@ -206,6 +218,24 @@
   }
   const playing = () => !!timer;
 
+  // 試験用：朝の曲から夜の曲へ入れ替わる様子を、実際の再生と同じ作りで書き出す
+  async function renderSwitch(seconds, sampleRate, from, to, at) {
+    const Off = root.OfflineAudioContext || root.webkitOfflineAudioContext;
+    const off = new Off(1, Math.floor(sampleRate * seconds), sampleRate);
+    const play = (key, t0, t1, fadeIn, fadeOut) => {
+      const song = SONGS[key], b = makeBus(off, off.destination, 0);
+      const g = b.master.gain;
+      g.setValueAtTime(0, t0);
+      g.linearRampToValueAtTime(0.45 * 0.85 * (fadeIn ? 1 : 1), t0 + (fadeIn ? 2.5 : 0.01));
+      if (fadeOut) { g.setValueAtTime(0.45 * 0.85, t1); g.linearRampToValueAtTime(0, t1 + 2.5); }
+      const stepSec = 60 / song.bpm / 2;
+      for (let i = 0, t = t0 + 0.05; t < t1 + 2.5; i++, t += stepSec) playStep(off, b.input, song, i, t);
+    };
+    play(from, 0, at, true, true);
+    play(to, at, seconds, true, false);
+    return off.startRendering();
+  }
+
   // 試聴用：曲の一部をオフラインで書き出す
   async function render(seconds, sampleRate, key) {
     const Off = root.OfflineAudioContext || root.webkitOfflineAudioContext;
@@ -217,6 +247,6 @@
     return off.startRendering();
   }
 
-  const api = { start, stop, setSong, playing, render, songs: SONGS, get title() { return SONGS[wantKey].title; }, ctxUsed: false };
+  const api = { start, stop, setSong, playing, render, renderSwitch, songs: SONGS, get title() { return SONGS[wantKey].title; }, ctxUsed: false };
   root.LeopaMusic = api;
 })(typeof window !== 'undefined' ? window : globalThis);
