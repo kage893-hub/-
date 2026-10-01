@@ -1574,6 +1574,7 @@
     const now = Date.now();
     const g = selected();
     setHTML($('#geckoTabs'), S.geckos.map(x => `<button class="chip${x.id === S.selected ? ' on' : ''}" data-action="select" data-id="${x.id}" aria-pressed="${x.id === S.selected}">${A.swatch(x)}<span>${esc(x.name)}</span><span class="sex ${x.sex}">${sexMark(x)}</span>${needsCare(x) ? '<i class="dot" aria-label="お世話が必要"></i>' : ''}</button>`).join('') +
+      (S.geckos.length > 1 ? '<button class="chip ghost sort-chip" data-action="sortMenu" aria-label="ならびかえ">⇅ ならびかえ</button>' : '') +
       (S.geckos.length < S.cases ? `<span class="chip ghost">空きケース ${S.cases - S.geckos.length}</span>` : ''));
     sceneMount();
     if (!g) { setHTML($('#caseInfo'), ''); setHTML($('#tankName'), ''); return; }
@@ -2754,6 +2755,23 @@
     });
   }
   Object.assign(ACTIONS, {
+    // 上のレオパの名前の順番をかえる
+    sortMenu() {
+      openSheet(`<h3 class="sheet-title">レオパのならびかえ</h3>
+        <p class="muted small">▲▼で、上の名前の順番をかえられます。</p>
+        <div class="list sort-list">${S.geckos.map((g, i) => `<div class="row static">
+          <span class="row-art">${A.swatch(g)}</span>
+          <span class="row-main"><b>${esc(g.name)} ${sexMark(g)}</b><small>${esc(nameOf(g))}</small></span>
+          <span class="sort-btns"><button class="act sm" data-action="sortMove" data-i="${i}" data-d="-1" ${i === 0 ? 'disabled' : ''} aria-label="上へ">▲</button><button class="act sm" data-action="sortMove" data-i="${i}" data-d="1" ${i === S.geckos.length - 1 ? 'disabled' : ''} aria-label="下へ">▼</button></span>
+        </div>`).join('')}</div>
+        <button class="act primary" data-action="closeSheet">できた</button>`);
+    },
+    sortMove(t) {
+      const i = Number(t.dataset.i), j = i + Number(t.dataset.d);
+      if (j < 0 || j >= S.geckos.length) return;
+      [S.geckos[i], S.geckos[j]] = [S.geckos[j], S.geckos[i]];
+      save(); renderView(); ACTIONS.sortMenu();
+    },
     camera() { const g = selected(); if (!g || !tank) return; cameraSheet(g); },
     camCancel() { camClose(); if (tank) tank.setClose(false); },
     async camShoot(keep) {

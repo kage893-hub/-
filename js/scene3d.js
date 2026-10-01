@@ -1207,7 +1207,7 @@
 
   // 形の曲げ方（描画側 GLSL と、眼球などの位置合わせ用 JS で同じ式を使う）
   const DEFORM_GLSL = `
-    uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop, uTailFat, uTailLift;
+    uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop, uTailFat, uTailLift, uBend;
     // 実物のレオパにあわせたしっぽ：長さは頭からお尻までの約0.8倍、いちばん太いところは首くらいの太さ
     #define TAIL_V -1.55
     #define TAIL_STRETCH 1.6
@@ -1252,6 +1252,9 @@
       float tt = clamp((-1.4 - p.z) / 3.1, 0.0, 1.0);
       w += tt * tt * (uCurl * 1.4 + 0.12 * sin(uT * 1.2 - p.z * 1.5) * (1.0 - uWalk) + uHappy * 0.3 * sin(uT * 9.0 - p.z * 2.0));
       w += step(0.55, tt) * uStalk * 0.06 * sin(uT * 28.0 - p.z * 4.0);
+      // 曲がるときは、体が弓なりにしなる（頭は行き先へ、しっぽはあとからついてくる）
+      float bz = p.z - 0.3;
+      w += uBend * bz * bz * (bz > 0.0 ? 0.07 : 0.04);
       p.x += w;
       if (aLeg < 0.5) p.x *= 1.0 + uBreathe * 0.025 * smoothstep(1.2, 0.8, p.z) * smoothstep(-1.6, -1.1, p.z);
       p.y -= uDrop;
@@ -1269,6 +1272,8 @@
     let w = U.uWalk.value * 0.16 * Math.sin(U.uPhase.value - q.z * 1.4) * (0.4 + 0.6 * smooth(clamp((1.2 - q.z) / 2.7, 0, 1))) * body;
     const tt = clamp((-1.4 - q.z) / 3.1, 0, 1);
     w += tt * tt * (U.uCurl.value * 1.4 + 0.12 * Math.sin(U.uT.value * 1.2 - q.z * 1.5) * (1 - U.uWalk.value) + U.uHappy.value * 0.3 * Math.sin(U.uT.value * 9 - q.z * 2));
+    const bz = q.z - 0.3;
+    w += (U.uBend ? U.uBend.value : 0) * bz * bz * (bz > 0 ? 0.07 : 0.04);
     q.x += w;
     q.y -= U.uDrop.value;
     return q;
@@ -1315,7 +1320,7 @@
     rough.wrapS = T.RepeatWrapping;
     const shed = false;
     const U = {};
-    for (const k of ['uT', 'uPhase', 'uWalk', 'uLook', 'uPitch', 'uTilt', 'uCurl', 'uStalk', 'uHappy', 'uBreathe', 'uDrop', 'uTailFat', 'uTailLift', 'uShedOn', 'uShedEdge']) U[k] = { value: 0 };
+    for (const k of ['uT', 'uPhase', 'uWalk', 'uLook', 'uPitch', 'uTilt', 'uCurl', 'uStalk', 'uHappy', 'uBreathe', 'uDrop', 'uTailFat', 'uTailLift', 'uBend', 'uShedOn', 'uShedEdge']) U[k] = { value: 0 };
     // 脱皮中は古い皮で全体が白っぽい（ケースの中では少しずつ脱いでいく）
     U.uShedOn.value = look.shed ? 1 : 0; U.uShedEdge.value = 9;
     U.uTailFat.value = look.fat || 0;
@@ -1376,7 +1381,7 @@
     const U = gk.U;
     U.uT.value = P.t; U.uPhase.value = P.phase; U.uWalk.value = P.walk; U.uLook.value = P.look;
     U.uPitch.value = P.pitch - 0.05; U.uTilt.value = P.tilt; U.uCurl.value = Math.min(P.curl, 1) * 0.9; U.uStalk.value = P.stalk;
-    U.uHappy.value = P.happy; U.uBreathe.value = P.breathe; U.uDrop.value = P.drop - 0.04;
+    U.uHappy.value = P.happy; U.uBreathe.value = P.breathe; U.uDrop.value = P.drop - 0.04; U.uBend.value = P.bend || 0;
     const hz = 1;
     const headQ = new T.Quaternion().setFromEuler(new T.Euler(U.uPitch.value * hz, U.uLook.value * 0.6 * hz, U.uTilt.value * hz, 'ZXY'));
     for (const e of gk.eyes) {
@@ -2929,7 +2934,10 @@
       if (d < 0.05) return 0;
       const diff = angleTo(g.yaw, Math.atan2(dx, dz));
       g.yaw += diff * Math.min(1, dt * 3.5);
-      const step = Math.min(d, speed * dt * (Math.abs(diff) > 1.1 ? 0.3 : 1));
+      // 歩き出しはゆっくり加速して、着くまえは少しゆるめる
+      g.spd = Math.min(speed, (g.spd || 0) + speed * dt * 3);
+      const v = g.spd * clamp(d / 0.5, 0.4, 1);
+      const step = Math.min(d, v * dt * (Math.abs(diff) > 1.1 ? 0.3 : 1));
       g.x += Math.sin(g.yaw) * step;
       g.z += Math.cos(g.yaw) * step;
       return step;
@@ -3594,6 +3602,7 @@
         if (R.heartT <= 0) { fx('♥', 'heart', pairMid); R.heartT = rand(0.9, 1.4); }
       }
       // オスの見た目
+      if (!o.step) M.spd = (M.spd || 0) * Math.max(0, 1 - dt * 8);
       M.walkW = lerp(M.walkW, o.step > 0 ? 1 : 0, Math.min(1, dt * 6));
       M.phase += o.step / SM * Math.PI;
       M.blinkT -= dt;
@@ -3732,7 +3741,20 @@
           }
           if (st.wait <= 0) { st.mode = 'idle'; st.wait = rand(1.5, 4); }
         } else if (st.mode === 'walk' || st.mode === 'toHide' || st.mode === 'toDrink' || st.mode === 'toBask') {
-          step = moveToward(st.target.x, st.target.z, 0.85 * nf, dt);
+          // 本物のレオパのように、少し歩いては止まり、まわりを見てまた歩く
+          if (st.pauseT > 0) {
+            st.pauseT -= dt;
+            st.yaw += angleTo(st.yaw, Math.atan2(st.target.x - st.x, st.target.z - st.z)) * Math.min(1, dt * 0.8);
+          } else {
+            step = moveToward(st.target.x, st.target.z, 0.85 * nf, dt);
+            st.burst = (st.burst == null ? rand(1.2, 3) : st.burst) - dt;
+            if (st.burst <= 0 && Math.hypot(st.target.x - st.x, st.target.z - st.z) > 1.2) {
+              st.burst = st.night ? rand(2, 4.5) : rand(1.2, 3);
+              st.pauseT = st.night ? rand(0.3, 0.8) : rand(0.5, 1.4);
+              if (Math.random() < 0.35) st.lick = 0.9;
+              else { st.peek = rand(-0.6, 0.6); st.peekT = st.pauseT; }
+            }
+          }
           if (Math.hypot(st.target.x - st.x, st.target.z - st.z) < 0.15) {
             if (st.mode === 'toHide' && st.target.next) st.target = st.target.next;
             else if (st.mode === 'toHide') { st.sleeping = true; st.wait = rand(18, 35); st.zzz = 0.8; st.mode = 'idle'; seen('hide'); }
@@ -3778,8 +3800,13 @@
 
       // 歩いた距離で足を動かす（足がすべらないように）
       const moving = step > 0;
-      st.walkW = lerp(st.walkW, moving ? 1 : 0, Math.min(1, dt * 6));
+      if (!moving) st.spd = (st.spd || 0) * Math.max(0, 1 - dt * 8);
+      st.walkW = lerp(st.walkW, moving ? clamp((st.spd || 0) / 0.6, 0.35, 1) : 0, Math.min(1, dt * 6));
       st.phase += step / (0.95 * S) * Math.PI;
+      // 向きを変えた速さで、体を弓なりにしならせる
+      const yawRate = angleTo(st.prevYaw == null ? st.yaw : st.prevYaw, st.yaw) / Math.max(dt, 1e-3);
+      st.prevYaw = st.yaw;
+      st.bend = lerp(st.bend || 0, clamp(yawRate * 0.45, -0.9, 0.9), Math.min(1, dt * 4));
 
       // まばたき
       st.blinkT -= dt;
@@ -3807,8 +3834,11 @@
       if (st.peekT > 0) st.peekT -= dt;
       if (st.pair) {
         wantLook = st.pair.fLook;
-      } else if (!moving && !st.sleeping && !food && st.peekT > 0) {
+      } else if (!st.sleeping && !food && st.peekT > 0) {
         wantLook = st.peek;
+      } else if (moving && !food && st.target) {
+        // 歩くときは、体より先に頭が行き先を向く
+        wantLook = clamp(angleTo(st.yaw, Math.atan2(st.target.x - st.x, st.target.z - st.z)) * 0.8, -0.6, 0.6);
       } else if (!moving && !st.sleeping && !food) {
         wantLook = clamp(angleTo(st.yaw, Math.atan2(camera.position.x - st.x, camera.position.z - st.z)), -0.75, 0.75);
       } else if (st.meal) {
@@ -3832,6 +3862,7 @@
       if (st.mode !== 'drink') st.drinkPitch = lerp(st.drinkPitch || 0, 0, Math.min(1, dt * 3));
       P.pitch = st.pitch + (st.eatPitch || 0) + (st.drinkPitch || 0) + Math.sin(st.phase * 2) * 0.035 * st.walkW;
       P.tilt = (st.tiltT > 0 ? Math.sin(Math.min(1, st.tiltT) * Math.PI) * 0.22 : 0) + (st.happy > 0 ? Math.sin(st.t * 7) * 0.12 : 0);
+      P.bend = st.bend;
       P.curl = st.curl;
       P.stalk = st.stalk > 0 ? 1 : 0;
       P.happy = st.happy > 0 ? 1 : 0;
