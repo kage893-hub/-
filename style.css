@@ -487,3 +487,13 @@ button { font: inherit; color: inherit; }
 .farewell-days b { font-size: 22px; }
 .farewell-days small { font-size: 11.5px; color: var(--muted); }
 .fx-item.eat { color: #7A4A1C; font-family: var(--font-display); font-size: 16px; letter-spacing: .04em; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 1px 0 #fff; animation-duration: .9s; }
+
+.shop-tabs { position: sticky; top: 0; z-index: 5; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; margin: 0 0 12px; border-radius: 14px; background: var(--surface-2); box-shadow: 0 2px 8px rgba(60, 40, 10, .06); }
+.shop-tabs button { padding: 9px 2px; border: 0; border-radius: 10px; background: transparent; font: inherit; font-size: 13px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.shop-tabs button.on { background: var(--surface); color: var(--ink, inherit); box-shadow: 0 1px 3px rgba(60, 40, 10, .15); }
+.row.on { border-color: var(--accent); background: var(--accent-soft); }
+.cage-sw { width: 38px; height: 38px; border-radius: 10px; flex: none; border: 3px solid #2F3431; background: #E3CDA2; }
+.cage-white { border-color: #E9E6DF; background: repeating-radial-gradient(circle at 4px 4px, #DCD8CF 0 1px, #F7F5F0 1px 8px); }
+.cage-wood { border-color: #7A4E2C; background: linear-gradient(#9A6A42 0 40%, #E8D4B0 40%); }
+.cage-desert { border-color: #3A2E26; background: linear-gradient(#A8663F 0 40%, #E2A574 40%); }
+.cage-candy { border-color: #F7A8C4; background: linear-gradient(#5A3420 0 40%, #E8B877 40%); box-shadow: inset 0 0 0 2px #fff; }

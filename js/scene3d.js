@@ -1561,6 +1561,124 @@
   const DEFAULT_DECOR = [{ t: 'rock', x: -4.4, z: -3.0, rot: 0 }, { t: 'dish', x: -5.0, z: 3.2, rot: 0 }, { t: 'plant', x: 1.8, z: -3.8, rot: 0 }];
   // ケースの広さ（床の半分の幅・奥行き）
   const TANK = { hw: 6.5, hd: 4.5 };
+  // ケージの大きさと見た目（ショップで買って、ケースごとに選べる）
+  const CAGE_SIZES = {
+    std: { name: 'レギュラー', hw: 6.5, hd: 4.5, price: 0, desc: '幅60cmクラスの定番サイズ' },
+    wide: { name: 'ワイド', hw: 8, hd: 5.2, price: 150, desc: '幅75cmクラス。家具をゆったり置ける' },
+    big: { name: 'ビッグ', hw: 9.5, hd: 6, price: 350, desc: '幅90cmクラス。のびのび歩き回れる' },
+  };
+  const CAGE_THEMES = {
+    glass: { name: 'ガラスケージ', price: 0, desc: 'シンプルな黒フレームのガラスケージ', floor: 'sand', tint: '#ffffff', frame: '#2F3431' },
+    white: { name: 'ホワイト＆ペーパー', price: 60, desc: '白いフレームにキッチンペーパー敷き。清潔感たっぷり', floor: 'paper', tint: '#ffffff', frame: '#F4F2ED' },
+    wood: { name: '木製ビバリウム', price: 120, desc: 'あたたかみのある木のフレームと背面パネル', floor: 'sand', tint: '#F4E6D0', frame: '#7A4E2C', back: 'wood', thick: true },
+    desert: { name: 'デザート', price: 120, desc: '赤い砂と岩の背景で、ふるさとの荒野ふうに', floor: 'sand', tint: '#E7AE7E', frame: '#3A2E26', back: 'rock' },
+    candy: { name: 'おかしの家', price: 300, desc: 'クッキーの床、チョコの壁、キャンディの柱。あまーいおうち', floor: 'cookie', tint: '#ffffff', frame: '#F7A8C4', back: 'choco', thick: true, candy: true },
+  };
+  // ケージ用の模様（一度作ったら使い回す）
+  const cageTexCache = {};
+  function cageTex(kind) {
+    if (cageTexCache[kind]) return cageTexCache[kind];
+    const c = document.createElement('canvas');
+    const ctx = c.getContext('2d');
+    const r = prng(kind.length * 17 + 3);
+    if (kind === 'paper') {
+      c.width = c.height = 512;
+      ctx.fillStyle = '#F7F5F0'; ctx.fillRect(0, 0, 512, 512);
+      for (let y = 8; y < 512; y += 16) for (let x = 8 + (y / 16 % 2) * 8; x < 512; x += 16) { ctx.fillStyle = 'rgba(180,170,150,.18)'; ctx.beginPath(); ctx.arc(x, y, 2.2, 0, 7); ctx.fill(); }
+      ctx.strokeStyle = 'rgba(170,160,140,.25)'; ctx.lineWidth = 3;
+      for (const x of [170, 341]) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 512); ctx.stroke(); }
+    } else if (kind === 'cookie') {
+      c.width = 1024; c.height = 768;
+      ctx.fillStyle = '#B9814A'; ctx.fillRect(0, 0, 1024, 768);
+      const W = 1024 / 6, H = 768 / 4;
+      for (let j = 0; j < 4; j++) for (let i = 0; i < 6; i++) {
+        const x = i * W + 6, y = j * H + 6, w = W - 12, h = H - 12;
+        ctx.fillStyle = (i + j) % 2 ? '#E8B877' : '#DDA766';
+        ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, 18) : ctx.rect(x, y, w, h); ctx.fill();
+        ctx.strokeStyle = 'rgba(150,95,40,.55)'; ctx.lineWidth = 4; ctx.setLineDash([10, 10]);
+        ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x + 12, y + 12, w - 24, h - 24, 10) : ctx.rect(x + 12, y + 12, w - 24, h - 24); ctx.stroke(); ctx.setLineDash([]);
+        for (let k = 0; k < 6; k++) { ctx.fillStyle = 'rgba(130,80,35,.6)'; ctx.beginPath(); ctx.arc(x + w * (0.25 + (k % 3) * 0.25), y + h * (k < 3 ? 0.38 : 0.66), 4, 0, 7); ctx.fill(); }
+        if (r() < 0.35) { ctx.fillStyle = '#5A3418'; for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(x + w * r(), y + h * r(), 7, 0, 7); ctx.fill(); } }
+      }
+    } else if (kind === 'choco') {
+      c.width = 1024; c.height = 256;
+      ctx.fillStyle = '#4A2A17'; ctx.fillRect(0, 0, 1024, 256);
+      for (let i = 0; i < 8; i++) for (let j = 0; j < 2; j++) {
+        const x = i * 128 + 8, y = j * 128 + 8;
+        const g = ctx.createLinearGradient(x, y, x + 112, y + 112);
+        g.addColorStop(0, '#7B4A2A'); g.addColorStop(1, '#5A3420');
+        ctx.fillStyle = g; ctx.fillRect(x, y, 112, 112);
+        ctx.fillStyle = 'rgba(255,220,190,.12)'; ctx.fillRect(x + 6, y + 6, 100, 10);
+      }
+      // ピンクのアイシングを上にたらす
+      ctx.fillStyle = '#F9C2D6';
+      ctx.fillRect(0, 0, 1024, 18);
+      for (let x = 10; x < 1024; x += 46 + r() * 30) { ctx.beginPath(); ctx.ellipse(x, 18, 11, 18 + r() * 26, 0, 0, 7); ctx.fill(); }
+    } else if (kind === 'rock') {
+      c.width = 1024; c.height = 256;
+      const g = ctx.createLinearGradient(0, 0, 0, 256);
+      g.addColorStop(0, '#B97A55'); g.addColorStop(1, '#8E5638');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, 1024, 256);
+      for (let i = 0; i < 60; i++) { ctx.fillStyle = `rgba(${r() < 0.5 ? '70,35,20' : '230,170,120'},${0.1 + r() * 0.15})`; ctx.beginPath(); ctx.ellipse(r() * 1024, r() * 256, 30 + r() * 90, 8 + r() * 26, r() * 0.4 - 0.2, 0, 7); ctx.fill(); }
+      ctx.strokeStyle = 'rgba(60,30,15,.35)'; ctx.lineWidth = 2;
+      for (let i = 0; i < 14; i++) { ctx.beginPath(); let x = r() * 1024, y = r() * 256; ctx.moveTo(x, y); for (let k = 0; k < 5; k++) { x += 20 + r() * 40; y += r() * 30 - 15; ctx.lineTo(x, y); } ctx.stroke(); }
+    } else if (kind === 'wood') {
+      c.width = 1024; c.height = 256;
+      ctx.fillStyle = '#9A6A42'; ctx.fillRect(0, 0, 1024, 256);
+      for (let i = 0; i < 70; i++) { ctx.strokeStyle = `rgba(${r() < 0.5 ? '80,45,22' : '200,150,100'},${0.12 + r() * 0.2})`; ctx.lineWidth = 1 + r() * 3; const y = r() * 256; ctx.beginPath(); ctx.moveTo(0, y); for (let x = 0; x <= 1024; x += 32) ctx.lineTo(x, y + Math.sin(x / 70 + i) * 5); ctx.stroke(); }
+      ctx.fillStyle = 'rgba(50,28,12,.35)'; for (let x = 256; x < 1024; x += 256) ctx.fillRect(x - 2, 0, 4, 256);
+    } else if (kind === 'stripe') {
+      c.width = 64; c.height = 256;
+      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, 64, 256);
+      ctx.fillStyle = '#E8436A';
+      for (let y = -64; y < 320; y += 64) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(64, y + 32); ctx.lineTo(64, y + 56); ctx.lineTo(0, y + 24); ctx.fill(); }
+    } else if (kind === 'swirl') {
+      c.width = c.height = 256;
+      const cols = ['#FF7BA6', '#FFFFFF', '#7FD3F7', '#FFFFFF', '#FFD45E', '#FFFFFF'];
+      for (let i = 0; i < 36; i++) { ctx.fillStyle = cols[i % cols.length]; ctx.beginPath(); ctx.moveTo(128, 128); ctx.arc(128, 128, 126, i / 36 * 6.283 + i * 0.05, (i + 1) / 36 * 6.283 + i * 0.05 + 0.02); ctx.fill(); }
+    }
+    const t = new T.CanvasTexture(c);
+    t.encoding = T.sRGBEncoding;
+    t.anisotropy = 4;
+    cageTexCache[kind] = t;
+    return t;
+  }
+  // おかしの家の飾り：キャンディの柱、ガムドロップ、ペロペロキャンディ
+  function candyBits(hw, hd) {
+    const g = new T.Group();
+    const stripe = cageTex('stripe'); stripe.wrapS = stripe.wrapT = T.RepeatWrapping; stripe.repeat.set(1, 3);
+    const caneM = phys('#ffffff', { map: stripe, roughness: 0.35, clearcoat: 0.6 });
+    for (const [x, z] of [[-hw - 0.15, -hd - 0.15], [hw + 0.15, -hd - 0.15], [-hw - 0.15, hd + 0.15], [hw + 0.15, hd + 0.15]]) {
+      const back = z < 0;
+      const h = back ? 2.6 : 0.85;
+      const post = new T.Mesh(new T.CylinderGeometry(0.17, 0.17, h, 18), caneM);
+      post.position.set(x, h / 2, z);
+      g.add(post);
+      const top = new T.Mesh(new T.SphereGeometry(0.24, 18, 12), phys(back ? '#FF7BA6' : '#7FD3F7', { roughness: 0.3, clearcoat: 0.8 }));
+      top.position.set(x, h + 0.08, z);
+      g.add(top);
+    }
+    const gumCols = ['#FF5C8A', '#FFD45E', '#7FD36B', '#7FB8F7', '#C08BF0', '#FF9A4D'];
+    const r = prng(9);
+    for (let i = 0; i < 16; i++) {
+      const m = new T.Mesh(new T.SphereGeometry(0.13, 14, 10, 0, 6.283, 0, 1.75), phys(gumCols[i % gumCols.length], { roughness: 0.25, clearcoat: 1, transparent: true, opacity: 0.92 }));
+      const k = (i + 0.5) / 16;
+      m.position.set(-hw + k * hw * 2, 2.28, -hd - 0.12);
+      m.scale.y = 0.9 + r() * 0.3;
+      g.add(m);
+    }
+    const swirl = cageTex('swirl');
+    for (const [x, z, s2] of [[-hw - 1.3, -hd - 0.6, 1], [hw + 1.2, -hd - 0.9, 0.8]]) {
+      const stick = new T.Mesh(new T.CylinderGeometry(0.06, 0.06, 3 * s2, 10), phys('#FFFFFF', { roughness: 0.6 }));
+      stick.position.set(x, 1.5 * s2, z);
+      const disc = new T.Mesh(new T.CylinderGeometry(0.9 * s2, 0.9 * s2, 0.22, 40), [phys('#FF7BA6', { roughness: 0.3, clearcoat: 1 }), phys('#ffffff', { map: swirl, roughness: 0.25, clearcoat: 1 }), phys('#ffffff', { map: swirl, roughness: 0.25, clearcoat: 1 })]);
+      disc.rotation.x = Math.PI / 2;
+      disc.position.set(x, 3 * s2 + 0.7 * s2, z);
+      g.add(stick, disc);
+    }
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    return g;
+  }
 
   // ======================================================
   // ケース
@@ -1606,6 +1724,7 @@
     scene.add(hemi, sun, heat, rim);
     // ケースの外：木のテーブルと部屋の壁
     let wall = null, windowG = null, windowGlass = null, sunPatch = null;
+    const roomProps = {};
     // 夜につける、部屋のスタンドライト
     const lamp = new T.PointLight('#FFC98A', 0, 26, 1.4);
     lamp.position.set(-7, 7, 5);
@@ -1684,27 +1803,56 @@
       books.position.set(-7.6, 0, 5.4);
       books.rotation.y = 0.4;
       scene.add(pot, books);
+      roomProps.pot = pot; roomProps.books = books;
     }
 
-    // 床（ホット側がほんのり暖色）
+    // 床（ホット側がほんのり暖色）とガラス・枠。ケージの大きさと見た目を変えると作り直す
     const sand = canvasTexture(sandCanvas(), { srgb: true });
     sand.flipY = true;
-    const floor = new T.Mesh(new T.PlaneGeometry(TANK.hw * 2, TANK.hd * 2), phys('#ffffff', { map: sand, bumpMap: sand, bumpScale: 0.012, roughness: 1 }));
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    scene.add(floor);
-    // ガラスと枠（手前は低くして中が見えるように）
-    const glass = phys('#D5E4DD', { transparent: true, opacity: 0.28, roughness: 0.05, clearcoat: 1 });
-    const frame = phys('#2F3431', { roughness: 0.4 });
+    const TK = { hw: TANK.hw, hd: TANK.hd };
+    const cageG = new T.Group();
+    scene.add(cageG);
+    let floor = null;
     const frontGlass = [];
-    for (const [x, z, w, d, h] of [[0, -TANK.hd - 0.1, TANK.hw * 2 + 0.3, 0.1, 2.2], [-TANK.hw - 0.1, 0, 0.1, TANK.hd * 2 + 0.2, 2.2], [TANK.hw + 0.1, 0, 0.1, TANK.hd * 2 + 0.2, 2.2], [0, TANK.hd + 0.1, TANK.hw * 2 + 0.3, 0.1, 0.5]]) {
-      const m = new T.Mesh(new T.BoxGeometry(w, h, d), glass);
-      m.position.set(x, h / 2, z);
-      scene.add(m);
-      const f = new T.Mesh(new T.BoxGeometry(w + 0.12, 0.1, d + 0.12), frame);
-      f.position.set(x, h, z);
-      scene.add(f);
-      if (z > 0) frontGlass.push(m, f);
+    let cageKey = '';
+    function buildCage(theme) {
+      while (cageG.children.length) { const c = cageG.children.pop(); disposeTree(c); }
+      frontGlass.length = 0;
+      const th = CAGE_THEMES[theme] || CAGE_THEMES.glass;
+      const ftex = th.floor === 'sand' ? sand : cageTex(th.floor);
+      floor = new T.Mesh(new T.PlaneGeometry(TK.hw * 2, TK.hd * 2), phys(th.tint, { map: ftex, bumpMap: ftex, bumpScale: th.floor === 'cookie' ? 0.03 : 0.012, roughness: th.floor === 'paper' ? 0.95 : 1 }));
+      floor.rotation.x = -Math.PI / 2;
+      floor.receiveShadow = true;
+      cageG.add(floor);
+      // ガラスと枠（手前は低くして中が見えるように）
+      const glass = phys('#D5E4DD', { transparent: true, opacity: 0.28, roughness: 0.05, clearcoat: 1 });
+      const frame = phys(th.frame, { roughness: th.candy ? 0.35 : 0.4, clearcoat: th.candy ? 0.6 : 0 });
+      const ft = th.thick ? 0.22 : 0.1;
+      for (const [x, z, w, d, h] of [[0, -TK.hd - 0.1, TK.hw * 2 + 0.3, 0.1, 2.2], [-TK.hw - 0.1, 0, 0.1, TK.hd * 2 + 0.2, 2.2], [TK.hw + 0.1, 0, 0.1, TK.hd * 2 + 0.2, 2.2], [0, TK.hd + 0.1, TK.hw * 2 + 0.3, 0.1, 0.5]]) {
+        const m = new T.Mesh(new T.BoxGeometry(w, h, d), glass);
+        m.position.set(x, h / 2, z);
+        cageG.add(m);
+        const f = new T.Mesh(new T.BoxGeometry(w + ft + 0.02, ft, d + ft + 0.02), frame);
+        f.position.set(x, h, z);
+        f.castShadow = !!th.thick;
+        cageG.add(f);
+        if (th.thick) {
+          const base = new T.Mesh(new T.BoxGeometry(w + ft + 0.02, ft * 0.8, d + ft + 0.02), frame);
+          base.position.set(x, ft * 0.4, z);
+          cageG.add(base);
+          if (z > 0) frontGlass.push(base);
+        }
+        if (z > 0) frontGlass.push(m, f);
+      }
+      if (th.back) {
+        const bt = cageTex(th.back);
+        bt.wrapS = T.RepeatWrapping; bt.repeat.set(Math.max(1, TK.hw / 6.5), 1);
+        const back = new T.Mesh(new T.PlaneGeometry(TK.hw * 2 + 0.2, 2.2), phys('#ffffff', { map: bt, roughness: th.back === 'choco' ? 0.5 : 0.9 }));
+        back.position.set(0, 1.1, -TK.hd - 0.17);
+        back.receiveShadow = true;
+        cageG.add(back);
+      }
+      if (th.candy) cageG.add(candyBits(TK.hw, TK.hd));
     }
     // 家具（ケースごとに差しかえる）
     const decorG = new T.Group();
@@ -1729,6 +1877,29 @@
     scene.add(blob);
 
     const BOUNDS = { x: TANK.hw - 0.7, zMin: -TANK.hd + 0.6, zMax: TANK.hd - 0.5 };
+    function setCage(c) {
+      c = c || {};
+      const size = CAGE_SIZES[c.size] ? c.size : 'std', theme = CAGE_THEMES[c.theme] ? c.theme : 'glass';
+      const key = size + '|' + theme;
+      if (key === cageKey) return;
+      const sizeChanged = !cageKey || cageKey.split('|')[0] !== size;
+      cageKey = key;
+      TK.hw = CAGE_SIZES[size].hw; TK.hd = CAGE_SIZES[size].hd;
+      BOUNDS.x = TK.hw - 0.7; BOUNDS.zMin = -TK.hd + 0.6; BOUNDS.zMax = TK.hd - 0.5;
+      buildCage(theme);
+      if (!sizeChanged) return;
+      // 大きいケージは、カメラを少し引いて全体が見えるように
+      const f = size === 'std' ? 1 : Math.max(TK.hw / TANK.hw * 1.1, TK.hd / TANK.hd);
+      HOME.pos.set(0, 7.6 * f, 12.6 * f);
+      HOME.look.set(0, 0.2, -0.4 * f);
+      Object.assign(sun.shadow.camera, { left: -TK.hw - 2.5, right: TK.hw + 2.5, top: TK.hd + 3.5, bottom: -TK.hd - 3.5 });
+      sun.shadow.camera.updateProjectionMatrix();
+      heat.position.x = TK.hw - 0.7;
+      if (roomProps.pot) roomProps.pot.position.set(TK.hw + 1.1, 0, -TK.hd - 1.7);
+      if (roomProps.books) roomProps.books.position.set(-TK.hw - 1.1, 0, TK.hd + 0.9);
+      const n = st.poops.length; setPoops(0); setPoops(n);
+      st.x = clamp(st.x, -BOUNDS.x + 1, BOUNDS.x - 1); st.z = clamp(st.z, BOUNDS.zMin + 1, BOUNDS.zMax - 1);
+    }
     let HIDE = null;
     let obstacles = [];
     let decorKey = '';
@@ -1828,7 +1999,7 @@
       for (let k = 0; k < 40; k++) { const x = rand(xa, xb), z = rand(za, zb); if (freeAt(x, z, pad)) return { x, z }; }
       return { x: rand(xa, xb), z: rand(za, zb) };
     }
-    const POOP_SPOTS = [[5.4, -3.8], [4.95, -4.0], [5.55, -3.35]];
+    const poopSpot = i => [[TK.hw - 1.1, -TK.hd + 0.7], [TK.hw - 1.55, -TK.hd + 0.5], [TK.hw - 0.95, -TK.hd + 1.15]][i % 3];
 
     const st = {
       gk: null, id: null, key: '', size: 1, x: 0.5, z: 0.8, yaw: 0.4,
@@ -1888,7 +2059,7 @@
       const obj = buildFood(kind);
       let x, z;
       let tries = 0;
-      do { x = rand(-TANK.hw + 2, TANK.hw - 1.5); z = rand(-TANK.hd + 1.4, TANK.hd - 1); tries++; } while ((Math.hypot(x - st.x, z - st.z) < 3 || !freeAt(x, z, 0.4)) && tries < 60);
+      do { x = rand(-TK.hw + 2, TK.hw - 1.5); z = rand(-TK.hd + 1.4, TK.hd - 1); tries++; } while ((Math.hypot(x - st.x, z - st.z) < 3 || !freeAt(x, z, 0.4)) && tries < 60);
       obj.position.set(x, 0, z);
       obj.rotation.y = rand(0, 6.28);
       scene.add(obj);
@@ -1906,7 +2077,7 @@
       while (st.poops.length > n) { const p = st.poops.pop(); scene.remove(p); disposeTree(p); }
       while (st.poops.length < n) {
         const p = buildPoop();
-        const [x, z] = POOP_SPOTS[st.poops.length % POOP_SPOTS.length];
+        const [x, z] = poopSpot(st.poops.length);
         p.position.set(x, 0, z);
         p.rotation.y = rand(0, 6.28);
         scene.add(p);
@@ -2271,10 +2442,10 @@
             else if (!st.night && Math.random() < 0.12) { st.sleeping = true; st.wait = rand(12, 25); st.zzz = 0.8; }
             else {
               // 寒いと暖かい側（右）へ、暑いと涼しい側（左）へ寄りがち
-              let xa = -TANK.hw + 2, xb = TANK.hw - 1.8;
+              let xa = -TK.hw + 2, xb = TK.hw - 1.8;
               if (st.heatPref > 0 && Math.random() < 0.75) xa = 0.5;
               if (st.heatPref < 0 && Math.random() < 0.75) xb = -0.5;
-              st.mode = 'walk'; st.target = freePoint(1.4 * st.size, xa, xb, -TANK.hd + 1.9, TANK.hd - 1.3);
+              st.mode = 'walk'; st.target = freePoint(1.4 * st.size, xa, xb, -TK.hd + 1.9, TK.hd - 1.3);
             }
           }
         }
@@ -2396,6 +2567,7 @@
     setNight(false);
     requestAnimationFrame(loop);
 
+    setCage({});
     return {
       // ヒーターの温度：光の強さと、レオパがどちら側に寄りがちかを変える
       setHeat(temp) {
@@ -2403,7 +2575,7 @@
         st.heatPref = temp <= 30 ? 1 : temp >= 34 ? -1 : 0;
         heat.intensity = 0.8 * st.heatGlow;
       },
-      _st: st, setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
+      _st: st, setCage, setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
       pendingFoods: () => st.foods.map(f => f.kind),
       lick() { st.lick = 0.9; },
       happy() { st.happy = 1.4; if (st.sleeping) wake(); },
@@ -2591,5 +2763,5 @@
   }
   function photoReady(look, opts) { return photoCache.get(photoKey(look, opts)) || null; }
 
-  root.Leopa3D = { supported, createTank, createViewer, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR, TANK };
+  root.Leopa3D = { CAGE_SIZES, CAGE_THEMES, supported, createTank, createViewer, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR, TANK };
 })(typeof window !== 'undefined' ? window : globalThis);

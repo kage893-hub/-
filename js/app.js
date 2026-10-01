@@ -388,6 +388,7 @@
     $('#tankEmpty').hidden = !!g;
     if (!tank) return;
     tank.setGecko(g ? lookOf(g) : null);
+    tank.setCage(g ? cageOf(g) : null);
     tank.setDecor(g ? decorOf(g) : []);
     tank.setPoops(g ? g.poop : 0);
     tank.setDirty(!!g && g.clean < 35);
@@ -716,6 +717,26 @@
     },
     temp(t) { S.incTemp = Number(t.dataset.t); renderView(); save(); },
     hatch(t) { hatch(t.dataset.id); },
+    buyCage(t) {
+      const kind = t.dataset.kind, id = t.dataset.id;
+      const v = (kind === 'size' ? L3.CAGE_SIZES : L3.CAGE_THEMES)[id];
+      const own = cageOwn(), g = selected();
+      if (!v) return;
+      if (!own[id]) {
+        if (S.coins < v.price) { toast('コインが足りません'); return; }
+        S.coins -= v.price; own[id] = 1; sfx('buy');
+        toast(g ? `${v.name}を買って、${g.name}のケースに使いました` : `${v.name}を買いました`);
+      } else if (g) toast(`${g.name}のケースを${v.name}にしました`);
+      if (g) applyCage(g, kind, id);
+      renderView(); save();
+    },
+    setCageOpt(t) {
+      const g = selected();
+      if (!g || !cageOwn()[t.dataset.id]) return;
+      applyCage(g, t.dataset.kind, t.dataset.id);
+      renderView(); save();
+    },
+    shopTab(t) { S.shopTab = t.dataset.tab; renderView(); const v = $('#view-shop'); if (v) v.scrollTop = 0; window.scrollTo(0, 0); },
     candle(t) {
       const e = S.eggs.find(x => x.id === t.dataset.id);
       if (!e) return;
@@ -1137,17 +1158,24 @@
           <button class="act primary sm" data-action="buyGecko" data-i="${i}" ${S.coins < o.price || S.geckos.length >= S.cases ? 'disabled' : ''}>${o.price} コインでおむかえ</button>
         </div></div>`;
     }).join('');
-    setHTML($('#view-shop'), `
-      <h2 class="h2">ショップ</h2>
-      <h3 class="h3">ごはん</h3>
+    const tab = S.shopTab || 'leopa';
+    const TABS = [['leopa', 'レオパ'], ['food', 'ごはん'], ['interior', 'インテリア'], ['other', 'そのほか']];
+    const tabs = `<div class="shop-tabs" role="tablist">${TABS.map(([k, n]) => `<button role="tab" aria-selected="${tab === k}" class="${tab === k ? 'on' : ''}" data-action="shopTab" data-tab="${k}">${n}</button>`).join('')}</div>`;
+    const sec = {
+      leopa: () => `<h3 class="h3">おむかえ <small class="muted">次の入荷まで ${fmtLeft(S.offersAt - now)}</small></h3>
+      ${specialCard()}
+      ${offers ? `<div class="offers">${offers}</div>` : '<p class="muted">売り切れです。次の入荷をお待ちください。</p>'}
+      <p class="muted small">コインは、お世話・ふ化・里親に出すことでもらえます。</p>
+      ${ordersSection(now)}`,
+      food: () => `<h3 class="h3">ごはん</h3>
       <div class="list">${Object.entries(FOODS).map(([k, F]) => `
         <button class="row" data-action="buyFood" data-kind="${k}" ${S.coins < F.price ? 'disabled' : ''}>
           <span class="row-art">${A.food(k)}</span>
           <span class="row-main"><b>${F.name} ${F.pack}匹</b><small>いま ${S.food[k]}匹 ・ ${F.desc}</small></span>
           <span class="row-side price">${F.price}</span>
-        </button>`).join('')}</div>
-      ${speedShop()}
-      ${interiorShop()}
+        </button>`).join('')}</div>`,
+      interior: () => `${cageShop()}${interiorShop()}`,
+      other: () => `${speedShop()}
       <h3 class="h3">ケース <small class="muted">${S.geckos.length} / ${S.cases} 使用中</small></h3>
       <div class="list">
         <button class="row" data-action="buyCase" ${S.cases >= CASE_MAX || S.coins < casePrice() ? 'disabled' : ''}>
@@ -1155,12 +1183,9 @@
           ${S.cases >= CASE_MAX ? '' : `<span class="row-side price">${casePrice()}</span>`}
         </button>
       </div>
-      <h3 class="h3">おむかえ <small class="muted">次の入荷まで ${fmtLeft(S.offersAt - now)}</small></h3>
-      ${specialCard()}
-      ${offers ? `<div class="offers">${offers}</div>` : '<p class="muted">売り切れです。次の入荷をお待ちください。</p>'}
-      <p class="muted small">コインは、お世話・ふ化・里親に出すことでもらえます。</p>
-      ${ordersSection(now)}
-      <div class="danger-zone">${isStandalone() || inFrame ? '' : '<button class="act ghost sm" data-action="installMenu">ホーム画面に追加</button>'}<button class="act ghost sm" data-action="giftMenu">ギフトコード</button><button class="act ghost sm" data-action="notifyMenu">おしらせ通知</button><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`);
+      <div class="danger-zone">${isStandalone() || inFrame ? '' : '<button class="act ghost sm" data-action="installMenu">ホーム画面に追加</button>'}<button class="act ghost sm" data-action="giftMenu">ギフトコード</button><button class="act ghost sm" data-action="notifyMenu">おしらせ通知</button><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`,
+    };
+    setHTML($('#view-shop'), `<h2 class="h2">ショップ</h2>${tabs}${(sec[tab] || sec.leopa)()}`);
   }
 
   function welcome() {
@@ -1459,11 +1484,43 @@
     if (tank) tank.setEdit(e ? { sel: e.sel } : null);
     renderView();
   }
+  // ---- ケージの大きさ・見た目（買うと持ち物になり、もようがえでケースごとに選べる）
+  const cageOf = g => { if (!g.cage) g.cage = { size: 'std', theme: 'glass' }; return g.cage; };
+  const cageDims = g => L3.CAGE_SIZES[cageOf(g).size] || L3.CAGE_SIZES.std;
+  const cageOwn = () => { if (!S.cageOwn) S.cageOwn = { std: 1, glass: 1 }; return S.cageOwn; };
+  function applyCage(g, kind, id) {
+    const c = cageOf(g);
+    if (kind === 'size') {
+      c.size = id;
+      // 小さくしたときは、はみ出した家具を内側へ寄せる
+      const TK = cageDims(g);
+      for (const d of decorOf(g)) {
+        const r = L3.DECOR[d.t].r + 0.15;
+        d.x = clamp(d.x, -TK.hw + r, TK.hw - r); d.z = clamp(d.z, -TK.hd + r, TK.hd - r);
+      }
+    } else c.theme = id;
+  }
+  function cageShop() {
+    const own = cageOwn(), g = selected();
+    const row = (kind, id, v) => {
+      const has = own[id], on = g && cageOf(g)[kind] === id;
+      return `<button class="row${on ? ' on' : ''}" data-action="buyCage" data-kind="${kind}" data-id="${id}" ${!has && S.coins < v.price ? 'disabled' : ''}>
+        ${kind === 'theme' ? `<span class="row-art cage-sw cage-${id}"></span>` : ''}
+        <span class="row-main"><b>${v.name}${on ? '（いまのケース）' : ''}</b><small>${v.desc}</small></span>
+        <span class="row-side ${has ? '' : 'price'}">${has ? (on ? '使用中' : 'つかう') : v.price}</span>
+      </button>`;
+    };
+    return `<h3 class="h3">ケージの大きさ <small class="muted">${g ? `${esc(g.name)}のケースに使います` : ''}</small></h3>
+      <div class="list">${Object.entries(L3.CAGE_SIZES).map(([id, v]) => row('size', id, v)).join('')}</div>
+      <h3 class="h3">ケージの見た目</h3>
+      <div class="list">${Object.entries(L3.CAGE_THEMES).map(([id, v]) => row('theme', id, v)).join('')}</div>
+      <p class="muted small">一度買えば、どのケースでも使えます。ケースごとの切りかえは「もようがえ」からもできます。</p>`;
+  }
   function decorOk(g, x, z, t, skip) {
     const r = L3.DECOR[t].r;
-    const TK = L3.TANK;
+    const TK = cageDims(g);
     if (Math.abs(x) > TK.hw - r - 0.1 || z < -TK.hd + r + 0.1 || z > TK.hd - r - 0.1) return 'ケースのはしに寄りすぎです';
-    if (Math.hypot(x - 5.4, z + 3.8) < r + 0.7) return 'そこはトイレの場所です';
+    if (Math.hypot(x - (TK.hw - 1.1), z - (-TK.hd + 0.7)) < r + 0.7) return 'そこはトイレの場所です';
     for (let i = 0; i < decorOf(g).length; i++) {
       if (i === skip) continue;
       const d = decorOf(g)[i];
@@ -1505,6 +1562,9 @@
       <div class="gc-head"><b>もようがえ中</b><small class="muted">${list.length} / ${MAX_DECOR} 個</small></div>
       <p class="muted small">${hint}</p>
       ${sel ? `<div class="actions"><button class="act sm" data-action="rotateDecor">向きを変える</button><button class="act sm" data-action="storeDecor">しまう</button></div>` : ''}
+      <div class="label">ケージ</div>
+      <div class="decor-inv">${Object.entries(L3.CAGE_SIZES).filter(([id]) => cageOwn()[id]).map(([id, v]) => `<button class="chip${cageOf(g).size === id ? ' on' : ''}" data-action="setCageOpt" data-kind="size" data-id="${id}">${v.name}</button>`).join('')}</div>
+      <div class="decor-inv">${Object.entries(L3.CAGE_THEMES).filter(([id]) => cageOwn()[id]).map(([id, v]) => `<button class="chip${cageOf(g).theme === id ? ' on' : ''}" data-action="setCageOpt" data-kind="theme" data-id="${id}">${v.name}</button>`).join('')}</div>
       <div class="label">持っている家具</div>
       ${inv.length ? `<div class="decor-inv">${inv.map(([t, n]) => `<button class="chip${editing.place === t ? ' on' : ''}" data-action="pickDecor" data-t="${t}">${L3.DECOR[t].name} ×${n}</button>`).join('')}</div>`
         : '<p class="muted small">しまった家具や、ショップで買った家具がここに並びます。</p>'}
