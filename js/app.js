@@ -231,6 +231,9 @@
         const fedH = Math.max(0, Math.min(dtH, (g.hunger - 30) / RATE.hunger));
         g.hunger = clamp(g.hunger - RATE.hunger * dtH);
         g.clean = clamp(g.clean - RATE.clean * dtH);
+        // おなかが空いている時間が長いと、しっぽの栄養を使う
+        const hungryH = Math.max(0, dtH - fedH);
+        g.cond = clamp((g.cond == null ? 55 : g.cond) - hungryH * 0.6 * speedX() + (fedH > 0 && g.cond < 50 ? fedH * 0.1 * speedX() : 0));
         if (fedH > 0) grow(g, fedH * GROWTH.perHour * speedX() * heatInfo(heatOf(g)).growth, now);
       }
       S.lastTick = now;
@@ -242,7 +245,7 @@
     }
     for (const g of S.geckos) {
       if (g.poopAt && now >= g.poopAt) { g.poop = Math.min(3, g.poop + 1); g.clean = clamp(g.clean - 10); g.poopAt = 0; mile(g, 'poop', 'はじめてのフンをした（元気なしるし！）', false); }
-      if (g.shedUntil && now >= g.shedUntil) g.shedUntil = 0;
+      if (g.shedUntil && now >= g.shedUntil) finishShed(g);
       if (g.gravid && now >= g.gravid.layAt) layEggs(g, now);
     }
   }
@@ -251,7 +254,7 @@
     const before = g.growth, st = stageOf(g);
     g.growth = Math.min(GROWTH.max, g.growth + amt);
     if (Math.floor(before / GROWTH.shedEvery) < Math.floor(g.growth / GROWTH.shedEvery) && !g.shedUntil) {
-      g.shedUntil = now + 40 * MIN;
+      g.shedUntil = now + 40 * MIN; g.shedDur = 40 * MIN;
     }
     const st2 = stageOf(g);
     if (st2 !== st) { toast(`${g.name}が${STAGE_LABEL[st2]}になりました！`); memo(g, `${STAGE_LABEL[st2]}になった！ 模様も変わってきたね`, true); }
@@ -396,6 +399,14 @@
   let tank = null;
   let tankGid = null;
 
+  // しっぽの太さ（-0.15 ほっそり 〜 +0.35 ぽっちゃり）
+  const condOf = g => (g.cond == null ? 55 : g.cond);
+  const fatOf = g => clamp((condOf(g) - 55) / 120, -0.15, 0.35);
+  function tankCondition(g) {
+    if (!tank || !tank.setShed) return;
+    tank.setShed(g && g.shedUntil ? shedProgress(g, Date.now()) : null);
+    tank.setFat(g ? fatOf(g) : 0);
+  }
   function lookOf(g) {
     return { id: g.id, genes: g.genes, tang: g.tang, poly: g.poly, seed: g.seed, stage: stageOf(g), gravid: !!g.gravid, shed: !!g.shedUntil, size: sizeOf(g) };
   }
@@ -411,6 +422,7 @@
       onTapPoop() { ACTIONS.poop(); },
       onFloorTap: (x, z) => floorTap(x, z),
       onDecorTap: i => decorTap(i),
+      onBehavior: id => behaviorSeen(id),
     });
   }
   function sceneMount() {
@@ -424,6 +436,7 @@
     tank.setDecor(g ? decorOf(g) : []);
     tank.setPoops(g ? g.poop : 0);
     tank.setDirty(!!g && g.clean < 35);
+    tankCondition(g);
     tank.setClock(clockNow(), seasonNow());
     if (g && tank.setHeat) tank.setHeat(heatOf(g));
     const th = $('.thermo');
@@ -460,10 +473,22 @@
   // ======================================================
   // お世話
   // ======================================================
+  // 脱皮の進み具合（0：白くなりはじめ → 0.6：脱ぎはじめ → 1：おわり）
+  function shedProgress(g, now) { if (!g.shedUntil) return -1; const d = g.shedDur || 40 * MIN; return clamp(1 - (g.shedUntil - now) / d, 0, 1); }
+  function finishShed(g) {
+    g.shedUntil = 0; g.misted = false;
+    g.sheds = (g.sheds || 0) + 1;
+    if (g.sheds === 1) g.mile = Object.assign(g.mile || {}, { shed1: Date.now() });
+    g.tame = clamp(g.tame + 2);
+    memo(g, '脱皮が完了。脱いだ皮はぱくっと食べた');
+    if (g.id === S.selected) toast(`${g.name}の脱皮が終わりました。つやつや！`);
+  }
   function applyEat(g, kind) {
     mile(g, 'eat', `はじめての${FOODS[kind].name}をぱくっと食べた`, true);
     const F = FOODS[kind];
     g.hunger = clamp(g.hunger + F.hunger);
+    // しっぽの栄養：ミルワームは脂肪が多いので、たくさんあげるとぽっちゃりに
+    g.cond = clamp((g.cond == null ? 55 : g.cond) + ({ cricket: 1.2, dubia: 1.6, worm: 3.2 })[kind] - (g.cond > 70 && kind !== 'worm' ? 0.6 : 0));
     grow(g, F.growth * (GROWTH.perHour / 6) * speedX() * heatInfo(heatOf(g)).growth, Date.now());
     g.tame = clamp(g.tame + 1);
     S.coins += 1;
@@ -576,7 +601,12 @@
       const g = selected();
       if (!g) return;
       const full = g.hunger + pendingHunger() >= 90;
+      const tw = S.feedMode === 'tw';
       openSheet(`<h3 class="sheet-title">ごはんをあげる</h3>
+        <div class="seg two" role="radiogroup" aria-label="あげかた">
+          <button role="radio" aria-checked="${!tw}" class="${tw ? '' : 'on'}" data-action="feedMode" data-m="drop"><b>ケースに入れる</b><small>自分でつかまえる</small></button>
+          <button role="radio" aria-checked="${tw}" class="${tw ? 'on' : ''}" data-action="feedMode" data-m="tw"><b>ピンセットで</b><small>目の前でゆらしてあげる</small></button>
+        </div>
         ${full ? `<p class="notice">${esc(g.name)}はおなかいっぱいみたい。また少したってから。</p>` : ''}
         <div class="list">${Object.entries(FOODS).map(([k, F]) => `
           <button class="row" data-action="feed" data-kind="${k}" ${full || !S.food[k] ? 'disabled' : ''}>
@@ -586,6 +616,7 @@
           </button>`).join('')}</div>
         <p class="muted small">なくなったらショップで買えます。</p>`);
     },
+    feedMode(t) { S.feedMode = t.dataset.m; save(); ACTIONS.feedMenu(); },
     feed(t) {
       const g = selected();
       const k = t.dataset.kind;
@@ -593,7 +624,10 @@
       if (g.hunger + pendingHunger() >= 90) { toast('おなかいっぱいみたい'); return; }
       S.food[k]--;
       closeSheet();
-      if (tank) tank.spawnFood(k);
+      if (tank && S.feedMode === 'tw') {
+        tank.startTweezers(k);
+        if (!S.twHint) { S.twHint = true; toast('ケースの中を指でなぞって、ピンセットをゆらしてみよう'); }
+      } else if (tank) tank.spawnFood(k);
       else applyEat(g, k);
       save();
     },
@@ -642,12 +676,11 @@
     mist() {
       const g = selected();
       if (!g || !g.shedUntil) return;
-      g.shedUntil = 0;
-      g.sheds = (g.sheds || 0) + 1;
-      if (g.sheds === 1) g.mile = Object.assign(g.mile || {}, { shed1: Date.now() });
-      g.tame = clamp(g.tame + 4);
-      toast('脱皮完了！脱いだ皮はぱくっと食べちゃいました');
-      memo(g, 'しっとりケアで脱皮が完了。皮はぱくっと食べた', true);
+      // しっとりさせると、すぐに脱ぎはじめる（脱ぎおわるまで2分半くらい）
+      const now = Date.now(), peel = 150000;
+      if (shedProgress(g, now) < 0.6) { g.shedDur = peel / 0.4; g.shedUntil = now + peel; }
+      g.misted = true;
+      toast('しっとりして、脱ぎはじめました。そっと見守ってね');
       renderView();
       save();
     },
@@ -1133,7 +1166,7 @@
         <button class="act care${tutGlow('handle')}" data-action="handle">ふれあう</button>
       </div>
       ${tutCoach()}
-      ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮を手伝う</button>' : ''}
+      ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮をうながす</button>' : ''}
       ${installCard()}
       ${dailyCard()}
       <div class="card gecko-card">
@@ -1161,6 +1194,7 @@
           ${bar('せいちょう', g.growth / GROWTH.max * 100, 'var(--good)', growSide)}
         </div>
         ${weightCard(g)}
+        ${healthCard(g)}
         ${datesCard(g)}
         <p class="muted small">${st === 'adult' ? (g.growth >= GROWTH.max ? 'りっぱなおとなです' : 'おとなになりました。ペアリングできます') : `${STAGE_LABEL[st === 'baby' ? 'young' : 'adult']}まで あと${fmtLeft((next - g.growth) / (GROWTH.perHour * speedX() * heatInfo(heatOf(g)).growth) * HOUR)}ほど（ごはんを食べていれば）`}${g.hunger <= 30 ? ' ・ おなかが空いていると成長が止まります' : ''}</p>
       </div>
@@ -1206,6 +1240,48 @@
   }
 
   let dexHTML = '';
+  // ======================================================
+  // しぐさ図鑑：ケースを見ているときに見つけたしぐさを集める
+  // ======================================================
+  const BEHAVIORS = [
+    { id: 'lick', name: '舌ぺろ', desc: 'ぺろっと舌を出して、まわりのにおいを確かめる', hint: 'のんびりしているときに' },
+    { id: 'look', name: 'きょろきょろ', desc: '首をふって、まわりを見回す', hint: 'のんびりしているときに' },
+    { id: 'tilt', name: '首かしげ', desc: 'こてんと首をかしげる。なにか気になったのかな', hint: 'そっとタップしてみると' },
+    { id: 'happy', name: 'しっぽゆらゆら', desc: 'ふれあうと、しっぽをゆらしてごきげん', hint: 'なれてきたら、ふれあってみよう' },
+    { id: 'stalk', name: 'しっぽプルプル', desc: '獲物をねらって、しっぽの先をふるわせる', hint: 'ごはんをあげると' },
+    { id: 'strike', name: '飛びつき', desc: '一瞬で獲物に飛びつく', hint: 'ごはんをあげると' },
+    { id: 'miss', name: '空ぶり', desc: 'コオロギに逃げられて、きょとん', hint: 'すばしっこいコオロギで' },
+    { id: 'shake', name: 'ぶんぶん', desc: 'くわえた獲物を、首をふって弱らせる', hint: 'コオロギやデュビアで' },
+    { id: 'lips', name: '口のまわりペロリ', desc: '食べおわったら、口のまわりをなめる', hint: 'ごはんのあとに' },
+    { id: 'tweezers', name: 'ピンセットから', desc: 'ピンセットのごはんにパクッ', hint: 'ピンセットでごはんをあげると' },
+    { id: 'drink', name: '水を飲む', desc: '水入れのふちに前足をかけて、ぺろぺろ', hint: '水入れを置いておくと' },
+    { id: 'bask', name: 'ひなたぼっこ', desc: '平たい石の上で、じっと温まる', hint: '昼間、石だたみを置いておくと' },
+    { id: 'climb', name: 'よじのぼり', desc: '岩の上までよじ登る', hint: '岩を置いておくと' },
+    { id: 'hide', name: 'シェルターでおやすみ', desc: 'シェルターにもぐって眠る', hint: 'ウェットシェルターを置いておくと' },
+    { id: 'nap', name: 'うたた寝', desc: 'そのへんで、すやすや', hint: '昼間に' },
+    { id: 'night', name: '夜のおさんぽ', desc: '夜になると元気に歩き回る', hint: '夜にケースをのぞくと' },
+    { id: 'shedRub', name: '顔こすり', desc: '脱皮のとき、顔をこすりつけて皮をはがす', hint: '脱皮のときに' },
+    { id: 'shedPull', name: '皮ひっぱり', desc: '古い皮をくわえて、ぐいっと引っぱる', hint: '脱皮のときに' },
+    { id: 'shedEat', name: '皮をもぐもぐ', desc: '脱いだ皮は、栄養なので食べてしまう', hint: '脱皮のときに' },
+  ];
+  function behaviorSeen(id) {
+    const b = BEHAVIORS.find(x => x.id === id);
+    if (!b || !S.welcomed) return;
+    S.beh = S.beh || {};
+    if (S.beh[id]) return;
+    S.beh[id] = Date.now();
+    S.coins += 10;
+    toast(`しぐさ図鑑に「${b.name}」を登録！ +10コイン`);
+    dexHTML = '';
+    save();
+  }
+  function behaviorPage() {
+    const got = S.beh || {}, n = BEHAVIORS.filter(b => got[b.id]).length;
+    return `<p class="muted small">ケースをながめていて見つけたしぐさが、ここに集まります。はじめて見つけると10コイン。 ${n} / ${BEHAVIORS.length}</p>
+      <div class="beh-grid">${BEHAVIORS.map(b => got[b.id]
+        ? `<div class="beh-card"><b>${b.name}</b><small>${b.desc}</small></div>`
+        : `<div class="beh-card locked"><b>？？？</b><small>ヒント：${b.hint}</small></div>`).join('')}</div>`;
+  }
   // ======================================================
   // 品評会：その日の部門で審査。1匹につき1日1回まで
   // ======================================================
@@ -1277,7 +1353,12 @@
       return `<div class="dex-card${got ? '' : ' locked'}"><div class="dex-art">${art}</div><b>${esc(d.name)}</b><small class="muted">${esc(d.hint)}</small></div>`;
     }).join('');
     const dtab = S.dexTab || 'dex';
-    const dtabs = `<div class="shop-tabs three" role="tablist">${[['dex', '図鑑'], ['show', '品評会'], ['rec', '実績・アルバム']].map(([k, n]) => `<button role="tab" aria-selected="${dtab === k}" class="${dtab === k ? 'on' : ''}" data-action="dexTab" data-tab="${k}">${n}</button>`).join('')}</div>`;
+    const dtabs = `<div class="shop-tabs" role="tablist">${[['dex', '図鑑'], ['beh', 'しぐさ'], ['show', '品評会'], ['rec', '実績']].map(([k, n]) => `<button role="tab" aria-selected="${dtab === k}" class="${dtab === k ? 'on' : ''}" data-action="dexTab" data-tab="${k}">${n}</button>`).join('')}</div>`;
+    if (dtab === 'beh') {
+      const html = `<h2 class="h2">しぐさ図鑑</h2>${dtabs}${behaviorPage()}`;
+      if (html !== dexHTML) { setHTML($('#view-dex'), html); dexHTML = html; }
+      return;
+    }
     if (dtab === 'rec') {
       const html = `<h2 class="h2">実績・アルバム</h2>${dtabs}${albumList()}${achSection()}`;
       if (html !== dexHTML) { setHTML($('#view-dex'), html); dexHTML = html; }
@@ -2099,7 +2180,8 @@
   }
   function weightOf(g) {
     let w = bodyBase(g);
-    w *= 0.93 + (g.hunger / 100) * 0.1;                       // おなかが空くと軽く、満腹だと少し重く
+    w *= 0.93 + (g.hunger / 100) * 0.1;
+    w *= 0.92 + condOf(g) / 100 * 0.16;                       // しっぽの栄養（ほっそり〜ぽっちゃり）                       // おなかが空くと軽く、満腹だと少し重く
     if (g.gravid) w *= 1.18;                                   // 卵のぶん
     return Math.round(w * 10) / 10;
   }
@@ -2129,6 +2211,34 @@
       <path d="${area}" fill="var(--accent)" opacity=".16"/><path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
       <circle cx="${X(pts.length - 1).toFixed(1)}" cy="${Y(cur).toFixed(1)}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/></svg>`;
   }
+  // ======================================================
+  // けんこうチェック：しっぽの太さ・体重の変化・食欲・脱皮・温度・ケースのきれいさ
+  // ======================================================
+  function healthCard(g) {
+    const c = condOf(g), now = Date.now();
+    const tail = c < 30 ? ['ほっそり', 'warn', 'ごはんを少し多めにあげよう'] : c < 45 ? ['すこし細め', 'info', 'コオロギやデュビアをしっかりあげよう'] : c <= 72 ? ['ちょうどいい', 'good', ''] : c <= 85 ? ['ぷっくり', 'good', 'しっぽに栄養がたっぷり'] : ['ぽっちゃり', 'warn', 'ミルワームはおやつ程度に。コオロギ中心がおすすめ'];
+    const log = weightLog(g);
+    const wk = log.length > 1 ? log[Math.max(0, log.length - 8)] : null;
+    const dw = wk ? Math.round((weightOf(g) - wk.w) * 10) / 10 : null;
+    const wtxt = dw == null ? ['記録中', 'muted'] : dw > 0.2 ? [`ふえている（+${dw}g）`, 'good'] : dw < -0.5 ? [`へっている（${dw}g）`, 'warn'] : ['安定', 'good'];
+    const app = g.hunger >= 60 ? ['まんぷく', 'good'] : g.hunger >= 25 ? ['ふつう', 'good'] : ['おなかぺこぺこ', 'warn'];
+    const sp = g.shedUntil ? shedProgress(g, now) : -1;
+    const shed = sp < 0 ? [`順調（これまで${g.sheds || 0}回）`, 'good'] : sp < 0.6 ? ['もうすぐ脱皮（白っぽい）', 'info'] : ['いま脱皮中', 'info'];
+    const h = heatInfo(heatOf(g));
+    const heat = [h.label, h.cls === 'good' ? 'good' : 'warn'];
+    const room = g.clean >= 60 && !g.poop ? ['きれい', 'good'] : g.clean >= 35 ? ['まあまあ', 'info'] : ['おそうじしよう', 'warn'];
+    const rows = [['しっぽの太さ', tail], ['体重の変化（1週間）', wtxt], ['食欲', app], ['脱皮', shed], ['温度', heat], ['ケース', room]];
+    const bad = rows.filter(r => r[1][1] === 'warn').length;
+    const sum = bad === 0 ? 'とても元気です' : bad === 1 ? 'おおむね元気です' : 'ちょっと気にしてあげよう';
+    const tips = [tail[2], app[1] === 'warn' ? 'ごはんをあげよう' : '', room[1] === 'warn' ? 'ケースをおそうじしよう' : '', heat[1] === 'warn' ? 'ヒーターの温度を見なおそう（暖かい側31〜33℃）' : ''].filter(Boolean);
+    return `<details class="health"${openHealth[g.id] ? ' open' : ''} data-id="${g.id}">
+      <summary><span>けんこうチェック</span><span class="pill ${bad ? 'warn' : 'good'}">${sum}</span></summary>
+      <div class="health-rows">${rows.map(([k, [v, cls]]) => `<span>${k}</span><b class="hv ${cls}">${v}</b>`).join('')}</div>
+      ${tips.length ? `<p class="small">アドバイス：${tips.join('。')}。</p>` : '<p class="muted small">このままの暮らしで大丈夫。</p>'}
+    </details>`;
+  }
+  const openHealth = {};
+  document.addEventListener('toggle', e => { const d = e.target; if (d.classList && d.classList.contains('health')) openHealth[d.dataset.id] = d.open; }, true);
   function weightCard(g) {
     const log = weightLog(g), cur = weightOf(g);
     const first = log.length ? log[0] : null;
@@ -2521,6 +2631,7 @@
   function tick() {
     const now = Date.now();
     simulate(now);
+    tankCondition(selected());
     checkNotify(now);
     refreshOffers(now);
     refreshOrders(now);

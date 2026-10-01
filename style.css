@@ -579,3 +579,23 @@ body.full-view .sheet-wrap { z-index: 55; }
 .tip b { margin-top: 2px; }
 .shop-tabs.three { grid-template-columns: repeat(3, 1fr); }
 .toast { max-width: calc(100vw - 32px); }
+
+/* しぐさ図鑑 */
+.beh-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.beh-card { display: grid; gap: 3px; padding: 10px 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+.beh-card b { font-size: 14px; }
+.beh-card small { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.beh-card.locked { background: var(--surface-2); border-style: dashed; }
+.beh-card.locked b { color: var(--muted); }
+/* けんこうチェック */
+.health { margin-top: 10px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.health summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; font-weight: 700; font-size: 14px; list-style: none; }
+.health summary::-webkit-details-marker { display: none; }
+.health summary::before { content: '▸'; color: var(--muted); margin-right: 4px; }
+.health[open] summary::before { content: '▾'; }
+.health summary span:first-child { margin-right: auto; }
+.health-rows { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 10px 0 6px; font-size: 13px; }
+.health-rows span { color: var(--muted); }
+.hv { text-align: right; }
+.hv.good { color: var(--good); } .hv.warn { color: var(--warn); } .hv.info { color: var(--info); } .hv.muted { color: var(--muted); }
+.seg.two { grid-template-columns: 1fr 1fr; }

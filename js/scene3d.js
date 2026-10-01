@@ -1127,7 +1127,8 @@
 
   // 形の曲げ方（描画側 GLSL と、眼球などの位置合わせ用 JS で同じ式を使う）
   const DEFORM_GLSL = `
-    uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop;
+    uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop, uTailFat;
+    varying float vLeoZ;
     attribute float aLeg;
     attribute vec3 aPivot;
     vec3 rotY(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(c * q.x + s * q.z, q.y, -s * q.x + c * q.z); }
@@ -1149,6 +1150,8 @@
         vec3 q = rotZ(rotX(rotY(p - pv, uLook * 0.6 * hz), uPitch * hz), uTilt * hz);
         p = pv + q;
       }
+      // しっぽの付け根の太さ（栄養をためている具合）
+      if (aLeg < 0.5) p.x *= 1.0 + uTailFat * clamp((-1.15 - p.z) / 0.45, 0.0, 1.0) * clamp((p.z + 3.1) / 0.8, 0.0, 1.0);
       float body = 1.0 - smoothstep(0.8, 1.35, p.z);
       float w = uWalk * 0.16 * sin(uPhase - p.z * 1.4) * (0.4 + 0.6 * smoothstep(1.2, -1.5, p.z)) * body;
       float tt = clamp((-1.4 - p.z) / 2.0, 0.0, 1.0);
@@ -1179,7 +1182,17 @@
       Object.assign(sh.uniforms, U);
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\n' + DEFORM_GLSL)
-        .replace('#include <begin_vertex>', 'vec3 transformed = leoDeform(vec3(position));');
+        .replace('#include <begin_vertex>', 'vLeoZ = position.z;\nvec3 transformed = leoDeform(vec3(position));');
+      // 脱皮：まだ脱いでいない古い皮を白っぽく。頭から少しずつ脱いでいく（境目は皮がめくれて明るく）
+      if (sh.fragmentShader.includes('#include <dithering_fragment>')) {
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <common>', '#include <common>\nuniform float uShedOn, uShedEdge;\nvarying float vLeoZ;')
+          .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+            float oldSkin = uShedOn * (1.0 - smoothstep(uShedEdge - 0.1, uShedEdge + 0.1, vLeoZ));
+            gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.80, 0.80, 0.77) + gl_FragColor.rgb * 0.22, oldSkin * 0.62);
+            float roll = uShedOn * step(uShedEdge, 1.7) * max(0.0, 1.0 - abs(vLeoZ - uShedEdge) / 0.07);
+            gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.97, 0.96, 0.93), roll * 0.7);`);
+      }
     };
     return mat;
   }
@@ -1204,9 +1217,12 @@
     bump.wrapS = T.RepeatWrapping;
     const rough = roughTexture();
     rough.wrapS = T.RepeatWrapping;
-    const shed = !!look.shed;
+    const shed = false;
     const U = {};
-    for (const k of ['uT', 'uPhase', 'uWalk', 'uLook', 'uPitch', 'uTilt', 'uCurl', 'uStalk', 'uHappy', 'uBreathe', 'uDrop']) U[k] = { value: 0 };
+    for (const k of ['uT', 'uPhase', 'uWalk', 'uLook', 'uPitch', 'uTilt', 'uCurl', 'uStalk', 'uHappy', 'uBreathe', 'uDrop', 'uTailFat', 'uShedOn', 'uShedEdge']) U[k] = { value: 0 };
+    // 脱皮中は古い皮で全体が白っぽい（ケースの中では少しずつ脱いでいく）
+    U.uShedOn.value = look.shed ? 1 : 0; U.uShedEdge.value = 9;
+    U.uTailFat.value = look.fat || 0;
     const skinMat = deformMaterial(phys('#ffffff', {
       map: colorTex, bumpMap: bump, bumpScale: 0.006, roughnessMap: rough, roughness: shed ? 0.95 : 0.6,
       clearcoat: shed ? 0 : 0.12, clearcoatRoughness: 0.6,
@@ -1225,7 +1241,7 @@
     const eyeKey = [pal.eye, pal.pupil, pal.solid, (look.seed || 0) % 7].join('|');
     const eyeTex = [false, true].map(d => cachedTex(irisCache, eyeKey + '|' + d, () => canvasTexture(irisCanvas(pal, d, (look.seed || 0) % 7), { srgb: true }), 24));
     const eyeMat = phys('#ffffff', { map: eyeTex[0], roughness: shed ? 0.5 : 0.3, clearcoat: 1, clearcoatRoughness: shed ? 0.6 : 0.04 });
-    const corneaMat = phys('#ffffff', { transparent: true, opacity: shed ? 0.35 : 0.1, roughness: shed ? 0.5 : 0, clearcoat: 1, clearcoatRoughness: 0, envMapIntensity: 1.6, depthWrite: false });
+    const corneaMat = phys('#ffffff', { transparent: true, opacity: look.shed ? 0.4 : 0.1, roughness: 0, clearcoat: 1, clearcoatRoughness: 0, envMapIntensity: 1.6, depthWrite: false });
     const glintMat = new T.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85 });
     const R = MODEL.eyeR;
     const eyeGeo = new T.SphereGeometry(R, 48, 32);
@@ -1253,7 +1269,7 @@
     rootG.add(tongue);
     rootG.traverse(o => { if (o.isMesh && o !== mesh) o.castShadow = false; });
     const gk = {
-      glb: true, root: rootG, mesh, U, eyes, lids, eyeMat, eyeTex, bones, mouth, legs: [],
+      glb: true, root: rootG, mesh, U, eyes, lids, eyeMat, corneaMat, eyeTex, bones, mouth, legs: [],
       owned: [], dilated: false, tongue,
     };
     pose(gk, restPose());
@@ -2571,7 +2587,9 @@
       if (st.sleeping) wake();
     }
     function takeFoods() {
-      endMealObj(); st.meal = null; st.hunt = null;
+      endMealObj(); st.meal = null; st.hunt = null; endTweezers(false);
+      if (st.shedAct && st.shedAct.flake) scene.remove(st.shedAct.flake);
+      st.shedAct = null;
       const kinds = st.foods.map(f => f.kind);
       st.foods.forEach(f => { scene.remove(f.obj); disposeTree(f.obj); });
       st.foods = [];
@@ -2671,12 +2689,14 @@
       st.zoom = clamp(st.zoom * Math.exp(e.deltaY * 0.0015), 0.45, 1.6);
     }, { passive: false });
     el.addEventListener('pointerdown', e => {
+      if (st.tw && !edit) { st.twDrag = true; try { el.setPointerCapture(e.pointerId); } catch (err) { /* noop */ } aimTweezers(e); return; }
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size === 2) { const [a, b] = [...touches.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
       down = { lx: e.clientX, ly: e.clientY, moved: 0 };
       if (st.close) { try { el.setPointerCapture(e.pointerId); } catch (err) { /* noop */ } }
     });
     el.addEventListener('pointermove', e => {
+      if (st.twDrag && st.tw) { aimTweezers(e); return; }
       if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size === 2 && st.close) {
         const [a, b] = [...touches.values()];
@@ -2696,6 +2716,7 @@
       }
     });
     el.addEventListener('pointerup', e => {
+      if (st.twDrag) { st.twDrag = false; return; }
       touches.delete(e.pointerId);
       if (touches.size < 2) pinch = 0;
       if (!down) return;
@@ -2759,6 +2780,7 @@
 
     function stepFoods(dt) {
       for (const f of st.foods) {
+        if (f.held) continue;
         if (f.hop) {
           f.hop.k += dt / f.hop.dur;
           const k = Math.min(1, f.hop.k);
@@ -2816,6 +2838,8 @@
       food.hop = null;
       const chews = food.kind === 'worm' ? 3 : food.kind === 'dubia' ? 5 : 4;
       st.meal = { obj: food.obj, kind: food.kind, t: 0, ph: 'hold', chews, s0: food.obj.scale.x };
+      seen('strike');
+      if (food.held && st.tw) { food.held = false; st.tw.food = null; st.tw.doneAt = performance.now(); seen('tweezers'); }
       st.hunt = null; st.stalk = 0;
       fx('パクッ', 'eat');
       handlers.onEat && handlers.onEat(food.kind);
@@ -2832,6 +2856,7 @@
         // くわえたまま、首を左右にぶんぶん振って弱らせる（ミルワームは引っぱるだけ）
         const k = Math.min(1, M.t / 0.7);
         st.eatLook = M.kind === 'worm' ? 0 : Math.sin(M.t * 28) * 0.32 * (1 - k);
+        if (M.kind !== 'worm' && !M.shook) { M.shook = true; seen('shake'); }
         st.eatPitch = M.kind === 'worm' ? 0.06 * Math.sin(k * Math.PI) : -0.05;
         if (M.t > 0.7) { M.ph = 'chew'; M.t = 0; }
       } else if (M.ph === 'chew') {
@@ -2843,7 +2868,7 @@
       } else if (M.ph === 'gulp') {
         // ごっくん：頭をくいっと上げて飲みこむ
         st.eatPitch = 0.16 * Math.sin(Math.min(1, M.t / 0.45) * Math.PI);
-        if (M.t > 0.5) { M.ph = 'lick'; M.t = 0; st.lick = 0.9; M.licks = 1; }
+        if (M.t > 0.5) { M.ph = 'lick'; M.t = 0; st.lick = 0.9; M.licks = 1; seen('lips'); }
       } else if (M.ph === 'lick') {
         // 口のまわりをぺろり、ぺろり
         if (M.t > 0.95 && M.licks < 2) { st.lick = 0.9; M.licks++; }
@@ -2857,6 +2882,122 @@
         M.obj.rotation.set(0, hy + Math.PI / 2 + (M.kind === 'worm' ? Math.sin(M.t * 16) * 0.45 : 0), 0);
       }
     }
+    // ---- しぐさ（図鑑に登録する）
+    function seen(id) { handlers.onBehavior && handlers.onBehavior(id); }
+
+    // ---- 脱皮：頭から少しずつ古い皮を脱ぐ。顔を床にこすりつけたり、皮をくわえて引っぱって食べたりする
+    const flakeMat = new T.MeshStandardMaterial({ color: '#EEEAE0', roughness: 0.9, transparent: true, opacity: 0.85, side: T.DoubleSide });
+    function makeFlake(S) {
+      const g = new T.PlaneGeometry(0.34 * S, 0.22 * S, 4, 3);
+      const pos = g.attributes.position;
+      for (let i = 0; i < pos.count; i++) pos.setZ(i, (Math.random() - 0.5) * 0.06 * S);
+      g.computeVertexNormals();
+      return new T.Mesh(g, flakeMat);
+    }
+    function shedPeel() { return st.shedP == null ? -1 : clamp((st.shedP - 0.6) / 0.4, 0, 1); }
+    function stepShedAct(dt, S) {
+      const A = st.shedAct;
+      A.t += dt;
+      if (A.type === 'rub') {
+        // 顔を床や石にこすりつけて、口のまわりの皮をはがす
+        st.eatPitch = 0.28 + Math.sin(A.t * 9) * 0.05;
+        st.eatLook = Math.sin(A.t * 6) * 0.35;
+        st.tiltT = 0.6;
+        if (A.t > 2.4) st.shedAct = null;
+      } else {
+        // 体の横の皮をくわえて、ぐいっと引っぱり、もぐもぐ食べる
+        const turn = A.side * 1.35 * Math.sin(Math.min(1, A.t / 0.7) * Math.PI / 2) * (A.t < 2.2 ? 1 : Math.max(0, 1 - (A.t - 2.2) / 0.5));
+        st.eatLook = turn;
+        st.eatPitch = 0.12;
+        if (A.t > 0.75 && !A.flake && A.t < 1.0) {
+          A.flake = makeFlake(S); scene.add(A.flake); seen('shedPull');
+        }
+        if (A.flake) {
+          const mp = mouthWorld(), hy = st.yaw + st.look * 0.6 + turn * 0.6;
+          A.flake.position.set(mp.x + Math.sin(hy) * 0.08 * S, Math.max(0.03, mp.y - 0.02), mp.z + Math.cos(hy) * 0.08 * S);
+          A.flake.rotation.set(Math.sin(A.t * 7) * 0.4, hy, 0.5);
+          if (A.t > 2.2) {
+            // もぐもぐ食べて、なくなる
+            const k = Math.min(1, (A.t - 2.2) / 1.2);
+            st.eatPitch = 0.12 - Math.abs(Math.sin(k * Math.PI * 3)) * 0.1;
+            A.flake.scale.setScalar(Math.max(0.05, 1 - k));
+            if (k >= 1) { scene.remove(A.flake); A.flake.geometry.dispose(); A.flake = null; st.lick = 0.9; seen('shedEat'); }
+          }
+        }
+        if (A.t > 3.6) { if (A.flake) { scene.remove(A.flake); A.flake.geometry.dispose(); } st.shedAct = null; }
+      }
+    }
+
+    // ---- ピンセットでごはん：指でピンセットを動かして、目の前でゆらすと飛びついてくる
+    const twMat = phys('#C9CED3', { metalness: 0.9, roughness: 0.28 });
+    function buildTweezers() {
+      const g = new T.Group();
+      for (const sgn of [-1, 1]) {
+        const arm = new T.Mesh(new T.BoxGeometry(0.07, 3.2, 0.03), twMat);
+        arm.geometry.translate(0, 1.6, 0);
+        arm.position.x = sgn * 0.045;
+        arm.rotation.z = -sgn * 0.02;
+        g.add(arm);
+      }
+      g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+      return g;
+    }
+    function startTweezers(kind) {
+      endTweezers(false);
+      const grp = buildTweezers();
+      scene.add(grp);
+      const obj = buildFood(kind);
+      scene.add(obj);
+      const S = 0.95 * st.size;
+      const tip = new T.Vector3(st.x + Math.sin(st.yaw) * 3.2 * S, 0.5, st.z + Math.cos(st.yaw) * 3.2 * S);
+      tip.x = clamp(tip.x, -BOUNDS.x, BOUNDS.x); tip.z = clamp(tip.z, BOUNDS.zMin, BOUNDS.zMax);
+      const food = { kind, obj, t: 999, hop: null, held: true };
+      st.foods.unshift(food);
+      st.tw = { kind, grp, food, tip, target: tip.clone(), lastMove: performance.now() - 5000, born: performance.now(), wig: 0 };
+      if (st.sleeping) wake();
+    }
+    // ピンセットを片づける。drop：つまんでいたごはんを床に落とす
+    function endTweezers(drop) {
+      const W = st.tw;
+      if (!W) return;
+      scene.remove(W.grp); disposeTree(W.grp);
+      if (W.food && W.food.held) {
+        if (drop) { W.food.held = false; W.food.obj.position.y = 0; W.food.t = rand(0.5, 1.2); }
+      }
+      st.tw = null;
+    }
+    function stepTweezers(dt) {
+      const W = st.tw;
+      if (!W) return;
+      const prev = W.tip.clone();
+      W.tip.lerp(W.target, Math.min(1, dt * 10));
+      const sp = prev.distanceTo(W.tip) / Math.max(dt, 0.001);
+      W.wig = lerp(W.wig, Math.min(1, sp / 3), Math.min(1, dt * 6));
+      // ピンセットは手前の上から差しこむ向きに
+      const dir = new T.Vector3().subVectors(camera.position, W.tip).setY(0).normalize().multiplyScalar(0.55).add(new T.Vector3(0, 1, 0)).normalize();
+      W.grp.position.copy(W.tip);
+      W.grp.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), dir);
+      if (W.food && W.food.held) {
+        W.food.obj.position.set(W.tip.x, W.tip.y - 0.06, W.tip.z);
+        W.food.obj.rotation.set(Math.sin(st.t * 14) * 0.5 * W.wig, Math.atan2(dir.x, dir.z) + Math.PI / 2, Math.sin(st.t * 11) * 0.3 * (0.3 + W.wig));
+      } else if (performance.now() - (W.doneAt || 0) > 1200) {
+        endTweezers(false);
+        return;
+      }
+      // しばらく食べなかったら、ごはんを床に置いて終わり
+      if (W.food && W.food.held && performance.now() - W.born > 45000) endTweezers(true);
+    }
+    const twPlane = new T.Plane(new T.Vector3(0, 1, 0), -0.5);
+    function aimTweezers(e) {
+      const r = el.getBoundingClientRect();
+      ray.setFromCamera({ x: (e.clientX - r.left) / r.width * 2 - 1, y: -(e.clientY - r.top) / r.height * 2 + 1 }, camera);
+      const p = new T.Vector3();
+      if (ray.ray.intersectPlane(twPlane, p)) {
+        st.tw.target.set(clamp(p.x, -BOUNDS.x, BOUNDS.x), 0.5, clamp(p.z, BOUNDS.zMin, BOUNDS.zMax));
+        st.tw.lastMove = performance.now();
+      }
+    }
+
     function stepGecko(dt) {
       const gk = st.gk;
       if (!gk) return;
@@ -2875,21 +3016,28 @@
         const aim = Math.atan2(fp.x - st.x, fp.z - st.z);
         const H = st.hunt || (st.hunt = { ph: 'track', t: 0, creep: false });
         H.t += dt;
-        if (H.ph === 'strike') {
+        const still = food.held && st.tw && performance.now() - st.tw.lastMove > 3500 && H.ph !== 'strike';
+        if (still) {
+          // ピンセットが止まっていると、見つめるだけ（ゆらすと気づいて近づく）
+          st.yaw += angleTo(st.yaw, aim) * Math.min(1, dt * 2);
+          st.eatPitch = -0.04;
+          if (H.ph === 'stalk') H.ph = 'track';
+          H.t = 1;
+        } else if (H.ph === 'strike') {
           // 一瞬で飛びつく
           st.yaw += angleTo(st.yaw, aim) * Math.min(1, dt * 14);
           const sp = Math.min(Math.max(0, dMouth - 0.05), H.speed * dt, H.left); H.left -= sp;
           st.x += Math.sin(st.yaw) * sp; st.z += Math.cos(st.yaw) * sp; step = sp;
           st.eatPitch = -0.2 * Math.sin(Math.min(1, H.t / 0.16) * Math.PI);
           if (dMouth < 0.3 * S + 0.16 && !food.hop) catchFood(food, S);
-          else if (H.t > 0.2) { H.ph = 'miss'; H.t = 0; }
+          else if (H.t > 0.2) { H.ph = 'miss'; H.t = 0; seen('miss'); }
         } else if (H.ph === 'miss') {
           // 空ぶり。顔を上げてきょとんとして、もう一度ねらう
           st.eatPitch = 0.08 * Math.sin(Math.min(1, H.t / 0.8) * Math.PI);
           if (H.t > 0.8) { H.ph = 'track'; H.t = 0; }
         } else if (dMouth < 1.1 * S + 0.35 && !food.hop) {
           // ぴたっと止まって、しっぽの先をぷるぷる → ねらいを定めて
-          if (H.ph !== 'stalk') { H.ph = 'stalk'; H.t = 0; H.wait = rand(0.7, 1.8); }
+          if (H.ph !== 'stalk') { H.ph = 'stalk'; H.t = 0; H.wait = rand(0.7, 1.8); seen('stalk'); }
           st.yaw += angleTo(st.yaw, aim) * Math.min(1, dt * 4);
           st.eatPitch = -0.1;
           if (H.t > H.wait && Math.abs(angleTo(st.yaw, aim)) < 0.3) {
@@ -2907,6 +3055,9 @@
           else step = moveToward(fp.x - Math.sin(aim) * reach, fp.z - Math.cos(aim) * reach, (H.creep ? 0.7 : 1.9) * nf, dt);
         }
         st.stalk = H.ph === 'stalk' || H.creep ? 1 : 0;
+      } else if (st.shedAct && !st.sleeping) {
+        st.stalk = 0; st.hunt = null;
+        stepShedAct(dt, S);
       } else {
         st.stalk = 0; st.hunt = null;
         if (st.sleeping) {
@@ -2929,9 +3080,9 @@
           step = moveToward(st.target.x, st.target.z, 0.85 * nf, dt);
           if (Math.hypot(st.target.x - st.x, st.target.z - st.z) < 0.15) {
             if (st.mode === 'toHide' && st.target.next) st.target = st.target.next;
-            else if (st.mode === 'toHide') { st.sleeping = true; st.wait = rand(18, 35); st.zzz = 0.8; st.mode = 'idle'; }
-            else if (st.mode === 'toDrink') { st.mode = 'drink'; st.wait = rand(3, 5); st.lickT = 0.2; }
-            else if (st.mode === 'toBask') { st.mode = 'bask'; st.wait = rand(8, 16); }
+            else if (st.mode === 'toHide') { st.sleeping = true; st.wait = rand(18, 35); st.zzz = 0.8; st.mode = 'idle'; seen('hide'); }
+            else if (st.mode === 'toDrink') { st.mode = 'drink'; st.wait = rand(3, 5); st.lickT = 0.2; seen('drink'); }
+            else if (st.mode === 'toBask') { st.mode = 'bask'; st.wait = rand(8, 16); seen('bask'); }
             else { st.mode = 'idle'; st.wait = st.night ? rand(0.8, 2.5) : rand(2.5, 6); }
           }
         } else {
@@ -2957,7 +3108,7 @@
             }
             else if (stone && !st.night && r0 < 0.28) { st.mode = 'toBask'; st.target = { x: stone.x + rand(-0.3, 0.3), z: stone.z + rand(-0.3, 0.3), face: rand(0, 6.28) }; }
             else if ((!st.night || st.heatPref < 0) && Math.random() < (st.heatPref < 0 ? 0.5 : 0.3) && HIDE) { st.mode = 'toHide'; st.target = HIDE.tunnel ? { x: HIDE.door.x, z: HIDE.door.z, next: { x: HIDE.x, z: HIDE.z } } : { x: HIDE.x, z: HIDE.z }; }
-            else if (!st.night && Math.random() < 0.12) { st.sleeping = true; st.wait = rand(12, 25); st.zzz = 0.8; }
+            else if (!st.night && Math.random() < 0.12) { st.sleeping = true; st.wait = rand(12, 25); st.zzz = 0.8; seen('nap'); }
             else {
               // 寒いと暖かい側（右）へ、暑いと涼しい側（左）へ寄りがち
               let xa = -TK.hw + 2, xb = TK.hw - 1.8;
@@ -2987,11 +3138,14 @@
       if (!moving && !st.sleeping && !food && st.mode === 'idle') {
         st.idleT = (st.idleT == null ? rand(3, 7) : st.idleT) - dt;
         if (st.idleT <= 0) {
-          const r0 = Math.random();
-          if (r0 < 0.45) st.lick = 0.9;
-          else if (r0 < 0.85) { st.peek = rand(-0.7, 0.7); st.peekT = rand(1.2, 2.4); }
-          else st.tiltT = 1.2;
-          st.idleT = rand(4, 9);
+          const r0 = Math.random(), pk = shedPeel();
+          if (pk > 0.02 && pk < 0.98 && r0 < 0.75) {
+            if (Math.random() < 0.4) { st.shedAct = { type: 'rub', t: 0 }; seen('shedRub'); }
+            else st.shedAct = { type: 'pull', t: 0, side: Math.random() < 0.5 ? -1 : 1 };
+          } else if (r0 < 0.45) { st.lick = 0.9; seen('lick'); }
+          else if (r0 < 0.85) { st.peek = rand(-0.7, 0.7); st.peekT = rand(1.2, 2.4); seen('look'); }
+          else { st.tiltT = 1.2; seen('tilt'); }
+          st.idleT = pk > 0 && pk < 1 ? rand(2, 4) : rand(4, 9);
         }
       }
       if (st.peekT > 0) st.peekT -= dt;
@@ -3034,6 +3188,16 @@
         const hf = heightAt(st.x + sy * 1.3 * S, st.z + cy * 1.3 * S), hm = heightAt(st.x, st.z), hb = heightAt(st.x - sy * 1.1 * S, st.z - cy * 1.1 * S);
         st.y = lerp(st.y || 0, Math.max(hm, (hf + hb) / 2), Math.min(1, dt * 8));
         st.slope = lerp(st.slope || 0, clamp(Math.atan2(hf - hb, 2.4 * S), -0.8, 0.8), Math.min(1, dt * 6));
+      }
+      if (st.y > 0.6) seen('climb');
+      if (moving && st.night) seen('night');
+      if (gk.U) {
+        const pk = shedPeel();
+        gk.U.uShedOn.value = st.shedP == null ? 0 : 1;
+        // 頭の先から、しっぽの先まで、境目がだんだん下がっていく
+        gk.U.uShedEdge.value = pk < 0 ? 9 : 1.9 - pk * 5.8;
+        gk.U.uTailFat.value = st.fat || 0;
+        if (gk.corneaMat) gk.corneaMat.opacity = st.shedP != null && pk < 0.12 ? 0.4 : 0.1;
       }
       gk.root.position.set(st.x, st.y, st.z);
       gk.root.rotation.order = 'YXZ';
@@ -3088,7 +3252,7 @@
       if (st.active && raw < 0.5) adapt(raw);
       if (st.active) {
         st.t += dt;
-        stepFoods(dt); stepPuffs(dt);
+        stepFoods(dt); stepPuffs(dt); stepTweezers(dt);
         stepGecko(dt);
         stepCamera(dt);
         renderer.render(scene, camera);
@@ -3106,10 +3270,13 @@
         st.heatPref = temp <= 30 ? 1 : temp >= 34 ? -1 : 0;
         heat.intensity = 0.8 * st.heatGlow;
       },
+      setShed(p) { st.shedP = p; },
+      setFat(f) { st.fat = f; },
+      startTweezers, tweezersActive: () => !!st.tw,
       _st: st, _cam: camera, _hide: () => HIDE, refreshDecor, setCage, setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
       pendingFoods: () => st.foods.map(f => f.kind),
       lick() { st.lick = 0.9; },
-      happy() { st.happy = 1.4; if (st.sleeping) wake(); },
+      happy() { st.happy = 1.4; if (st.sleeping) wake(); seen('happy'); },
       setActive(v) { st.active = v; if (v) { last = performance.now(); resize(); } },
     };
   }
