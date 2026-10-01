@@ -59,3 +59,6 @@ node tests/genetics.test.js # 遺伝ロジックのテスト
 ## 素材のクレジット
 
 - 家具の3Dモデル：[Quaternius「Stylized Nature MegaKit」](https://quaternius.com/packs/stylizednaturemegakit.html)（CC0）。使うものだけを `tools/pack_decor.py` で `assets/decor-kit.bin` にまとめています。
+- 恐竜フィギュア：[Quaternius「Animated Dinosaur Pack」](https://quaternius.com/packs/animateddinosaurs.html)（CC0）
+- おかしの飾り：[Kenney「Food Kit」](https://kenney.nl/assets/food-kit)（CC0）
+- ウェットシェルター・水入れ：Meshy AI で作成したモデル

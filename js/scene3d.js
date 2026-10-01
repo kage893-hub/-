@@ -1496,6 +1496,13 @@
       for (let i = 0; i < 120; i++) { ctx.strokeStyle = `rgba(${r() < 0.6 ? '110,90,70' : '235,225,210'},${0.15 + r() * 0.3})`; ctx.lineWidth = 1 + r() * 3; const x = r() * 256; ctx.beginPath(); ctx.moveTo(x, 0); for (let y = 0; y <= 512; y += 32) ctx.lineTo(x + Math.sin(y / 50 + i) * 4, y); ctx.stroke(); }
       map = new T.CanvasTexture(c); map.encoding = T.sRGBEncoding; map.wrapS = map.wrapT = T.RepeatWrapping;
     }
+    if (m.color) {
+      const mat = new T.MeshStandardMaterial({ roughness: 0.75, metalness: 0 });
+      mat.color.setRGB(m.color[0], m.color[1], m.color[2]);
+      mat.userData.shared = true;
+      return (KIT.mats[name] = mat);
+    }
+    if (m.nearest && map) { map.magFilter = T.NearestFilter; map.minFilter = T.NearestFilter; map.generateMipmaps = false; map.needsUpdate = true; }
     if (name === 'Stone') {
       const mat = phys('#7A746A', { roughness: 0.92, bumpMap: sandTex(), bumpScale: 0.04, side: T.DoubleSide });
       mat.userData.shared = true;
@@ -1763,6 +1770,48 @@
       name: 'オレンジのきのこ', price: 10, r: 0.55,
       desc: '重なりあって生えるきのこ（飾りです）',
       build: () => kitOr('Mushroom_Laetiporus', 1.1, null, () => OLD_DECOR.plant.build()),
+    },
+    // 恐竜時代ケージに合う飾り（Quaternius「Animated Dinosaur Pack」CC0）
+    trex: {
+      name: '恐竜フィギュア（Tレックス）', price: 25, r: 0.9,
+      desc: '恐竜の王さま。恐竜時代ケージにぴったり',
+      build: () => kitOr('Trex', 2.6, null, () => OLD_DECOR.rock.build()),
+    },
+    trike: {
+      name: '恐竜フィギュア（トリケラトプス）', price: 25, r: 0.9,
+      desc: '3本の角がかっこいい草食恐竜',
+      build: () => kitOr('Triceratops', 2.4, null, () => OLD_DECOR.rock.build()),
+    },
+    stego: {
+      name: '恐竜フィギュア（ステゴサウルス）', price: 25, r: 0.9,
+      desc: '背中の板とトゲが目印',
+      build: () => kitOr('Stegosaurus', 2.5, null, () => OLD_DECOR.rock.build()),
+    },
+    para: {
+      name: '恐竜フィギュア（パラサウロロフス）', price: 25, r: 0.8,
+      desc: '赤いトサカがおしゃれな恐竜',
+      build: () => kitOr('Parasaurolophus', 2.2, null, () => OLD_DECOR.rock.build()),
+    },
+    // おかしの家ケージに合う飾り（Kenney「Food Kit」CC0）
+    donut: {
+      name: 'ドーナツ', price: 15, r: 0.9, climb: true,
+      desc: 'スプリンクルつきの大きなドーナツ。上に乗れます',
+      build: () => kitOr('Donut', 1.9, null, () => OLD_DECOR.stone.build()),
+    },
+    cookie: {
+      name: 'サンドクッキー', price: 15, r: 0.95, climb: true,
+      desc: 'チョコのサンドクッキー。上でひと休み',
+      build: () => kitOr('Cookie', 2.0, null, () => OLD_DECOR.stone.build()),
+    },
+    cake: {
+      name: 'バースデーケーキ', price: 20, r: 1.0,
+      desc: 'ろうそくの立ったケーキ。お祝いの気分に',
+      build: () => kitOr('Cake', 2.1, null, () => OLD_DECOR.stone.build()),
+    },
+    ginger: {
+      name: 'ジンジャーブレッドマン', price: 15, r: 1.0, climb: true,
+      desc: '床に寝ころぶ大きなクッキー。上を歩けます',
+      build: () => kitOr('Gingerbread', 2.3, { h: 3 }, () => OLD_DECOR.stone.build()),
     },
     dish: {
       name: '水入れ', price: 10, r: 1.0,

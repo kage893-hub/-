@@ -11,7 +11,7 @@ PICK = sys.argv[3].split(',') if len(sys.argv) > 3 else None
 TEX = {
     'Rocks_Diffuse.png': (512, 'jpg'), 'Rocks_Desert_Diffuse.png': (512, 'jpg'), 'PathRocks_Diffuse.png': (512, 'jpg'),
     'Leaves.png': (512, 'png'), 'Grass.png': (256, 'png'), 'Flowers.png': (512, 'png'),
-    'Leaves_TwistedTree_C.png': (256, 'png'), 'Leaves_NormalTree_C.png': (256, 'png'), 'Mushrooms.png': (256, 'jpg'),
+    'Leaves_TwistedTree_C.png': (256, 'png'), 'Leaves_NormalTree_C.png': (256, 'png'), 'Mushrooms.png': (256, 'jpg'), 'colormap.png': (0, 'png'),
 }
 files = {os.path.basename(f): f for f in glob.glob(os.path.join(SRC, '**', '*'), recursive=True)}
 blob = bytearray()
@@ -25,7 +25,8 @@ def image(name):
     if name not in files or name not in TEX: return None
     size, fmt = TEX[name]
     im = Image.open(files[name])
-    im = im.convert('RGBA' if fmt == 'png' else 'RGB').resize((size, size), Image.LANCZOS)
+    im = im.convert('RGBA' if fmt == 'png' else 'RGB')
+    if size: im = im.resize((size, size), Image.LANCZOS)
     buf = io.BytesIO()
     if fmt == 'png': im.save(buf, 'PNG', optimize=True)
     else: im.save(buf, 'JPEG', quality=82)
@@ -60,7 +61,79 @@ def glb_mesh(path, cell):
     verts = [(r[0] / r[3], r[1] / r[3], r[2] / r[3]) for r in rep]
     return verts, tris
 
+def obj_mesh(path):
+    # Quaternius の OBJ（材質ごとの色だけ）を読む
+    mtl, cur = {}, None
+    for line in open(path[:-4] + '.mtl'):
+        t = line.split()
+        if not t: continue
+        if t[0] == 'newmtl': cur = t[1]
+        elif t[0] == 'Kd' and cur: mtl[cur] = [float(x) for x in t[1:4]]
+    V, N, groups, mat = [], [], {}, None
+    for line in open(path):
+        t = line.split()
+        if not t: continue
+        if t[0] == 'v': V.append([float(x) for x in t[1:4]])
+        elif t[0] == 'vn': N.append([float(x) for x in t[1:4]])
+        elif t[0] == 'usemtl': mat = t[1]
+        elif t[0] == 'f':
+            ids = [(int(a.split('/')[0]) - 1, int(a.split('/')[-1]) - 1) for a in t[1:]]
+            g = groups.setdefault(mat, [])
+            for k in range(1, len(ids) - 1): g.append((ids[0], ids[k], ids[k + 1]))
+    return V, N, groups, mtl
+
 for name in PICK:
+    if name.split(':')[0].endswith('.obj'):
+        path, out_name = name.split(':')[:2]
+        V, N, groups, mtl = obj_mesh(path)
+        lo = [min(v[c] for v in V) for c in range(3)]; hi = [max(v[c] for v in V) for c in range(3)]
+        cx, cz, y0 = (lo[0] + hi[0]) / 2, (lo[2] + hi[2]) / 2, lo[1]
+        prims = []
+        for m, tris in groups.items():
+            mname = out_name + '_' + m
+            mats[mname] = {'img': None, 'alpha': False, 'color': mtl.get(m, [0.5, 0.5, 0.5])}
+            P, Nn = [], []
+            for tri in tris:
+                for vi, ni in tri:
+                    v = V[vi]; P += [v[0] - cx, v[1] - y0, v[2] - cz]; Nn += N[ni]
+            n = len(P) // 3
+            prims.append({'mat': mname, 'pos': put(struct.pack('<%df' % len(P), *P)), 'nrm': put(struct.pack('<%df' % len(Nn), *Nn)), 'uv': None,
+                          'idx': put(struct.pack('<%dH' % n, *range(n))), 'i32': False})
+        items[out_name] = {'prims': prims, 'size': [round(hi[0] - lo[0], 3), round(hi[1] - lo[1], 3), round(hi[2] - lo[2], 3)]}
+        continue
+    if name.split(':')[0].endswith('.glb') and name.count(':') == 1:
+        # テクスチャつきの GLB（Kenney など）
+        path, out_name = name.split(':')
+        b = open(path, 'rb').read()
+        jl = struct.unpack_from('<I', b, 12)[0]; j = json.loads(b[20:20 + jl]); bin_ = b[20 + jl + 8:]
+        def acc(i):
+            a = j['accessors'][i]; bv = j['bufferViews'][a['bufferView']]
+            n = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4}[a['type']]
+            fmt = {5126: 'f', 5125: 'I', 5123: 'H', 5121: 'B'}[a['componentType']]
+            sz = struct.calcsize(fmt); off = bv.get('byteOffset', 0) + a.get('byteOffset', 0); stride = bv.get('byteStride', sz * n)
+            return [struct.unpack_from('<' + fmt * n, bin_, off + k * stride) for k in range(a['count'])]
+        raw = []; lo = [1e9] * 3; hi = [-1e9] * 3
+        for m in j['meshes']:
+            for p in m['primitives']:
+                pos = acc(p['attributes']['POSITION'])
+                for v in pos:
+                    for c in range(3): lo[c] = min(lo[c], v[c]); hi[c] = max(hi[c], v[c])
+                raw.append((p, pos))
+        cx, cz, y0 = (lo[0] + hi[0]) / 2, (lo[2] + hi[2]) / 2, lo[1]
+        prims = []
+        for p, pos in raw:
+            nrm = acc(p['attributes']['NORMAL']); uv = acc(p['attributes']['TEXCOORD_0']); idx = acc(p['indices'])
+            m = j['materials'][p['material']]
+            uri = j['images'][j['textures'][m['pbrMetallicRoughness']['baseColorTexture']['index']]['source']]['uri']
+            mname = 'kenney_' + os.path.basename(uri)
+            if mname not in mats:
+                mats[mname] = {'img': image(os.path.basename(uri)), 'alpha': False, 'nearest': True}
+            P = struct.pack('<%df' % (len(pos) * 3), *[x for v in pos for x in (v[0] - cx, v[1] - y0, v[2] - cz)])
+            prims.append({'mat': mname, 'pos': put(P), 'nrm': put(struct.pack('<%df' % (len(nrm) * 3), *[x for v in nrm for x in v])),
+                          'uv': put(struct.pack('<%df' % (len(uv) * 2), *[x for v in uv for x in v])),
+                          'idx': put(struct.pack('<%dH' % len(idx), *[v[0] for v in idx])), 'i32': False})
+        items[out_name] = {'prims': prims, 'size': [round(hi[0] - lo[0], 3), round(hi[1] - lo[1], 3), round(hi[2] - lo[2], 3)]}
+        continue
     if name.endswith('.glb') or ':' in name:
         # 「ファイル名:名前:格子の大きさ[:材質]」
         parts = name.split(':'); path, out_name, cell = parts[:3]; mat = parts[3] if len(parts) > 3 else 'Terracotta'
