@@ -1572,7 +1572,7 @@
     white: { name: 'ホワイト＆ペーパー', price: 60, desc: '白いフレームにキッチンペーパー敷き。清潔感たっぷり', floor: 'paper', tint: '#ffffff', frame: '#F4F2ED' },
     wood: { name: '木製ビバリウム', price: 120, desc: 'あたたかみのある木のフレームと背面パネル', floor: 'sand', tint: '#F4E6D0', frame: '#7A4E2C', back: 'wood', thick: true },
     desert: { name: 'デザート', price: 120, desc: '赤い砂と岩の背景で、ふるさとの荒野ふうに', floor: 'sand', tint: '#E7AE7E', frame: '#3A2E26', back: 'rock' },
-    candy: { name: 'おかしの家', price: 300, desc: 'クッキーの床、チョコの壁、キャンディの柱。あまーいおうち', floor: 'cookie', tint: '#ffffff', frame: '#F7A8C4', back: 'choco', thick: true, candy: true },
+    candy: { name: 'おかしの家', price: 150, desc: 'クッキーの床、チョコの壁、キャンディの柱。あまーいおうち', floor: 'cookie', tint: '#ffffff', frame: '#F7A8C4', back: 'choco', thick: true, candy: true },
   };
   // ケージ用の模様（一度作ったら使い回す）
   const cageTexCache = {};
