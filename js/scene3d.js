@@ -1075,7 +1075,7 @@
       return 0;
     };
     const g = new T.BufferGeometry();
-    const P = new Float32Array(n * 3), UV = new Float32Array(n * 2), LEG = new Float32Array(n), PV = new Float32Array(n * 3);
+    const P = new Float32Array(n * 3), UV = new Float32Array(n * 2), LEG = new Float32Array(n), PV = new Float32Array(n * 3), CY = new Float32Array(n);
     for (let i = 0; i < n; i++) {
       const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
       const q = toGame(x, y, z);
@@ -1086,12 +1086,14 @@
       UV[i * 2] = thToU(th);
       UV[i * 2 + 1] = zToV(canonZ(q.z));
       LEG[i] = leg;
+      CY[i] = toGame(0, centerY(z), z).y;
       if (leg) { const pv = toGame(...PIV[leg]); PV.set([pv.x, pv.y, pv.z], i * 3); }
     }
     g.setAttribute('position', new T.BufferAttribute(P, 3));
     g.setAttribute('uv', new T.BufferAttribute(UV, 2));
     g.setAttribute('aLeg', new T.BufferAttribute(LEG, 1));
     g.setAttribute('aPivot', new T.BufferAttribute(PV, 3));
+    g.setAttribute('aCy', new T.BufferAttribute(CY, 1));
     g.setIndex(new T.BufferAttribute(idx, 1));
     g.computeVertexNormals();
     // おなか側の継ぎ目（u が 1→0 に戻るところ）で模様が伸びないように、三角形ごとに u をそろえる
@@ -1128,9 +1130,11 @@
   // 形の曲げ方（描画側 GLSL と、眼球などの位置合わせ用 JS で同じ式を使う）
   const DEFORM_GLSL = `
     uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop, uTailFat;
+    #define TAIL_BASE 1.25
     varying float vLeoZ;
     attribute float aLeg;
     attribute vec3 aPivot;
+    attribute float aCy;
     vec3 rotY(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(c * q.x + s * q.z, q.y, -s * q.x + c * q.z); }
     vec3 rotX(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(q.x, c * q.y - s * q.z, s * q.y + c * q.z); }
     vec3 rotZ(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(c * q.x - s * q.y, s * q.x + c * q.y, q.z); }
@@ -1151,7 +1155,13 @@
         p = pv + q;
       }
       // しっぽの付け根の太さ（栄養をためている具合）
-      if (aLeg < 0.5) p.x *= 1.0 + uTailFat * clamp((-1.15 - p.z) / 0.45, 0.0, 1.0) * clamp((p.z + 3.1) / 0.8, 0.0, 1.0);
+      // レオパらしい、栄養をためたぶりっと太いしっぽ（付け根から先へ、にんじんのように細くなる）
+      if (aLeg < 0.5) {
+        float tf = smoothstep(0.0, 1.0, clamp((-1.05 - p.z) / 0.5, 0.0, 1.0)) * (1.0 - 0.88 * smoothstep(0.0, 1.0, clamp((-1.85 - p.z) / 1.45, 0.0, 1.0)));
+        float tk = tf * (TAIL_BASE + uTailFat);
+        p.x *= 1.0 + tk;
+        p.y = aCy + (p.y - aCy) * (1.0 + tk * 0.7);
+      }
       float body = 1.0 - smoothstep(0.8, 1.35, p.z);
       float w = uWalk * 0.16 * sin(uPhase - p.z * 1.4) * (0.4 + 0.6 * smoothstep(1.2, -1.5, p.z)) * body;
       float tt = clamp((-1.4 - p.z) / 2.0, 0.0, 1.0);
