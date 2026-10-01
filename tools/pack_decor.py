@@ -33,7 +33,48 @@ def image(name):
     img_index[name] = len(images) - 1
     return img_index[name]
 
+def glb_mesh(path, cell):
+    # Meshy の GLB（位置と面だけ）を読み、格子でまとめて面の数を減らす
+    b = open(path, 'rb').read()
+    jl = struct.unpack_from('<I', b, 12)[0]; j = json.loads(b[20:20 + jl]); base = 20 + jl + 8
+    def acc(i, n, fmt):
+        a = j['accessors'][i]; bv = j['bufferViews'][a['bufferView']]
+        off = base + bv.get('byteOffset', 0) + a.get('byteOffset', 0)
+        return struct.unpack_from('<%d%s' % (a['count'] * n, fmt), b, off)
+    p = j['meshes'][0]['primitives'][0]
+    ct = j['accessors'][p['indices']]['componentType']
+    pos = acc(p['attributes']['POSITION'], 3, 'f'); idx = acc(p['indices'], 1, {5125: 'I', 5123: 'H'}[ct])
+    cells, rep, remap = {}, [], []
+    for i in range(0, len(pos), 3):
+        k = (round(pos[i] / cell), round(pos[i + 1] / cell), round(pos[i + 2] / cell))
+        if k not in cells: cells[k] = len(rep); rep.append([0.0, 0.0, 0.0, 0])
+        c = cells[k]; r = rep[c]; r[0] += pos[i]; r[1] += pos[i + 1]; r[2] += pos[i + 2]; r[3] += 1
+        remap.append(c)
+    tris, seen = [], set()
+    for i in range(0, len(idx), 3):
+        a, b2, c = remap[idx[i]], remap[idx[i + 1]], remap[idx[i + 2]]
+        if a == b2 or b2 == c or a == c: continue
+        key = tuple(sorted((a, b2, c)))
+        if key in seen: continue
+        seen.add(key); tris += [a, b2, c]
+    verts = [(r[0] / r[3], r[1] / r[3], r[2] / r[3]) for r in rep]
+    return verts, tris
+
 for name in PICK:
+    if name.endswith('.glb') or ':' in name:
+        # 「ファイル名:名前:格子の大きさ」
+        path, out_name, cell = name.split(':')
+        verts, tris = glb_mesh(path, float(cell))
+        lo = [min(v[c] for v in verts) for c in range(3)]; hi = [max(v[c] for v in verts) for c in range(3)]
+        cx, cz, y0 = (lo[0] + hi[0]) / 2, (lo[2] + hi[2]) / 2, lo[1]
+        P = struct.pack('<%df' % (len(verts) * 3), *[x for v in verts for x in (v[0] - cx, v[1] - y0, v[2] - cz)])
+        big = len(verts) > 65535
+        I = struct.pack('<%d%s' % (len(tris), 'I' if big else 'H'), *tris)
+        mats.setdefault('Terracotta', {'img': None, 'alpha': False, 'double': True})
+        items[out_name] = {'prims': [{'mat': 'Terracotta', 'pos': put(P), 'nrm': None, 'uv': None, 'idx': put(I), 'i32': big}],
+                           'size': [round(hi[0] - lo[0], 3), round(hi[1] - lo[1], 3), round(hi[2] - lo[2], 3)]}
+        print(out_name, 'tris', len(tris) // 3)
+        continue
     # 「名前@テクスチャ」で、同じ形に別の模様をはった版を作る（例：赤茶の岩）
     tex_over = None
     if '@' in name: base, tex_over = name.split('@'); out_name = base + '_' + tex_over.split('_')[1]

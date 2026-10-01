@@ -146,7 +146,7 @@
   function freshState() {
     S = {
       v: 2, coins: 60, cases: 4, incTemp: 29.5, food: { cricket: 20, dubia: 3, worm: 3 },
-      tut: { step: 0 }, geckos: [], eggs: [], dex: {}, names: {}, decorInv: { cork: 1 }, selected: null, offers: [], offersAt: 0,
+      tut: { step: 0 }, geckos: [], eggs: [], dex: {}, names: {}, decorInv: { grass: 1 }, decorV3: true, selected: null, offers: [], offersAt: 0,
       lastTick: Date.now(), nextId: 1, welcomed: false, stats: { hatched: 0, rehomed: 0 },
     };
     // はじめはショップでレオパを選ぶところから
@@ -2440,6 +2440,16 @@
 
   S = load();
   window.__leopaState = () => S; // 動作確認用
+  // なくなった家具（コルクバーク）は代金をお返しする。シェルターが岩からテラコッタに変わったので1つプレゼント
+  if (S && !S.decorV3) {
+    S.decorV3 = true;
+    let back = 0;
+    for (const g of S.geckos) if (g.decor) { const n = g.decor.length; g.decor = g.decor.filter(d => L3.DECOR[d.t]); back += (n - g.decor.length) * 25; }
+    for (const t of Object.keys(S.decorInv || {})) if (!L3.DECOR[t]) { back += (S.decorInv[t] || 0) * 25; delete S.decorInv[t]; }
+    if (back) S.coins += back;
+    if (S.geckos.length) S.decorInv.wet = (S.decorInv.wet || 0) + 1;
+    S._decorNote = back;
+  }
   window.__leopaTank = () => tank;
   if (!S) freshState();
   const awayFrom = S.lastTick;
@@ -2451,6 +2461,7 @@
   else hideLoading();
   tick();
   awaySummary(awayFrom, Date.now());
+  if (S._decorNote != null) { const b = S._decorNote; delete S._decorNote; if (S.geckos.length) setTimeout(() => toast(`家具が新しくなりました！ウェットシェルターを1つプレゼント${b ? `（コルクバークは${b}コインでお返ししました）` : ''}`), 1500); }
   setTimeout(() => { if (!S.welcomed || !S.geckos.length) return; const list = checkCelebrations(); if (list.length) celebrate(list); }, 2500);
   switchView('case');
   setInterval(tick, 5000);

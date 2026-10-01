@@ -1496,6 +1496,11 @@
       for (let i = 0; i < 120; i++) { ctx.strokeStyle = `rgba(${r() < 0.6 ? '110,90,70' : '235,225,210'},${0.15 + r() * 0.3})`; ctx.lineWidth = 1 + r() * 3; const x = r() * 256; ctx.beginPath(); ctx.moveTo(x, 0); for (let y = 0; y <= 512; y += 32) ctx.lineTo(x + Math.sin(y / 50 + i) * 4, y); ctx.stroke(); }
       map = new T.CanvasTexture(c); map.encoding = T.sRGBEncoding; map.wrapS = map.wrapT = T.RepeatWrapping;
     }
+    if (name === 'Terracotta') {
+      const mat = phys('#B55A33', { roughness: 0.88, bumpMap: sandTex(), bumpScale: 0.025, side: T.DoubleSide });
+      mat.userData.shared = true;
+      return (KIT.mats[name] = mat);
+    }
     const mat = new T.MeshStandardMaterial({ color: '#ffffff', map, roughness: 0.92, metalness: 0, alphaTest: m.alpha ? 0.5 : 0, side: m.alpha ? T.DoubleSide : T.FrontSide });
     mat.userData.shared = true;
     KIT.mats[name] = mat;
@@ -1513,10 +1518,11 @@
         const geo = new T.BufferGeometry();
         const f32 = r => new Float32Array(KIT.buf.slice(KIT.base + r[0], KIT.base + r[0] + r[1]));
         geo.setAttribute('position', new T.BufferAttribute(f32(p.pos), 3));
-        geo.setAttribute('normal', new T.BufferAttribute(f32(p.nrm), 3));
+        if (p.nrm) geo.setAttribute('normal', new T.BufferAttribute(f32(p.nrm), 3));
         if (p.uv) geo.setAttribute('uv', new T.BufferAttribute(f32(p.uv), 2));
         const ib = KIT.buf.slice(KIT.base + p.idx[0], KIT.base + p.idx[0] + p.idx[1]);
         geo.setIndex(new T.BufferAttribute(p.i32 ? new Uint32Array(ib) : new Uint16Array(ib), 1));
+        if (!p.nrm) geo.computeVertexNormals();
         geo.computeBoundingSphere();
         geo.userData.shared = true;
         kitGeo[key] = geo;
@@ -1544,10 +1550,7 @@
         const rock = new T.Mesh(rockGeometry(), phys('#6E6358', { roughness: 0.95, bumpMap: sandTex(), bumpScale: 0.03 }));
         rock.scale.set(1.75, 1.0, 1.4);
         rock.position.y = 0.1;
-        const door = doorMesh(1.15, 0.78);
-        door.position.set(0.25, 0.34, 1.78);
-        door.rotation.x = -0.15;
-        g.add(rock, door);
+        g.add(rock);
         return g;
       },
     },
@@ -1561,10 +1564,7 @@
         const pool = new T.Mesh(new T.CircleGeometry(0.42, 32), phys('#6FAECB', { roughness: 0.02, clearcoat: 1 }));
         pool.rotation.x = -Math.PI / 2;
         pool.position.y = 0.745;
-        const door = doorMesh(0.75, 0.62);
-        door.position.set(0, 0.3, 1.0);
-        door.rotation.x = -0.2;
-        g.add(dome, pool, door);
+        g.add(dome, pool);
         return g;
       },
     },
@@ -1578,9 +1578,6 @@
         geo.rotateX(-Math.PI / 2);
         const bark = new T.Mesh(geo, phys('#6B4A30', { roughness: 0.95, bumpMap: sandTex(), bumpScale: 0.08, side: T.DoubleSide }));
         g.add(bark);
-        const door = doorMesh(1.0, 0.95);
-        door.position.set(0, 0.3, 1.1);
-        g.add(door);
         return g;
       },
     },
@@ -1632,33 +1629,35 @@
   const OLD = OLD_DECOR;
   // 3Dモデル集が読めたらそれを、読めなかったときは手作りの形を使う
   function kitOr(name, fit, opt, fallback) { return kitHas(name) ? buildKit(name, fit, opt) : fallback(); }
-  // 岩シェルター：岩のモデルの正面に、入口の暗がりをつける
-  function rockShelter(name, fit, h) {
-    if (!kitHas(name)) return OLD_DECOR.rock.build();
+  // ウェットシェルター：テラコッタのトンネル。両はしの穴から中に入れる。上の受け皿に水をためる
+  const WET_FIT = 3.0;
+  function wetShelter() {
+    if (!kitHas('Wet')) return OLD_DECOR.wet.build();
     const g = new T.Group();
-    const rock = buildKit(name, fit, { h });
-    g.add(rock);
-    g.updateMatrixWorld(true);
-    const hit = new T.Raycaster(new T.Vector3(0, 0.4, 20), new T.Vector3(0, 0, -1)).intersectObject(rock, true)[0];
-    const door = doorMesh(1.1, 0.8);
-    door.position.set(0, 0.36, (hit ? hit.point.z : fit * 0.45) + 0.04);
-    door.rotation.x = -0.12;
-    g.add(door);
+    const body = buildKit('Wet', WET_FIT);
+    const it = KIT.data.items.Wet, k = WET_FIT / Math.max(it.size[0], it.size[2]);
+    const water = new T.Mesh(new T.PlaneGeometry(it.size[0] * k * 0.52, it.size[2] * k * 0.66), phys('#6FAECB', { roughness: 0.02, clearcoat: 1, transparent: true, opacity: 0.85 }));
+    water.rotation.x = -Math.PI / 2;
+    water.position.y = it.size[1] * k * 0.9;
+    g.add(body, water);
     return g;
   }
   const DECOR = {
     rock: {
-      name: '岩シェルター（赤茶）', price: 30, r: 1.45, shelter: { x: 0, z: 2.6 },
-      desc: '赤茶色の岩のかくれ家。荒野っぽい雰囲気に',
-      build: () => rockShelter('Rock_Medium_1_Desert', 3.3, 0.62),
+      name: '岩（赤茶）', price: 30, r: 1.45, climb: true,
+      desc: '赤茶色の大きな岩。レオパがよじ登って遊びます',
+      build: () => kitOr('Rock_Medium_1_Desert', 3.3, { h: 0.62 }, () => OLD_DECOR.rock.build()),
     },
     rock2: {
-      name: '岩シェルター（苔むし）', price: 30, r: 1.4, shelter: { x: 0, z: 2.5 },
-      desc: '苔がついた灰色の岩のかくれ家',
-      build: () => rockShelter('Rock_Medium_2', 3.2, 0.72),
+      name: '岩（苔むし）', price: 30, r: 1.4, climb: true,
+      desc: '苔がついた灰色の岩。上でひと休みすることも',
+      build: () => kitOr('Rock_Medium_2', 3.2, { h: 0.72 }, () => OLD_DECOR.rock.build()),
     },
-    wet: OLD.wet,
-    cork: OLD.cork,
+    wet: {
+      name: 'ウェットシェルター', price: 40, r: 1.3, shelter: { x: 0, z: 0 }, tunnel: true,
+      desc: 'テラコッタのトンネル型。上に水をためて中をしっとり。両はしの穴から出入りできます',
+      build: wetShelter,
+    },
     log: {
       name: '枯れ木（ひろがり）', price: 20, r: 0.9,
       desc: '枝が大きく広がった白い枯れ木。ケースの主役に',
@@ -1670,12 +1669,12 @@
       build: () => kitOr('DeadTree_2', 1.6, null, () => OLD_DECOR.log.build()),
     },
     stone: {
-      name: '石だたみ（まる）', price: 15, r: 1.0,
+      name: '石だたみ（まる）', price: 15, r: 1.0, climb: true,
       desc: '丸い石を並べた床。ひなたぼっこにも',
       build: () => kitOr('RockPath_Round_Wide', 2.1, { h: 1.5 }, () => OLD_DECOR.stone.build()),
     },
     stone2: {
-      name: '石だたみ（しかく）', price: 15, r: 1.0,
+      name: '石だたみ（しかく）', price: 15, r: 1.0, climb: true,
       desc: '四角い石を並べた床。ひなたぼっこにも',
       build: () => kitOr('RockPath_Square_Wide', 2.0, { h: 1.2 }, () => OLD_DECOR.stone.build()),
     },
@@ -1721,7 +1720,7 @@
     },
     dish: OLD.dish,
   };
-  const DEFAULT_DECOR = [{ t: 'rock', x: -4.4, z: -3.0, rot: 0 }, { t: 'dish', x: -5.0, z: 3.2, rot: 0 }, { t: 'plant', x: 1.8, z: -3.8, rot: 0 }];
+  const DEFAULT_DECOR = [{ t: 'wet', x: -4.4, z: -2.6, rot: 0 }, { t: 'dish', x: -5.0, z: 3.2, rot: 0 }, { t: 'plant', x: 1.8, z: -3.8, rot: 0 }];
   // ケースの広さ（床の半分の幅・奥行き）
   const TANK = { hw: 6.5, hd: 4.5 };
   // ケージの大きさと見た目（ショップで買って、ケースごとに選べる）
@@ -2233,6 +2232,7 @@
       TK.hw = CAGE_SIZES[size].hw; TK.hd = CAGE_SIZES[size].hd;
       BOUNDS.x = TK.hw - 0.7; BOUNDS.zMin = -TK.hd + 0.6; BOUNDS.zMax = TK.hd - 0.5;
       buildCage(theme);
+      buildHF();
       if (!sizeChanged) return;
       // 大きいケージは、カメラを少し引いて全体が見えるように
       const f = size === 'std' ? 1 : Math.max(TK.hw / TANK.hw * 1.1, TK.hd / TANK.hd);
@@ -2247,7 +2247,34 @@
       st.x = clamp(st.x, -BOUNDS.x + 1, BOUNDS.x - 1); st.z = clamp(st.z, BOUNDS.zMin + 1, BOUNDS.zMax - 1);
     }
     let HIDE = null;
-    let obstacles = [];
+    let obstacles = [];   // ぶつかる家具（トンネルは左右の壁だけ）
+    let placed = [];      // 置いてある家具ぜんぶ（選択・水入れ探しなど）
+    let climbs = [];      // よじ登れる家具
+    // よじ登れる家具の高さ（床を細かいマス目に分けて、上から光線を当てて測る）
+    const HF = { c: 0.12, nx: 0, nz: 0, h: null };
+    function buildHF() {
+      HF.nx = Math.ceil(TK.hw * 2 / HF.c) + 1; HF.nz = Math.ceil(TK.hd * 2 / HF.c) + 1;
+      HF.h = new Float32Array(HF.nx * HF.nz);
+      if (!climbs.length) return;
+      const rc = new T.Raycaster(), down = new T.Vector3(0, -1, 0), from = new T.Vector3();
+      for (const o of climbs) {
+        o.updateMatrixWorld(true);
+        const bb = new T.Box3().setFromObject(o);
+        const i0 = Math.max(0, Math.floor((bb.min.x + TK.hw) / HF.c)), i1 = Math.min(HF.nx - 1, Math.ceil((bb.max.x + TK.hw) / HF.c));
+        const j0 = Math.max(0, Math.floor((bb.min.z + TK.hd) / HF.c)), j1 = Math.min(HF.nz - 1, Math.ceil((bb.max.z + TK.hd) / HF.c));
+        for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+          rc.set(from.set(-TK.hw + i * HF.c, bb.max.y + 1, -TK.hd + j * HF.c), down);
+          const hit = rc.intersectObject(o, true)[0];
+          if (hit && hit.point.y > HF.h[j * HF.nx + i]) HF.h[j * HF.nx + i] = hit.point.y;
+        }
+      }
+    }
+    function heightAt(x, z) {
+      if (!HF.h) return 0;
+      const fx = clamp((x + TK.hw) / HF.c, 0, HF.nx - 1.001), fz = clamp((z + TK.hd) / HF.c, 0, HF.nz - 1.001);
+      const i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j, H = HF.h, n = HF.nx;
+      return lerp(lerp(H[j * n + i], H[j * n + i + 1], u), lerp(H[(j + 1) * n + i], H[(j + 1) * n + i + 1], u), v);
+    }
     let decorKey = '';
     let edit = null; // もようがえ中なら { sel }
     const ring = new T.Mesh(new T.RingGeometry(0.9, 1, 48), new T.MeshBasicMaterial({ color: '#FFC94A', transparent: true, opacity: 0.9, depthWrite: false }));
@@ -2293,7 +2320,7 @@
       if (key === decorKey) return;
       decorKey = key;
       while (decorG.children.length) { const c = decorG.children.pop(); disposeTree(c); }
-      obstacles = [];
+      obstacles = []; placed = []; climbs = [];
       HIDE = null;
       (list || []).forEach((d, i) => {
         const def = DECOR[d.t];
@@ -2309,18 +2336,29 @@
         sh.position.set(d.x, 0.006, d.z);
         sh.scale.setScalar(def.r * 2.6);
         decorG.add(sh);
-        const ob = { x: d.x, z: d.z, r: def.r, i, t: d.t, rot: d.rot || 0, box: boxOf(d.t, def, o) };
+        const B = boxOf(d.t, def, o);
+        const ob = { x: d.x, z: d.z, r: def.r, i, t: d.t, rot: d.rot || 0, box: B };
+        placed.push(ob);
+        const c = Math.cos(d.rot || 0), s2 = Math.sin(d.rot || 0);
+        const local = (lx, lz) => ({ x: d.x + lx * c + lz * s2, z: d.z - lx * s2 + lz * c });
+        if (def.climb) climbs.push(o);
+        else if (def.tunnel) {
+          // トンネル：左右の壁だけにぶつかる。中は通りぬけられる
+          const wt = B.hx * 0.36;
+          for (const sgn of [-1, 1]) obstacles.push(Object.assign({}, ob, { box: { cx: B.cx + sgn * (B.hx - wt / 2), cz: B.cz, hx: wt / 2, hz: B.hz } }));
+        } else obstacles.push(ob);
         if (def.shelter && !HIDE) {
-          const c = Math.cos(d.rot || 0), s2 = Math.sin(d.rot || 0);
-          const sx = d.x + def.shelter.x * c + def.shelter.z * s2, sz = d.z - def.shelter.x * s2 + def.shelter.z * c;
-          HIDE = { x: sx, z: sz, face: (d.rot || 0) + Math.PI, ob };
+          const sp = local(def.shelter.x, def.shelter.z);
+          HIDE = def.tunnel
+            ? { x: sp.x, z: sp.z, face: (d.rot || 0) + Math.PI, ob, tunnel: true, door: local(0, B.hz + 1.6) }
+            : { x: sp.x, z: sp.z, face: (d.rot || 0) + Math.PI, ob };
         }
-        obstacles.push(ob);
       });
+      buildHF();
       showSel();
     }
     function showSel() {
-      const d = edit && edit.sel != null ? obstacles.find(o => o.i === edit.sel) : null;
+      const d = edit && edit.sel != null ? placed.find(o => o.i === edit.sel) : null;
       ring.visible = !!d;
       if (d) { ring.position.x = d.x; ring.position.z = d.z; ring.scale.setScalar(d.r + 0.15); }
     }
@@ -2332,7 +2370,7 @@
       const pts = [[2.0, 0.22], [1.4, 0.34], [0.6, 0.4], [-0.2, 0.4], [-1.0, 0.34], [-1.8, 0.24], [-2.6, 0.14]];
       for (let it = 0; it < 4; it++) {
         for (const o of obstacles) {
-          if (HIDE && o === HIDE.ob && (st.sleeping || st.mode === 'toHide')) continue;
+          if (HIDE && !HIDE.tunnel && o === HIDE.ob && (st.sleeping || st.mode === 'toHide')) continue;
           for (const [k, w] of pts) {
             const px = st.x + Math.sin(st.yaw) * k * S, pz = st.z + Math.cos(st.yaw) * k * S;
             const r = sdObstacle(o, px, pz), min = w * S;
@@ -2409,7 +2447,7 @@
       const obj = buildFood(kind);
       let x, z;
       let tries = 0;
-      do { x = rand(-TK.hw + 2, TK.hw - 1.5); z = rand(-TK.hd + 1.4, TK.hd - 1); tries++; } while ((Math.hypot(x - st.x, z - st.z) < 3 || !freeAt(x, z, 0.4)) && tries < 60);
+      do { x = rand(-TK.hw + 2, TK.hw - 1.5); z = rand(-TK.hd + 1.4, TK.hd - 1); tries++; } while ((Math.hypot(x - st.x, z - st.z) < 3 || !freeAt(x, z, 0.4) || heightAt(x, z) > 0.05) && tries < 60);
       obj.position.set(x, 0, z);
       obj.rotation.y = rand(0, 6.28);
       scene.add(obj);
@@ -2620,6 +2658,8 @@
           const reach = f.kind === 'cricket' ? 1.4 : f.kind === 'dubia' ? 0.6 : 0.2;
           const x1 = clamp(f.obj.position.x + rand(-reach, reach), -BOUNDS.x, BOUNDS.x);
           const z1 = clamp(f.obj.position.z + rand(-reach, reach), BOUNDS.zMin, BOUNDS.zMax);
+          f.t = rand(0.9, 2.2);
+          if (heightAt(x1, z1) > 0.05 || !freeAt(x1, z1, 0.2)) continue;
           f.obj.rotation.y = Math.atan2(x1 - f.obj.position.x, z1 - f.obj.position.z);
           f.hop = { x0: f.obj.position.x, z0: f.obj.position.z, x1, z1, k: 0, dur: f.kind === 'cricket' ? 0.35 : 1.2 };
           f.t = rand(0.9, 2.2);
@@ -2768,8 +2808,9 @@
         } else if (st.mode === 'walk' || st.mode === 'toHide' || st.mode === 'toDrink' || st.mode === 'toBask') {
           step = moveToward(st.target.x, st.target.z, 0.85 * nf, dt);
           if (Math.hypot(st.target.x - st.x, st.target.z - st.z) < 0.15) {
-            if (st.mode === 'toHide') { st.sleeping = true; st.wait = rand(18, 35); st.zzz = 0.8; }
-            if (st.mode === 'toDrink') { st.mode = 'drink'; st.wait = rand(3, 5); st.lickT = 0.2; }
+            if (st.mode === 'toHide' && st.target.next) st.target = st.target.next;
+            else if (st.mode === 'toHide') { st.sleeping = true; st.wait = rand(18, 35); st.zzz = 0.8; st.mode = 'idle'; }
+            else if (st.mode === 'toDrink') { st.mode = 'drink'; st.wait = rand(3, 5); st.lickT = 0.2; }
             else if (st.mode === 'toBask') { st.mode = 'bask'; st.wait = rand(8, 16); }
             else { st.mode = 'idle'; st.wait = st.night ? rand(0.8, 2.5) : rand(2.5, 6); }
           }
@@ -2777,7 +2818,7 @@
           st.wait -= dt;
           if (st.wait <= 0) {
             st.walkTime = 0;
-            const dish = obstacles.find(o => o.t === 'dish'), stone = obstacles.find(o => o.t === 'stone' || o.t === 'stone2');
+            const dish = placed.find(o => o.t === 'dish'), stone = placed.find(o => o.t === 'stone' || o.t === 'stone2');
             const nextTo = (o, gap) => {
               // 家具の手前（ケースの中心に近い側）に、鼻先を向けて止まる
               const a = Math.atan2(-o.x * 0.6 - o.x * 0.4 + rand(-1.2, 1.2), -o.z + rand(-1, 1));
@@ -2787,8 +2828,8 @@
             };
             const r0 = Math.random();
             if (dish && r0 < 0.14) { st.mode = 'toDrink'; st.target = nextTo(dish, 1.25 * st.size); }
-            else if (stone && !st.night && r0 < 0.28) { st.mode = 'toBask'; st.target = nextTo(stone, 1.2 * st.size); }
-            else if ((!st.night || st.heatPref < 0) && Math.random() < (st.heatPref < 0 ? 0.5 : 0.3) && HIDE) { st.mode = 'toHide'; st.target = { x: HIDE.x, z: HIDE.z }; }
+            else if (stone && !st.night && r0 < 0.28) { st.mode = 'toBask'; st.target = { x: stone.x + rand(-0.3, 0.3), z: stone.z + rand(-0.3, 0.3), face: rand(0, 6.28) }; }
+            else if ((!st.night || st.heatPref < 0) && Math.random() < (st.heatPref < 0 ? 0.5 : 0.3) && HIDE) { st.mode = 'toHide'; st.target = HIDE.tunnel ? { x: HIDE.door.x, z: HIDE.door.z, next: { x: HIDE.x, z: HIDE.z } } : { x: HIDE.x, z: HIDE.z }; }
             else if (!st.night && Math.random() < 0.12) { st.sleeping = true; st.wait = rand(12, 25); st.zzz = 0.8; }
             else {
               // 寒いと暖かい側（右）へ、暑いと涼しい側（左）へ寄りがち
@@ -2859,10 +2900,19 @@
       P.tongue = st.lick > 0 ? Math.sin((0.9 - st.lick) / 0.9 * Math.PI) : 0;
       P.breathe = Math.sin(st.t * (st.sleeping ? 1.4 : 2.4));
       P.sway = 1;
-      gk.root.position.set(st.x, 0, st.z);
-      gk.root.rotation.y = st.yaw;
+      // 岩や石の上では、足もとの高さに合わせて体を持ちあげ、坂なら体をかたむける
+      {
+        const sy = Math.sin(st.yaw), cy = Math.cos(st.yaw);
+        const hf = heightAt(st.x + sy * 1.3 * S, st.z + cy * 1.3 * S), hm = heightAt(st.x, st.z), hb = heightAt(st.x - sy * 1.1 * S, st.z - cy * 1.1 * S);
+        st.y = lerp(st.y || 0, Math.max(hm, (hf + hb) / 2), Math.min(1, dt * 8));
+        st.slope = lerp(st.slope || 0, clamp(Math.atan2(hf - hb, 2.4 * S), -0.8, 0.8), Math.min(1, dt * 6));
+      }
+      gk.root.position.set(st.x, st.y, st.z);
+      gk.root.rotation.order = 'YXZ';
+      gk.root.rotation.set(-st.slope, st.yaw, 0);
       pose(gk, P);
       blob.position.x = st.x;
+      blob.position.y = 0.012 + st.y;
       blob.position.z = st.z;
       blob.scale.set(2.2 * S, 4.2 * S, 1);
       blob.rotation.z = st.yaw;
@@ -2925,7 +2975,7 @@
         st.heatPref = temp <= 30 ? 1 : temp >= 34 ? -1 : 0;
         heat.intensity = 0.8 * st.heatGlow;
       },
-      _st: st, refreshDecor, setCage, setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
+      _st: st, _hide: () => HIDE, refreshDecor, setCage, setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
       pendingFoods: () => st.foods.map(f => f.kind),
       lick() { st.lick = 0.9; },
       happy() { st.happy = 1.4; if (st.sleeping) wake(); },
@@ -3113,5 +3163,5 @@
   }
   function photoReady(look, opts) { return photoCache.get(photoKey(look, opts)) || null; }
 
-  root.Leopa3D = { loadKit, CAGE_SIZES, CAGE_THEMES, itemPhoto, itemPhotoReady, supported, createTank, createViewer, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR, TANK };
+  root.Leopa3D = { _buildKit: (n, f) => buildKit(n, f), loadKit, CAGE_SIZES, CAGE_THEMES, itemPhoto, itemPhotoReady, supported, createTank, createViewer, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR, TANK };
 })(typeof window !== 'undefined' ? window : globalThis);
