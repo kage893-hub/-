@@ -1739,6 +1739,34 @@
     ring.visible = false;
     scene.add(ring);
     const contactMat = new T.MeshBasicMaterial({ map: gradientCanvasTexture([[0, 'rgba(40,25,10,.35)'], [0.6, 'rgba(40,25,10,.12)'], [1, 'rgba(40,25,10,0)']]), transparent: true, depthWrite: false });
+    // 家具の実際の形（ばく然とした円ではなく、回転した長方形）で当たり判定する
+    const boxCache = {};
+    function boxOf(t, def, built) {
+      if (boxCache[t]) return boxCache[t];
+      const keepPos = built.position.clone(), keepRot = built.rotation.y;
+      built.position.set(0, 0, 0); built.rotation.y = 0; built.updateMatrixWorld(true);
+      const b = new T.Box3().setFromObject(built);
+      built.position.copy(keepPos); built.rotation.y = keepRot; built.updateMatrixWorld(true);
+      const k = 0.92;
+      return (boxCache[t] = {
+        cx: (b.min.x + b.max.x) / 2, cz: (b.min.z + b.max.z) / 2,
+        hx: Math.max(0.2, (b.max.x - b.min.x) / 2 * k), hz: Math.max(0.2, (b.max.z - b.min.z) / 2 * k),
+      });
+    }
+    // 点(px,pz)から家具までの距離（中にいたらマイナス）と、外へ向かう向き
+    function sdObstacle(o, px, pz) {
+      const c = Math.cos(o.rot), sn = Math.sin(o.rot), B = o.box;
+      const dx = px - o.x, dz = pz - o.z;
+      const lx = dx * c - dz * sn - B.cx, lz = dx * sn + dz * c - B.cz;
+      const qx = Math.abs(lx) - B.hx, qz = Math.abs(lz) - B.hz;
+      let d, nx, nz;
+      if (qx > 0 || qz > 0) {
+        const ax = Math.max(qx, 0), az = Math.max(qz, 0);
+        d = Math.hypot(ax, az); nx = Math.sign(lx) * ax / d; nz = Math.sign(lz) * az / d;
+      } else if (qx > qz) { d = qx; nx = Math.sign(lx) || 1; nz = 0; }
+      else { d = qz; nx = 0; nz = Math.sign(lz) || 1; }
+      return { d, wx: nx * c + nz * sn, wz: -nx * sn + nz * c };
+    }
     function setDecor(list) {
       const key = JSON.stringify(list || []);
       if (key === decorKey) return;
@@ -1760,7 +1788,7 @@
         sh.position.set(d.x, 0.006, d.z);
         sh.scale.setScalar(def.r * 2.6);
         decorG.add(sh);
-        const ob = { x: d.x, z: d.z, r: def.r, i, t: d.t };
+        const ob = { x: d.x, z: d.z, r: def.r, i, t: d.t, rot: d.rot || 0, box: boxOf(d.t, def, o) };
         if (def.shelter && !HIDE) {
           const c = Math.cos(d.rot || 0), s2 = Math.sin(d.rot || 0);
           const sx = d.x + def.shelter.x * c + def.shelter.z * s2, sz = d.z - def.shelter.x * s2 + def.shelter.z * c;
@@ -1779,19 +1807,23 @@
     // 家具にめりこまないように、体にそって押し出す
     function resolveObstacles() {
       const S = 0.95 * st.size;
-      for (let it = 0; it < 3; it++) {
+      // 鼻先から尻尾の先まで、体にそって点を取る（尻尾は細いので余裕を小さく）
+      const pts = [[2.0, 0.22], [1.4, 0.34], [0.6, 0.4], [-0.2, 0.4], [-1.0, 0.34], [-1.8, 0.24], [-2.6, 0.14]];
+      for (let it = 0; it < 4; it++) {
         for (const o of obstacles) {
           if (HIDE && o === HIDE.ob && (st.sleeping || st.mode === 'toHide')) continue;
-          for (const k of [1.25, 0.45, -0.4, -1.3]) {
+          for (const [k, w] of pts) {
             const px = st.x + Math.sin(st.yaw) * k * S, pz = st.z + Math.cos(st.yaw) * k * S;
-            const dx = px - o.x, dz = pz - o.z, d = Math.hypot(dx, dz) || 0.001;
-            const min = o.r + 0.32 * S * (k < -1 ? 0.6 : 1);
-            if (d < min) { st.x += dx / d * (min - d); st.z += dz / d * (min - d); }
+            const r = sdObstacle(o, px, pz), min = w * S;
+            if (r.d < min) { st.x += r.wx * (min - r.d); st.z += r.wz * (min - r.d); }
           }
         }
+        const m = 1.4 * st.size;
+        st.x = clamp(st.x, -BOUNDS.x + m, BOUNDS.x - m);
+        st.z = clamp(st.z, BOUNDS.zMin + m, BOUNDS.zMax - m * 0.6);
       }
     }
-    const freeAt = (x, z, pad) => obstacles.every(o => Math.hypot(x - o.x, z - o.z) > o.r + pad);
+    const freeAt = (x, z, pad) => obstacles.every(o => sdObstacle(o, x, z).d > pad);
     function freePoint(pad, xa, xb, za, zb) {
       for (let k = 0; k < 40; k++) { const x = rand(xa, xb), z = rand(za, zb); if (freeAt(x, z, pad)) return { x, z }; }
       return { x: rand(xa, xb), z: rand(za, zb) };
