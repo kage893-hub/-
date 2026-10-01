@@ -1198,6 +1198,7 @@
     setTimeout(() => f.remove(), 1100);
   }
   function renderView() {
+    if (window.LKids) LKids.set(!!S.kids);
     setHTML($('#soundBtn'), S.mute ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l4 6M21 9l-4 6"/></svg><span class="sr">音をオンにする</span>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg><span class="sr">音をオフにする</span>');
     setHTML($('#musicBtn'), `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>${S.musicOff ? '<path d="M3 3l18 18"/>' : ''}</svg><span class="sr">${S.musicOff ? '音楽をオンにする' : '音楽をオフにする'}</span>`);
     setHTML($('#coins'), `<span class="coin" aria-hidden="true"></span><b>${S.coins}</b><span class="sr">コイン</span>`);
@@ -1241,6 +1242,20 @@
     return `<div class="bar"><span>${label}</span><span class="meter"><i style="--v:${clamp(v).toFixed(1)}%;--c:${color}"></i></span><b>${side === undefined ? Math.round(v) : side}</b></div>`;
   }
 
+  // ボタンのアイコン（線画。色は文字の色）
+  const ICONS = {
+    feed: '<path d="M6 3v7a2 2 0 0 0 4 0V3M8 10v11M17 3c-2 2-2.5 5-2.5 8h3V21"/>',
+    clean: '<path d="M14 3l-4 9M7 12h10l-1.5 9h-7z"/><path d="M10 16v2M14 16v2"/>',
+    hand: '<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12M11 11V4.5a1.5 1.5 0 0 1 3 0V12M14 11.5V6a1.5 1.5 0 0 1 3 0v8a7 7 0 0 1-7 7h-.5a6 6 0 0 1-4.6-2.2L3 16.2a1.6 1.6 0 0 1 2.4-2L8 16"/>',
+    camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.6"/>',
+    album: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 15l4.5-4 4 3.5 2.5-2 5 4"/><circle cx="15.5" cy="8" r="1.6"/>',
+    look: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/>',
+    heart: '<path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/>',
+    sofa: '<path d="M5 11V8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3"/><path d="M3 12a2 2 0 0 1 4 0v2h10v-2a2 2 0 0 1 4 0v6H3z"/><path d="M5 18v2M19 18v2"/>',
+    home: '<path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-5h4v5"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+  };
+  const ic = k => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]}</svg>`;
   function renderCase() {
     const now = Date.now();
     const g = selected();
@@ -1258,9 +1273,9 @@
     setHTML($('#tankName'), `<b>${esc(g.name)}</b><span class="sex ${g.sex}">${sexMark(g)}</span><span class="pill ${status.cls}">${status.text}</span>`);
     setHTML($('#caseInfo'), `
       ${editing ? editPanel(g) : `<div class="actions">
-        <button class="act primary care${tutGlow('feed')}" data-action="feedMenu">ごはん</button>
-        <button class="act care${tutGlow('clean')}" data-action="clean">おそうじ</button>
-        <button class="act care${tutGlow('handle')}" data-action="handle">ふれあう</button>
+        <button class="act primary care${tutGlow('feed')}" data-action="feedMenu">${ic('feed')}ごはん</button>
+        <button class="act care${tutGlow('clean')}" data-action="clean">${ic('clean')}おそうじ</button>
+        <button class="act care${tutGlow('handle')}" data-action="handle">${ic('hand')}ふれあう</button>
       </div>
       ${tutCoach()}
       ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮をうながす</button>' : ''}
@@ -1297,12 +1312,12 @@
       </div>
 
       <div class="actions sub">
-        <button class="act ghost" data-action="viewGecko" data-id="${g.id}">くわしく見る</button>
-        <button class="act ghost" data-action="pairMenu">ペアリング${block ? '' : ' OK'}</button>
-        <button class="act ghost" data-action="camera">カメラで撮る</button>
-        <button class="act ghost" data-action="album">アルバム</button>
-        <button class="act ghost" data-action="editStart">もようがえ</button>
-        <button class="act ghost" data-action="rehomeMenu">里親に出す</button>
+        <button class="act ghost" data-action="viewGecko" data-id="${g.id}">${ic('look')}くわしく見る</button>
+        <button class="act ghost" data-action="pairMenu">${ic('heart')}ペアリング${block ? '' : ' OK'}</button>
+        <button class="act ghost" data-action="camera">${ic('camera')}カメラで撮る</button>
+        <button class="act ghost" data-action="album">${ic('album')}アルバム</button>
+        <button class="act ghost" data-action="editStart">${ic('sofa')}もようがえ</button>
+        <button class="act ghost" data-action="rehomeMenu">${ic('home')}里親に出す</button>
       </div>
       <p class="tip"><b>まめちしき</b><span>${TIPS[tipIndex]}</span></p>`}`);
   }
@@ -2342,7 +2357,7 @@
         x.fillText(`${g.name} ${g.sex === 'M' ? '♂' : '♀'}  ${weightOf(g)}g`, pad, c.height - h * 0.42);
         x.font = `500 ${Math.round(h * 0.26)}px "Zen Maru Gothic","Hiragino Maru Gothic ProN",sans-serif`;
         x.fillStyle = 'rgba(255,255,255,.85)';
-        x.fillText(`${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}  レオパといっしょ`, pad, c.height - h * 0.12);
+        x.fillText(`${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}  ${window.LKids && LKids.on ? 'れおぱといっしょ' : 'レオパといっしょ'}`, pad, c.height - h * 0.12);
         res(c.toDataURL('image/jpeg', 0.85));
       };
       img.src = dataUrl;
@@ -2351,13 +2366,13 @@
   Object.assign(ACTIONS, {
     camera() { const g = selected(); if (!g || !tank) return; cameraSheet(g); },
     camCancel() { camClose(); if (tank) tank.setClose(false); },
-    async camShoot() {
+    async camShoot(keep) {
       const g = S.geckos.find(x => x.id === window._camGecko);
       if (!g || !tank) { camClose(); return; }
       let raw;
       try { raw = tank.snapshot(1200, false); } catch (e) { toast('写真をとれませんでした'); return; }
       camClose();
-      tank.setClose(false);
+      if (keep !== true) tank.setClose(false);
       sfx('tap');
       const img = await stamp(raw, g);
       shot = { img, id: g.id };
@@ -2532,6 +2547,32 @@
     })[kind]?.();
   }
   Object.assign(ACTIONS, {
+    settings() {
+      const k = !!S.kids;
+      openSheet(`<h3 class="sheet-title">${ic('gear')}設定</h3>
+        <p class="set-label">文字のモード</p>
+        <div class="seg two" role="radiogroup" aria-label="文字のモード">
+          <button role="radio" aria-checked="${!k}" class="${k ? '' : 'on'}" data-action="setKids" data-v="0"><b data-raw>ふつう</b><small data-raw>漢字とカタカナ</small></button>
+          <button role="radio" aria-checked="${k}" class="${k ? 'on' : ''}" data-action="setKids" data-v="1"><b data-raw>ひらがな</b><small data-raw>ちいさな こむけ</small></button>
+        </div>
+        <p class="muted small">ひらがなモードでは、すべての文字をひらがなにして、むずかしい言葉をやさしい言葉に言いかえます。</p>
+        <button class="act ghost" data-action="closeSheet">とじる</button>`);
+    },
+    setKids(t) {
+      S.kids = t.dataset.v === '1';
+      save();
+      renderView();
+      ACTIONS.settings();
+      toast(S.kids ? 'ひらがなモードにしたよ' : 'ふつうの文字にもどしました');
+    },
+    // 全画面のときのシャッター：いま見えているまま、すぐに1枚
+    fullShoot() {
+      const g = selected();
+      if (!g || !tank) return;
+      const f = $('#tank'); if (f) { f.classList.remove('flash'); void f.offsetWidth; f.classList.add('flash'); }
+      window._camGecko = g.id;
+      ACTIONS.camShoot(true);
+    },
     toggleSound() { S.mute = !S.mute; if (!S.mute) sfx('tap'); renderView(); save(); },
     toggleMusic() {
       S.musicOff = !S.musicOff;

@@ -24,7 +24,7 @@
 <div id="app">
   <header class="topbar">
     <h1 class="logo"><picture><source srcset="assets/logo.webp" type="image/webp"><img src="assets/logo.png" alt="レオパといっしょ" width="720" height="178"></picture></h1>
-    <div class="top-right"><button class="sound-btn" id="musicBtn" data-action="toggleMusic"></button><button class="sound-btn" id="soundBtn" data-action="toggleSound"></button><div class="coins" id="coins"></div></div>
+    <div class="top-right"><button class="sound-btn" id="setBtn" data-action="settings" aria-label="設定"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button><button class="sound-btn" id="musicBtn" data-action="toggleMusic"></button><button class="sound-btn" id="soundBtn" data-action="toggleSound"></button><div class="coins" id="coins"></div></div>
   </header>
   <main>
     <section id="view-case" class="view">
@@ -35,6 +35,7 @@
         <p id="tankEmpty" class="tank-empty" hidden>ケースは空っぽです。ショップでおむかえしよう</p>
         <div class="tank-name" id="tankName"></div>
         <button class="full-btn" data-action="fullView" aria-label="全画面で見る"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        <button class="shutter full-shutter" data-action="fullShoot" aria-label="シャッター（写真をとる）"><span></span></button>
         <div class="full-bar" id="fullBar">
           <button class="act primary" data-action="feedMenu">ごはん</button>
           <button class="act" data-action="fullRotate" id="fullRotate" hidden>横向き</button>
@@ -66,6 +67,7 @@
 <script src="js/art.js"></script>
 <script src="js/scene3d.js"></script>
 <script src="js/music.js"></script>
+<script src="js/kids.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

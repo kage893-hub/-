@@ -605,3 +605,18 @@ body.full-view .sheet-wrap { z-index: 55; }
 .tank:has(.hand-bar) .cam-btn, .tank:has(.hand-bar) .thermo { opacity: 0; pointer-events: none; }
 .credits { margin: 0; padding-left: 1.2em; display: grid; gap: 8px; font-size: 13px; line-height: 1.6; }
 .credits a { color: var(--info); }
+
+/* ボタンのアイコン */
+.act .ic, .sheet-title .ic { width: 1.15em; height: 1.15em; margin-right: .3em; vertical-align: -.2em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.sheet-title .ic { width: 1em; height: 1em; }
+.set-label { margin: 4px 0 6px; font-weight: 700; }
+/* 全画面のときだけ出す、いつでも撮れるシャッター */
+.full-shutter { display: none; }
+body.full-view .full-shutter { display: grid; position: absolute; z-index: 9; right: calc(14px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); background: rgba(0, 0, 0, .18); box-shadow: 0 2px 10px rgba(0, 0, 0, .25); }
+body.full-view .tank.camera-on .full-shutter, body.full-view .tank:has(.hand-bar) .full-shutter { display: none; }
+.tank.flash::after { content: ''; position: absolute; inset: 0; z-index: 20; background: #fff; pointer-events: none; animation: camFlash .35s ease-out forwards; }
+@keyframes camFlash { from { opacity: .85; } to { opacity: 0; } }
+/* ひらがなモードは、文字を少し大きく、行間を広く */
+html.kids .muted.small, html.kids .small { font-size: 13px; line-height: 1.7; }
+html.kids .pill { white-space: normal; }
+.offer-main { min-width: 0; }
