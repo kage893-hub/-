@@ -370,7 +370,8 @@
         </div></div>`;
   }
   const offerAt = i => i === 'sp' ? (S.special && !S.special.sold ? S.special.offer : null)
-    : i[0] === 'x' ? (S.expo && S.expo.stock[Number(i.slice(1))] && !S.expo.stock[Number(i.slice(1))].sold ? S.expo.stock[Number(i.slice(1))] : null) : S.offers[Number(i)];
+    : i[0] === 'x' ? (S.expo && S.expo.stock[Number(i.slice(1))] && !stockGone(S.expo.stock[Number(i.slice(1))]) ? S.expo.stock[Number(i.slice(1))] : null) : S.offers[Number(i)];
+  const stockGone = o => o.sold || o.other || (o.goneAt && Date.now() >= o.goneAt);
   function takeOffer(i) { if (i === 'sp') S.special.sold = true; else if (i[0] === 'x') S.expo.stock[Number(i.slice(1))].sold = true; else S.offers.splice(Number(i), 1); }
   function refreshOffers(now) {
     refreshSpecial(now);
@@ -1132,6 +1133,7 @@
       if (!g || S.geckos.length <= 1 || g.gravid) return;
       const reward = Math.round(valueOf(g) * 0.8);
       memo(g, 'やさしい飼い主さんのもとへ旅立った。元気でね');
+      const back = returnDecor(g);
       S.geckos = S.geckos.filter(x => x !== g);
       S.coins += reward;
       S.stats.rehomed++;
@@ -1139,6 +1141,7 @@
       closeSheet();
       sfx('coin');
       toast(`${g.name}は新しい家族のもとへ。元気でね！（+${reward}）`);
+      if (back) toast(`ケースの家具${back}個は、手持ちにもどしました`);
       renderView();
       save();
     },
@@ -1581,7 +1584,6 @@
       ${tutCoach()}
       ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮をうながす</button>' : ''}
       ${g.stuckShed ? '<button class="act wide mist" data-action="soak">ぬるま湯ケアで、のこった皮をとる</button>' : ''}
-      ${expoBanner()}
       ${installCard()}
       <div class="card gecko-card">
         <div class="gc-head">
@@ -1622,6 +1624,7 @@
         <button class="act ghost" data-action="editStart">${ic('sofa')}もようがえ</button>
         <button class="act ghost" data-action="rehomeMenu">${ic('home')}里親に出す</button>
       </div>
+      ${expoBanner()}
       <p class="tip"><b>まめちしき</b><span>${TIPS[tipIndex]}</span></p>`}`);
   }
 
@@ -2118,6 +2121,7 @@
       const g = S.geckos.find(x => x.id === t.dataset.id);
       if (!o || !g || !fits(o, g) || S.geckos.length <= 1) return;
       memo(g, `${o.buyer}のもとへ旅立った`);
+      const back = returnDecor(g);
       S.geckos = S.geckos.filter(x => x !== g);
       if (S.selected === g.id) S.selected = S.geckos[0].id;
       S.coins += o.reward;
@@ -2126,6 +2130,7 @@
       closeSheet();
       sfx('coin');
       toast(`${g.name}は${o.buyer}のもとへ。報酬 ${o.reward}コイン！`);
+      if (back) toast(`ケースの家具${back}個は、手持ちにもどしました`);
       checkAch(); renderView(); save();
     },
     claimAch(t) {
@@ -3105,17 +3110,17 @@
 
   // ======================================================
   // レプタイルズショー：毎週日曜 10:00〜22:00。入場チケット 5コイン
-  // 水曜から、自分のブースに出す子を決められる
+  // 土曜から案内が出て、自分のブースに出す子を決められる
   // ======================================================
-  const EXPO_OPEN = 10, EXPO_CLOSE = 22, EXPO_TICKET = 5;
+  const EXPO_OPEN = 10, EXPO_CLOSE = 22, EXPO_TICKET = 5, BOOTH_MAX = 5;
   const ymd = d => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-  // いまの週のショーの情報（水〜日だけ。月・火は null）
+  // いまの週のショーの情報（土・日だけ。ほかの曜日は null）
   function expoInfo(now) {
     const d = new Date(now), dow = d.getDay(), h = d.getHours();
-    if (dow !== 0 && dow < 3) return null;
-    const sun = new Date(d); sun.setDate(d.getDate() + (dow === 0 ? 0 : 7 - dow));
+    if (dow !== 0 && dow !== 6) return null;
+    const sun = new Date(d); sun.setDate(d.getDate() + (dow === 0 ? 0 : 1)); sun.setHours(0, 0, 0, 0);
     const open = dow === 0 && h >= EXPO_OPEN && h < EXPO_CLOSE;
-    return { key: ymd(sun), open, over: dow === 0 && h >= EXPO_CLOSE, sunday: dow === 0, dow, h };
+    return { key: ymd(sun), open, over: dow === 0 && h >= EXPO_CLOSE, sunday: dow === 0, dow, h, t0: sun.getTime() + EXPO_OPEN * HOUR, t1: sun.getTime() + EXPO_CLOSE * HOUR };
   }
   // ショー限定のケースの見た目（週ごとに入れかわる）
   const EXPO_THEMES = ['expoGold', 'expoNight'];
@@ -3137,6 +3142,9 @@
         o.growth = 60 + Math.round(r() * 60);
         o.price = Math.round(valueOf(o) * 1.25);
         o.booth = RIVALS[(i * 3 + Math.floor(r() * 10)) % RIVALS.length];
+        // ほかのお客さんにおむかえされる時刻：朝はそろっていて、夜になるほど売れていく（売れ残る子もいる）
+        const f = 0.1 + Math.pow(r(), 0.7) * 1.05;
+        o.goneAt = f >= 1 ? 0 : info.t0 + f * (info.t1 - info.t0);
         return o;
       });
       // 用品：家具10種類がいつもの半額
@@ -3149,7 +3157,7 @@
   function expoTick(now) {
     const info = expoInfo(now), E = expoState(now);
     if (!info || !E) return;
-    if (!E.noticed && (info.dow >= 3 || info.sunday) && !info.over) {
+    if (!E.noticed && !info.over) {
       E.noticed = true;
       setTimeout(() => toast(`今週の日曜日はレプタイルズショー！（${EXPO_OPEN}:00〜${EXPO_CLOSE}:00）自分のブースに出す子を決めよう`), 2500);
       notify('expo' + E.day, '今週の日曜日はレプタイルズショー', 'ブースに出すレオパを決めておこう');
@@ -3162,11 +3170,10 @@
       if (!b.at) {
         // 売れるかどうかと、売れる時刻を決める（値打ちの高い子ほど売れやすい）
         const r = Math.random();
-        const p = clamp(0.45 + valueOf(g) / 400, 0.45, 0.92) * 100;
-        const start = Math.max(now, new Date(new Date(now).setHours(EXPO_OPEN, 0, 0, 0)).getTime());
-        const end = new Date(new Date(now).setHours(EXPO_CLOSE, 0, 0, 0)).getTime();
+        const p = clamp(0.5 + boothValue(g) / 600, 0.5, 0.92) * 100;
+        const start = Math.max(now, info.t0), end = info.t1;
         b.at = r * 100 < p ? start + Math.random() * Math.max(0, end - start - 30 * MIN) : -1;
-        b.price = Math.round(valueOf(g) * (1.15 + Math.random() * 0.45));
+        b.price = Math.round(boothValue(g) * (0.92 + Math.random() * 0.16) / 5) * 5;
       }
       if (b.at > 0 && (now >= b.at || info.over) && S.geckos.length > 1) {
         b.result = 'sold';
@@ -3183,9 +3190,29 @@
       if (E.booth.length) setTimeout(() => toast(`レプタイルズショーが終わりました。${E.sold.length}匹が新しいおうちへ${un ? `、${un}匹はおうちに帰ってきました` : ''}`), 1200);
     }
   }
+  // ブースでの売り値：ブリーダー依頼の報酬の1.2倍くらい
+  function boothValue(g) {
+    const dex = G.dexMatches(g.genes, g.tang, g.poly);
+    let diff = 0;
+    for (const [name, d] of ORDER_MORPHS) { const e = G.DEX.find(x => x.name === name); if (e && dex.includes(e.id)) diff = Math.max(diff, d); }
+    for (const t of ORDER_TRAITS) for (const v of t.vals) if (t.test(g, v)) diff = Math.max(diff, t.diff(v));
+    // 依頼に出てこない、もっとめずらしいモルフ
+    const rare = { SHTCTB: 1.3, 'ブラックナイト': 1.1, 'ディアブロブランコ': 1.4, 'ラプター': 1.1, 'トータルエクリプス': 0.95, 'レッドアイアルビノ': 0.9, 'ブレイジングブリザード': 0.9, 'ブリザード': 0.6, 'スーパーマックスノー トレンパーアルビノ': 0.8, 'マックスノー エクリプス': 0.75 };
+    for (const id of dex) if (rare[id]) diff = Math.max(diff, rare[id]);
+    return Math.round((50 + diff * 220) * (stageOf(g) === 'adult' ? 1.5 : 1) * 1.2);
+  }
+  // おわかれした子のケースに置いていた家具は、手持ちにもどす（ケージの見た目と大きさは、もともと全部のケースで使える）
+  function returnDecor(g) {
+    let n = 0;
+    for (const d of g.decor || []) if (L3.DECOR[d.t]) { S.decorInv[d.t] = (S.decorInv[d.t] || 0) + 1; n++; }
+    g.decor = [];
+    return n;
+  }
   // 生体を手放す（里親・依頼・ショー 共通）
   function sendAway(g, reward, text) {
     memo(g, text);
+    const back = returnDecor(g);
+    if (back) setTimeout(() => toast(`${g.name}のケースの家具${back}個は、手持ちにもどしました`), 2600);
     S.geckos = S.geckos.filter(x => x !== g);
     S.coins += reward;
     S.stats.rehomed++;
@@ -3249,7 +3276,7 @@
     if (info.over) return '';
     const n = E.booth.filter(b => !b.result).length;
     return `<div class="expo-banner soon"><span class="expo-tag">${info.sunday ? `きょう ${EXPO_OPEN}:00から` : '今週の日曜日'}</span><b>レプタイルズショー</b>
-      <small>めずらしいレオパの即売や、チャンピオン大会があります。自分のブースに出す子も決めておこう（${n} / 3匹）</small>
+      <small>めずらしいレオパの即売や、チャンピオン大会があります。自分のブースに出す子も決めておこう（${n} / ${BOOTH_MAX}匹）</small>
       <button class="act sm" data-action="expoBooth">ブースに出す子を決める</button></div>`;
   }
   function renderExpo() {
@@ -3259,11 +3286,12 @@
     const tabs = `<div class="shop-tabs expo-tabs" role="tablist">${EXPO_TABS.map(([k, n]) => `<button role="tab" aria-selected="${tab === k}" class="${tab === k ? 'on' : ''}" data-action="expoTab" data-tab="${k}">${n}</button>`).join('')}</div>`;
     let body = '';
     if (tab === 'sale') {
-      body = `<p class="muted small">ブリーダーさんたちが、今日だけの子を連れてきています。1匹ずつの早い者勝ち。</p>
+      body = `<p class="muted small">ブリーダーさんたちが、今日だけの子を連れてきています。1匹ずつの早い者勝ち。夜になるほど、ほかのお客さんにおむかえされていきます（いま ${E.stock.filter(o => !stockGone(o)).length} / ${E.stock.length}匹）。</p>
         <div class="offers">${E.stock.map((o, i) => {
           const morph = nameOf(o);
           const hets = G.hets(o.genes);
-          return `<div class="offer${o.sold ? ' sold' : ''}">
+          const gone = stockGone(o);
+          return `<div class="offer${gone ? ' sold' : ''}">
             <div class="offer-art" data-action="viewOffer" data-i="x${i}">${portrait(o, stageOf(o), morph)}</div>
             <div class="offer-main">
               <small class="muted">${esc(o.booth)} のブース</small>
@@ -3272,13 +3300,13 @@
               ${hets.length ? `<small class="het-line">${hets.map(h => 'het ' + h).join(' / ')}</small>` : ''}
               ${unseen(o) ? '<small class="new-line">図鑑にまだいない</small>' : ''}
               ${traitTable(o, true)}
-              ${o.sold ? '<span class="pill">売り切れ</span>' : `<button class="act sm" data-action="viewOffer" data-i="x${i}">じっくり見る</button>
+              ${gone ? `<span class="pill">${o.sold ? 'おむかえしました' : 'ほかのお客さんがおむかえ'}</span>` : `<button class="act sm" data-action="viewOffer" data-i="x${i}">じっくり見る</button>
               <button class="act primary sm" data-action="buyGecko" data-i="x${i}" ${S.coins < o.price || S.geckos.length >= S.cases ? 'disabled' : ''}>${o.price} コインでおむかえ</button>`}
             </div></div>`;
         }).join('')}</div>
         <div class="card guide"><h3 class="h3">ショーでおむかえするときは</h3><p>見た目だけで選ばず、元気か（目がすんでいる・しっぽがふっくら）をよく見ます。ケースの準備ができていないなら、その日は買わないのも大切です。持ち帰るときは、寒すぎ・暑すぎに気をつけます。</p></div>`;
     } else if (tab === 'booth') {
-      body = `<p class="muted small">自分で育てた子を、最大3匹までブースに出せます。ショーのあいだに、お客さんが来ると売れていきます。売れなかった子は、閉場後におうちに帰ってきます。</p>
+      body = `<p class="muted small">自分で育てた子を、最大${BOOTH_MAX}匹までブースに出せます。ショーのあいだに、お客さんが来ると売れていきます。売れなかった子は、閉場後におうちに帰ってきます。</p>
         <div class="list">${E.booth.length ? E.booth.map(b => {
           const g = S.geckos.find(x => x.id === b.id);
           const name = g ? g.name : (E.sold.find(s => s.name) || {}).name || '';
@@ -3345,16 +3373,16 @@
     expoTab(t) { S.expoTab = t.dataset.tab; renderView(); window.scrollTo(0, 0); },
     expoBooth() {
       const now = Date.now(), info = expoInfo(now), E = expoState(now);
-      if (!info || info.over || !E) { toast('ブースを決められるのは、水曜日から日曜日のショーが終わるまでです'); return; }
+      if (!info || info.over || !E) { toast('ブースを決められるのは、土曜日から日曜日のショーが終わるまでです'); return; }
       needLicense(() => {
         const on = new Set(E.booth.filter(b => !b.result).map(b => b.id));
-        openSheet(`<p class="eyebrow">わたしのブース（${on.size} / 3匹）</p><h3 class="sheet-title">ショーに出す子をえらぶ</h3>
+        openSheet(`<p class="eyebrow">わたしのブース（${on.size} / ${BOOTH_MAX}匹）</p><h3 class="sheet-title">ショーに出す子をえらぶ</h3>
           <p class="muted small">出した子は、ショーのあいだに売れると新しいおうちへ旅立ちます。売れなかったら帰ってきます。</p>
           <div class="list">${S.geckos.map(g => {
             const why = g.gravid ? '抱卵中' : stageOf(g) === 'baby' ? 'ベビーはまだ出せません' : '';
             return `<button class="row${on.has(g.id) ? ' on' : ''}" data-action="boothToggle" data-id="${g.id}" ${why ? 'disabled' : ''}>
               <span class="row-art">${A.swatch(g)}</span>
-              <span class="row-main"><b>${esc(g.name)} ${sexMark(g)}</b><small>${esc(nameOf(g))}${why ? ' ・ ' + why : ` ・ 目安 ${Math.round(valueOf(g) * 1.15)}〜${Math.round(valueOf(g) * 1.6)}コイン`}</small></span>
+              <span class="row-main"><b>${esc(g.name)} ${sexMark(g)}</b><small>${esc(nameOf(g))}${why ? ' ・ ' + why : ` ・ 売れたら 約${boothValue(g)}コイン`}</small></span>
               <span class="row-side">${on.has(g.id) ? '<span class="pill good">出す</span>' : ''}</span></button>`;
           }).join('')}</div>
           <button class="act" data-action="closeSheet">とじる</button>`);
@@ -3365,10 +3393,10 @@
       const g = S.geckos.find(x => x.id === t.dataset.id); if (!g) return;
       const i = E.booth.findIndex(b => b.id === g.id && !b.result);
       if (i >= 0) { E.booth.splice(i, 1); save(); ACTIONS.expoBooth(); return; }
-      if (E.booth.filter(b => !b.result).length >= 3) { toast('ブースに出せるのは3匹までです'); return; }
+      if (E.booth.filter(b => !b.result).length >= BOOTH_MAX) { toast(`ブースに出せるのは${BOOTH_MAX}匹までです`); return; }
       if (S.geckos.length - E.booth.filter(b => !b.result).length <= 1) { toast('さいごの1匹は出せません'); return; }
       // 売れたらおわかれになるので、先に確認する
-      ACTIONS.farewell(g, 'ショーのお客さん', Math.round(valueOf(g) * 1.15), `data-action="boothAdd" data-id="${g.id}"`);
+      ACTIONS.farewell(g, 'ショーのお客さん', boothValue(g), `data-action="boothAdd" data-id="${g.id}"`);
       const note = document.querySelector('#sheetBody .notice');
       if (note) note.textContent = `ブースに出すと、ショーで売れたときに${g.name}は新しいおうちへ旅立ちます。売れなかったら帰ってきます。出しますか？`;
       const b = document.querySelector('#sheetBody [data-action="boothAdd"]'); if (b) b.textContent = 'ブースに出す';
