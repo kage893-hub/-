@@ -1633,6 +1633,7 @@
         const water = new T.Mesh(new T.CircleGeometry(0.7, 40), phys('#6FAECB', { roughness: 0.02, clearcoat: 1, transparent: true, opacity: 0.85 }));
         water.rotation.x = -Math.PI / 2;
         water.position.y = 0.285;
+        water.name = 'water'; water.userData.r = 0.7;
         g.add(dish, water);
         return g;
       },
@@ -1663,6 +1664,7 @@
     const water = new T.Mesh(new T.CircleGeometry(it.size[2] * k * 0.42, 40), phys('#6FAECB', { roughness: 0.02, clearcoat: 1, transparent: true, opacity: 0.85 }));
     water.rotation.x = -Math.PI / 2;
     water.position.set(-W * 0.06, it.size[1] * k * ((v && v.h) || 1) * 0.72, 0);
+    water.name = 'water'; water.userData.r = it.size[2] * k * 0.42;
     g.add(body, water);
     return g;
   }
@@ -1814,17 +1816,17 @@
       build: () => kitOr('Gingerbread', 2.3, { h: 3 }, () => OLD_DECOR.stone.build()),
     },
     dish: {
-      name: '水入れ', price: 10, r: 1.0,
+      name: '水入れ', price: 10, r: 1.0, climb: true, drink: true,
       desc: '石をくりぬいた水入れ。いつでも新鮮なお水を',
       build: () => stoneBasin('dish'),
     },
     dish2: {
-      name: '水入れ（赤い砂岩）', price: 12, r: 1.05,
+      name: '水入れ（赤い砂岩）', price: 12, r: 1.05, climb: true, drink: true,
       desc: '赤茶色の砂岩の水入れ。荒野ふうのケースに',
       build: () => stoneBasin('dish2'),
     },
     dish3: {
-      name: '水入れ（白い大理石）', price: 15, r: 0.95,
+      name: '水入れ（白い大理石）', price: 15, r: 0.95, climb: true, drink: true,
       desc: 'つるっとした白い大理石の水入れ。上品な雰囲気に',
       build: () => stoneBasin('dish3'),
     },
@@ -2373,7 +2375,7 @@
         const j0 = Math.max(0, Math.floor((bb.min.z + TK.hd) / HF.c)), j1 = Math.min(HF.nz - 1, Math.ceil((bb.max.z + TK.hd) / HF.c));
         for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
           rc.set(from.set(-TK.hw + i * HF.c, bb.max.y + 1, -TK.hd + j * HF.c), down);
-          const hit = rc.intersectObject(o, true)[0];
+          const hit = rc.intersectObject(o, true).find(h => h.object.name !== 'water');
           if (hit && hit.point.y > HF.h[j * HF.nx + i]) HF.h[j * HF.nx + i] = hit.point.y;
         }
       }
@@ -2450,6 +2452,11 @@
         placed.push(ob);
         const c = Math.cos(d.rot || 0), s2 = Math.sin(d.rot || 0);
         const local = (lx, lz) => ({ x: d.x + lx * c + lz * s2, z: d.z - lx * s2 + lz * c });
+        if (def.drink) {
+          o.updateMatrixWorld(true);
+          const w = o.getObjectByName('water');
+          if (w) { const wp = w.getWorldPosition(new T.Vector3()); ob.water = { x: wp.x, z: wp.z, y: wp.y, r: w.userData.r || 0.6 }; }
+        }
         if (def.climb) climbs.push(o);
         else if (def.tunnel) {
           // トンネル：左右の壁だけにぶつかる。中は通りぬけられる
@@ -2912,7 +2919,11 @@
           // 水をぺろぺろ飲む／石の横でじっとひなたぼっこ
           st.wait -= dt;
           if (st.target && st.target.face != null) st.yaw += angleTo(st.yaw, st.target.face) * Math.min(1, dt * 3);
-          if (st.mode === 'drink') { st.lickT -= dt; if (st.lickT <= 0) { st.lick = 0.9; st.lickT = rand(0.9, 1.4); } }
+          if (st.mode === 'drink') {
+            st.lickT -= dt; if (st.lickT <= 0) { st.lick = 0.9; st.lickT = rand(0.9, 1.4); }
+            const w = st.target && st.target.water;
+            if (w) { const my = mouthWorld().y; st.drinkPitch = clamp((st.drinkPitch || 0) + (my - (w.y + 0.04)) * dt * 6, -0.3, 0.8); }
+          }
           if (st.wait <= 0) { st.mode = 'idle'; st.wait = rand(1.5, 4); }
         } else if (st.mode === 'walk' || st.mode === 'toHide' || st.mode === 'toDrink' || st.mode === 'toBask') {
           step = moveToward(st.target.x, st.target.z, 0.85 * nf, dt);
@@ -2927,7 +2938,7 @@
           st.wait -= dt;
           if (st.wait <= 0) {
             st.walkTime = 0;
-            const dish = placed.find(o => /^dish/.test(o.t)), stone = placed.find(o => o.t === 'stone' || o.t === 'stone2');
+            const dish = placed.find(o => o.water), stone = placed.find(o => o.t === 'stone' || o.t === 'stone2');
             const nextTo = (o, gap) => {
               // 家具の手前（ケースの中心に近い側）に、鼻先を向けて止まる
               const a = Math.atan2(-o.x * 0.6 - o.x * 0.4 + rand(-1.2, 1.2), -o.z + rand(-1, 1));
@@ -2936,7 +2947,14 @@
               return { x, z, face: Math.atan2(o.x - x, o.z - z) };
             };
             const r0 = Math.random();
-            if (dish && r0 < 0.14) { st.mode = 'toDrink'; st.target = nextTo(dish, 1.25 * st.size); }
+            if (dish && r0 < 0.14) {
+              // 口が水の真ん中あたりに来るように、器のふちに前足をかけて止まる
+              const w = dish.water;
+              const a = Math.atan2(st.x - w.x + rand(-0.6, 0.6), st.z - w.z + rand(-0.6, 0.6));
+              const d = w.r * 0.35 + 1.85 * 0.95 * st.size;
+              const x = clamp(w.x + Math.sin(a) * d, -BOUNDS.x + 1.4, BOUNDS.x - 1.4), z = clamp(w.z + Math.cos(a) * d, BOUNDS.zMin + 1.4, BOUNDS.zMax - 1);
+              st.mode = 'toDrink'; st.target = { x, z, face: Math.atan2(w.x - x, w.z - z), water: w };
+            }
             else if (stone && !st.night && r0 < 0.28) { st.mode = 'toBask'; st.target = { x: stone.x + rand(-0.3, 0.3), z: stone.z + rand(-0.3, 0.3), face: rand(0, 6.28) }; }
             else if ((!st.night || st.heatPref < 0) && Math.random() < (st.heatPref < 0 ? 0.5 : 0.3) && HIDE) { st.mode = 'toHide'; st.target = HIDE.tunnel ? { x: HIDE.door.x, z: HIDE.door.z, next: { x: HIDE.x, z: HIDE.z } } : { x: HIDE.x, z: HIDE.z }; }
             else if (!st.night && Math.random() < 0.12) { st.sleeping = true; st.wait = rand(12, 25); st.zzz = 0.8; }
@@ -2999,7 +3017,8 @@
       P.walk = st.walkW;
       P.look = st.look + (st.eatLook || 0);
       // 歩くときは一歩ごとに頭が小さく上下する
-      P.pitch = st.pitch + (st.eatPitch || 0) + Math.sin(st.phase * 2) * 0.035 * st.walkW;
+      if (st.mode !== 'drink') st.drinkPitch = lerp(st.drinkPitch || 0, 0, Math.min(1, dt * 3));
+      P.pitch = st.pitch + (st.eatPitch || 0) + (st.drinkPitch || 0) + Math.sin(st.phase * 2) * 0.035 * st.walkW;
       P.tilt = (st.tiltT > 0 ? Math.sin(Math.min(1, st.tiltT) * Math.PI) * 0.22 : 0) + (st.happy > 0 ? Math.sin(st.t * 7) * 0.12 : 0);
       P.curl = st.curl;
       P.stalk = st.stalk > 0 ? 1 : 0;
