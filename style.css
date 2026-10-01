@@ -533,3 +533,4 @@ button { font: inherit; color: inherit; }
 .show-break { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin: 6px 0; }
 .show-break b { color: var(--ink, inherit); }
 .spinner.big { display: inline-block; width: 40px; height: 40px; border-width: 4px; margin-bottom: 8px; }
+.cage-dino { border-color: #5B4A3A; background: linear-gradient(#E0865A 0 40%, #8A6A48 40%); }

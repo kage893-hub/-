@@ -1572,6 +1572,7 @@
     white: { name: 'ホワイト＆ペーパー', price: 60, desc: '白いフレームにキッチンペーパー敷き。清潔感たっぷり', floor: 'paper', tint: '#ffffff', frame: '#F4F2ED' },
     wood: { name: '木製ビバリウム', price: 120, desc: 'あたたかみのある木のフレームと背面パネル', floor: 'sand', tint: '#F4E6D0', frame: '#7A4E2C', back: 'wood', thick: true },
     desert: { name: 'デザート', price: 120, desc: '赤い砂と岩の背景で、ふるさとの荒野ふうに', floor: 'sand', tint: '#E7AE7E', frame: '#3A2E26', back: 'rock' },
+    dino: { name: '恐竜時代', price: 150, desc: '火山の背景とシダの森、足あとの残る大地。太古の世界へタイムスリップ', floor: 'dinofloor', tint: '#ffffff', frame: '#5B4A3A', back: 'volcano', thick: true, dino: true },
     candy: { name: 'おかしの家', price: 150, desc: 'クッキーの床、チョコの壁、キャンディの柱。あまーいおうち', floor: 'cookie', tint: '#ffffff', frame: '#F7A8C4', back: 'choco', thick: true, candy: true },
   };
   // ケージ用の模様（一度作ったら使い回す）
@@ -1627,6 +1628,53 @@
       ctx.fillStyle = '#9A6A42'; ctx.fillRect(0, 0, 1024, 256);
       for (let i = 0; i < 70; i++) { ctx.strokeStyle = `rgba(${r() < 0.5 ? '80,45,22' : '200,150,100'},${0.12 + r() * 0.2})`; ctx.lineWidth = 1 + r() * 3; const y = r() * 256; ctx.beginPath(); ctx.moveTo(0, y); for (let x = 0; x <= 1024; x += 32) ctx.lineTo(x, y + Math.sin(x / 70 + i) * 5); ctx.stroke(); }
       ctx.fillStyle = 'rgba(50,28,12,.35)'; for (let x = 256; x < 1024; x += 256) ctx.fillRect(x - 2, 0, 4, 256);
+    } else if (kind === 'dinofloor') {
+      c.width = 1024; c.height = 768;
+      ctx.fillStyle = '#8A6A48'; ctx.fillRect(0, 0, 1024, 768);
+      for (let i = 0; i < 1600; i++) { ctx.fillStyle = `rgba(${r() < 0.5 ? '60,42,28' : '170,140,105'},${0.15 + r() * 0.3})`; ctx.beginPath(); ctx.arc(r() * 1024, r() * 768, 1 + r() * 3.5, 0, 7); ctx.fill(); }
+      for (let i = 0; i < 40; i++) { ctx.fillStyle = `rgba(${r() < 0.5 ? '120,110,100' : '90,80,70'},.8)`; ctx.beginPath(); ctx.ellipse(r() * 1024, r() * 768, 5 + r() * 10, 4 + r() * 7, r() * 3, 0, 7); ctx.fill(); }
+      // 恐竜の3本指の足あと
+      const foot = (x, y, a, sc) => {
+        ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.scale(sc, sc);
+        ctx.fillStyle = 'rgba(45,30,18,.55)';
+        ctx.beginPath(); ctx.ellipse(0, 10, 16, 20, 0, 0, 7); ctx.fill();
+        for (const t of [-0.5, 0, 0.5]) { ctx.save(); ctx.rotate(t); ctx.beginPath(); ctx.ellipse(0, -22, 7, 22, 0, 0, 7); ctx.fill(); ctx.beginPath(); ctx.moveTo(-5, -40); ctx.lineTo(0, -54); ctx.lineTo(5, -40); ctx.fill(); ctx.restore(); }
+        ctx.restore();
+      };
+      for (let k = 0; k < 5; k++) foot(180 + k * 150, 600 - k * 95 + (k % 2) * 40, 0.9, 1.1);
+    } else if (kind === 'volcano') {
+      c.width = 1024; c.height = 256;
+      const sky = ctx.createLinearGradient(0, 0, 0, 256);
+      sky.addColorStop(0, '#6B4C7A'); sky.addColorStop(0.45, '#E0865A'); sky.addColorStop(1, '#F4C27A');
+      ctx.fillStyle = sky; ctx.fillRect(0, 0, 1024, 256);
+      // 遠くの火山（煙と溶岩）
+      const vol = (x, w, h, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(x - w, 256); ctx.lineTo(x - w * 0.18, 256 - h); ctx.lineTo(x + w * 0.18, 256 - h); ctx.lineTo(x + w, 256); ctx.fill(); };
+      ctx.fillStyle = 'rgba(90,70,80,.45)';
+      for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.arc(700 + i * 18, 40 - i * 6, 26 + i * 6, 0, 7); ctx.fill(); }
+      vol(700, 260, 205, '#5A3A3A');
+      ctx.strokeStyle = '#FF7A2A'; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.moveTo(690, 56); ctx.quadraticCurveTo(670, 140, 640, 200); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(712, 56); ctx.quadraticCurveTo(740, 120, 770, 190); ctx.stroke();
+      ctx.fillStyle = '#FFB347'; ctx.fillRect(660, 48, 80, 8);
+      vol(260, 200, 130, '#6E4A44');
+      // 翼竜のシルエット
+      ctx.fillStyle = 'rgba(50,30,45,.75)';
+      for (const [x, y, sc] of [[420, 60, 1], [500, 90, 0.7], [930, 50, 0.8]]) {
+        ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
+        ctx.beginPath(); ctx.moveTo(-50, 0); ctx.quadraticCurveTo(-20, -18, 0, 0); ctx.quadraticCurveTo(20, -18, 50, 0); ctx.quadraticCurveTo(20, -6, 0, 6); ctx.quadraticCurveTo(-20, -6, -50, 0); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(16, -6); ctx.lineTo(4, 4); ctx.fill();
+        ctx.restore();
+      }
+      // 手前のシダ
+      ctx.fillStyle = '#2F4A2A';
+      for (let x = 0; x < 1024; x += 56 + r() * 40) {
+        const h = 70 + r() * 70, lean = (r() - 0.5) * 40;
+        for (let k = 0; k < 9; k++) {
+          const t = k / 9, px = x + lean * t, py = 256 - h * t;
+          ctx.beginPath(); ctx.ellipse(px - 14 * (1 - t), py, 16 * (1 - t) + 4, 4, -0.5, 0, 7); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(px + 14 * (1 - t), py, 16 * (1 - t) + 4, 4, 0.5, 0, 7); ctx.fill();
+        }
+      }
     } else if (kind === 'stripe') {
       c.width = 64; c.height = 256;
       ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, 64, 256);
@@ -1681,6 +1729,7 @@
       g.add(back);
     }
     if (th.candy) g.add(candyBits(hw, hd));
+    if (th.dino) g.add(dinoBits(hw, hd));
     return { group: g, floor, front };
   }
   // ---- ショップの見本写真（家具・ケージの見た目・ケージの大きさ）
@@ -1760,6 +1809,53 @@
     disposeTree(g);
     itemCache.set(key, url);
     return url;
+  }
+  // 恐竜時代の飾り：石の柱、外に生えるシダ、小さな火山、化石の骨
+  function dinoBits(hw, hd) {
+    const g = new T.Group();
+    const stoneM = phys('#7A6A58', { roughness: 0.95 });
+    for (const [x, z] of [[-hw - 0.15, -hd - 0.15], [hw + 0.15, -hd - 0.15], [-hw - 0.15, hd + 0.15], [hw + 0.15, hd + 0.15]]) {
+      const back = z < 0, h = back ? 2.5 : 0.8;
+      const post = new T.Mesh(new T.CylinderGeometry(0.2, 0.26, h, 7), stoneM);
+      post.position.set(x, h / 2, z);
+      const cap = new T.Mesh(new T.DodecahedronGeometry(0.3, 0), stoneM);
+      cap.position.set(x, h + 0.1, z); cap.rotation.set(0.4, 0.7, 0);
+      g.add(post, cap);
+    }
+    // シダ（外の左奥）
+    const fernM = phys('#3E6B35', { roughness: 0.7, side: T.DoubleSide });
+    const fern = (x, z, sc) => {
+      const f = new T.Group();
+      for (let i = 0; i < 9; i++) {
+        const leaf = new T.Mesh(new T.PlaneGeometry(0.5, 2.6, 1, 6), fernM);
+        const pos = leaf.geometry.attributes.position;
+        for (let k = 0; k < pos.count; k++) { const y = pos.getY(k) + 1.3; pos.setZ(k, -0.18 * y * y); pos.setX(k, pos.getX(k) * (1 - y / 2.8)); }
+        leaf.geometry.computeVertexNormals();
+        leaf.geometry.translate(0, 1.3, 0);
+        leaf.rotation.set(-0.5 - (i % 3) * 0.15, i / 9 * Math.PI * 2, 0);
+        f.add(leaf);
+      }
+      f.position.set(x, 0, z); f.scale.setScalar(sc);
+      g.add(f);
+    };
+    fern(-hw - 1.4, -hd - 0.6, 1.1); fern(-hw - 2.2, -hd + 1.2, 0.8);
+    // 小さな火山（外の右奥）
+    const vol = new T.Mesh(new T.CylinderGeometry(0.45, 1.6, 2.2, 14, 1, true), phys('#5A3E36', { roughness: 0.95, side: T.DoubleSide }));
+    vol.position.set(hw + 1.6, 1.1, -hd - 0.8);
+    const lava = new T.Mesh(new T.CircleGeometry(0.44, 14), new T.MeshBasicMaterial({ color: '#FF8A2A' }));
+    lava.rotation.x = -Math.PI / 2; lava.position.set(hw + 1.6, 2.15, -hd - 0.8);
+    g.add(vol, lava);
+    // 化石の骨（外の右手前）
+    const boneM = phys('#EFE3C8', { roughness: 0.7 });
+    const bone = new T.Group();
+    const shaft = new T.Mesh(new T.CylinderGeometry(0.09, 0.09, 1.4, 10), boneM);
+    shaft.rotation.z = Math.PI / 2;
+    bone.add(shaft);
+    for (const x of [-0.72, 0.72]) for (const z of [-0.09, 0.09]) { const k = new T.Mesh(new T.SphereGeometry(0.13, 10, 8), boneM); k.position.set(x, 0, z); bone.add(k); }
+    bone.position.set(hw + 1.3, 0.13, hd - 0.6); bone.rotation.y = 0.6;
+    g.add(bone);
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    return g;
   }
   // おかしの家の飾り：キャンディの柱、ガムドロップ、ペロペロキャンディ
   function candyBits(hw, hd) {

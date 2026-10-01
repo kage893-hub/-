@@ -91,6 +91,8 @@
   }
   // 古いデータ（見た目の遺伝がない版）を新しい形にそろえる
   function migrate(s) {
+    // 自動の記録についていた見本写真は使わなくなったので消す
+    if (s.albums) for (const k in s.albums) for (const e of s.albums[k].entries || []) delete e.look;
     if (s.v === 1) {
       for (const x of [...s.geckos, ...s.eggs, ...(s.offers || [])]) x.poly = G.normPoly(x.poly);
       for (const g of s.geckos) if (g.gravid && g.gravid.dad) g.gravid.dad.poly = G.normPoly(g.gravid.dad.poly);
@@ -1820,7 +1822,7 @@
   }
   function memo(g, text, withLook) {
     const e = { t: Date.now(), text };
-    if (withLook) e.look = { genes: Object.assign({}, g.genes), tang: g.tang, poly: Object.assign({}, g.poly), seed: g.seed, stage: stageOf(g) };
+    // 自動の記録には写真をつけない（写真はカメラで撮ったものだけ）
     albumOf(g).entries.push(e);
   }
   const fmtDate = t => { const d = new Date(t); return `${d.getMonth() + 1}月${d.getDate()}日 ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; };
@@ -1839,7 +1841,7 @@
       <ol class="album">${a.entries.slice().reverse().map((e, i) => {
         const idx = a.entries.length - 1 - i;
         const src = getPhoto(e);
-        const pic = src ? `<img src="${src}" alt="">` : e.look ? portrait(e.look, e.look.stage, '') : '';
+        const pic = src ? `<img src="${src}" alt="">` : '';
         return `<li class="album-item${src ? ' photo' : ''}">
           ${pic ? `<div class="album-pic">${pic}</div>` : ''}
           <div class="album-text"><small class="muted">${fmtDate(e.t)}</small><span>${esc(e.text)}</span>
