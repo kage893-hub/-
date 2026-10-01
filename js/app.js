@@ -1927,7 +1927,6 @@
   // セーブデータの書き出し・読み込み（控え）
   // 形式: "LEOPA1:" + 圧縮した JSON（base64）+ ":" + 検査用の数字
   // ======================================================
-  const BK_MAGIC = 'LEOPA1:';
   function checksum(str) { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
   async function gzipB64(text) {
     const bytes = new TextEncoder().encode(text);
@@ -1940,6 +1939,7 @@
     return { b64: btoa(bin), gz: !!window.CompressionStream };
   }
   async function ungzipB64(b64, gz) {
+    while (b64.length % 4) b64 += '=';
     const bin = atob(b64), bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
     if (!gz) return new TextDecoder().decode(bytes);
     const ds = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
@@ -1951,18 +1951,33 @@
     for (const a of Object.values(S.albums || {})) for (const e of a.entries) if (e.pid) { const d = getPhoto(e); if (d) photos[e.pid] = d; }
     const json = JSON.stringify({ app: 'leopa', at: Date.now(), save: S, photos });
     const { b64, gz } = await gzipB64(json);
-    return BK_MAGIC + (gz ? 'g' : 'p') + ':' + b64 + ':' + checksum(b64);
+    // 「+」「/」「=」はアプリによって変わりやすいので、使わない形にする
+    const safe = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return 'LEOPA2:' + (gz ? 'g' : 'p') + ':' + safe + ':' + checksum(safe);
   }
   // 読みこんで中身をたしかめる（まだ上書きしない）
-  async function parseBackup(text) {
-    text = String(text || '').replace(/\s+/g, '');
-    if (!text.startsWith(BK_MAGIC)) throw new Error('「レオパといっしょ」の控えではないようです');
-    const parts = text.slice(BK_MAGIC.length).split(':');
-    if (parts.length !== 3) throw new Error('文字が途中で切れているようです。最後までコピーできているか確かめてください');
-    const [kind, b64, sum] = parts;
-    if (checksum(b64) !== sum) throw new Error('文字が一部こわれています。もう一度コピーしてみてください');
+  // メモ帳やメッセージアプリを通すと、全角の「：」に変わったり、前後に別の文字や改行・見えない文字が
+  // 入ったり、「+」が空白に変わったりするので、できるだけ元に戻してから読む
+  async function parseBackup(raw) {
+    const norm = String(raw || '').normalize('NFKC').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '');
+    const cands = [norm.replace(/\s+/g, ''), norm.replace(/ /g, '+').replace(/\s+/g, '')];
+    let found = null, broken = false;
+    for (const text of cands) {
+      const m = text.match(/LEOPA[12]:([gp]):([A-Za-z0-9+/=_-]+):([0-9a-z]+)/i);
+      if (!m) continue;
+      const kind = m[1].toLowerCase(), b64 = m[2], sum = m[3].toLowerCase();
+      if (checksum(b64) !== sum) { broken = true; continue; }
+      found = { kind, b64 };
+      break;
+    }
+    if (!found) {
+      if (broken) throw new Error('文字が一部こわれています。もう一度コピーしてみてください');
+      if (/LEOPA/i.test(norm)) throw new Error('文字が途中で切れているようです。最後までコピーできているか確かめてください');
+      if (/[A-Za-z0-9+/_-]{200,}/.test(norm)) throw new Error('控えの先頭（LEOPA…）が欠けているようです。「コピーする」ボタンで全部をコピーしてください');
+      throw new Error('「レオパといっしょ」の控えではないようです');
+    }
     let obj;
-    try { obj = JSON.parse(await ungzipB64(b64, kind === 'g')); } catch (e) { throw new Error('控えをひらけませんでした'); }
+    try { obj = JSON.parse(await ungzipB64(found.b64.replace(/-/g, '+').replace(/_/g, '/'), found.kind === 'g')); } catch (e) { throw new Error('控えをひらけませんでした'); }
     if (!obj || obj.app !== 'leopa' || !obj.save || !Array.isArray(obj.save.geckos) || !(obj.save.v === 1 || obj.save.v === 2)) throw new Error('この控えは読みこめません');
     return obj;
   }
