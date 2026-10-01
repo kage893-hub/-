@@ -470,7 +470,7 @@
     tank.setClock(clockNow(), seasonNow());
     if (g && tank.setHeat) tank.setHeat(heatOf(g));
     const th = $('.thermo');
-    if (th) th.innerHTML = `<span class="t-when">${SEASON_JA[seasonNow()]}の${timeJa(clockNow())}${g ? ` ・ <span class="t-hum${humidOf(g) < 45 ? ' low' : ''}">しつど ${humidOf(g)}%</span>` : ''}</span><span class="t-temps"><span class="t-hot">${window.LKids && LKids.on ? 'あったか' : '暖かい側'} ${g ? heatOf(g) : 32}℃</span> ／ <span class="t-cool">${window.LKids && LKids.on ? 'すずしい' : '涼しい側'} ${coolTemp()}℃</span></span>`;
+    if (th) th.innerHTML = `<span class="t-when">${SEASON_JA[seasonNow()]}の${timeJa(clockNow())}${g ? ` ・ <span class="t-hum${humidOf(g) < 45 ? ' low' : ''}">湿度 ${humidOf(g)}%</span>` : ''}</span><span class="t-temps"><span class="t-hot">${window.LKids && LKids.on ? 'あったか' : '暖かい側'} ${g ? heatOf(g) : 32}℃</span> ／ <span class="t-cool">${window.LKids && LKids.on ? 'すずしい' : '涼しい側'} ${coolTemp()}℃</span></span>`;
   }
   function flushFoods() {
     if (!tank) return;
@@ -506,7 +506,7 @@
   // 脱皮の進み具合（0：白くなりはじめ → 0.6：脱ぎはじめ → 1：おわり）
   function shedProgress(g, now) { if (!g.shedUntil) return -1; const d = g.shedDur || 40 * MIN; return clamp(1 - (g.shedUntil - now) / d, 0, 1); }
   function finishShed(g) {
-    // しつどが足りないと、しっぽの先や指先に皮が残ってしまう
+    // 湿度が足りないと、しっぽの先や指先に皮が残ってしまう
     if (!g.misted && humidOf(g) < 50) {
       g.stuckShed = Date.now();
       memo(g, '脱皮の皮が、しっぽの先に残ってしまった');
@@ -527,7 +527,7 @@
   const hasDish = g => decorOf(g).some(d => L3.DECOR[d.t] && L3.DECOR[d.t].drink);
   const hasWet = g => decorOf(g).some(d => /^wet/.test(d.t));
   const waterDirty = (g, now) => hasDish(g) && now - (g.waterAt || now) > realDays(1);
-  // しつど：ウェットシェルターと水入れ、しっとりケアで上がる
+  // 湿度：ウェットシェルターと水入れ、しっとりケアで上がる
   function humidOf(g, now) {
     now = now || Date.now();
     return Math.min(85, 35 + (hasWet(g) ? 20 : 0) + (hasDish(g) ? 8 : 0) + (g.mistAt && now - g.mistAt < realDays(0.25) ? 20 : 0));
@@ -536,7 +536,7 @@
   const LEARN = {
     shed: '脱皮中はさわらない', meal: '食後すぐはさわらない', nap: '昼はねかせてあげる', newcomer: 'おむかえ直後はそっと',
     appetite: '脱皮前は食欲が落ちる', size: 'えさは目と目の間より小さく', calcium: 'カルシウムをまぶす', leftover: '食べ残しは取り出す',
-    water: '水は毎日とりかえる', stuck: '脱皮の皮のこりはぬるま湯で', humid: 'しつどを保つ', sick: '体調がわるいときは病院へ', egg: '卵の上下を変えない',
+    water: '水は毎日とりかえる', stuck: '脱皮の皮のこりはぬるま湯で', humid: '湿度を保つ', sick: '体調がわるいときは病院へ', egg: '卵の上下を変えない',
   };
   function learn(key) {
     S.learned = S.learned || {};
@@ -726,8 +726,8 @@
       </div>
       <p class="small">${info.text}</p>
       <p class="muted small">涼しい側は部屋の温度（いまは ${coolTemp()}℃）。季節と時間帯で変わります。</p>
-      <h4 class="h4">しつど ${humidOf(g)}%</h4>
-      <p class="muted small">ケースのしつどは 40〜60% くらいが目安。ウェットシェルター（+20%）や水入れ（+8%）で保ちます。かわいていると、脱皮の皮がのこりやすくなります。</p>
+      <h4 class="h4">湿度 ${humidOf(g)}%</h4>
+      <p class="muted small">ケースの湿度は 40〜60% くらいが目安。ウェットシェルター（+20%）や水入れ（+8%）で保ちます。かわいていると、脱皮の皮がのこりやすくなります。</p>
       <button class="act primary" data-action="closeSheet">とじる</button>`);
     learn('humid');
   }
@@ -962,7 +962,7 @@
       g.stuckShed = 0;
       learn('stuck');
       S.coins += 1;
-      toast('ぬるま湯で皮をふやかして、そっととりました。のこった皮は指先やしっぽをしめつけることがあるので、ウェットシェルターでしつどを保とう');
+      toast('ぬるま湯で皮をふやかして、そっととりました。のこった皮は指先やしっぽをしめつけることがあるので、ウェットシェルターで湿度を保とう');
       renderView(); save();
     },
     clinic() {
@@ -2585,10 +2585,10 @@
     const hu = humidOf(g, now), hum = hu >= 45 ? [`${hu}%（ちょうどいい）`, 'good'] : [`${hu}%（かわきぎみ）`, 'warn'];
     const sick = g.sick ? [SICK[g.sick.type].name, 'warn'] : ['いつもどおり', 'good'];
     const water = !hasDish(g) ? ['水入れがない', 'warn'] : waterDirty(g, now) ? ['よごれてきた', 'warn'] : ['きれい', 'good'];
-    const rows = [['体調', sick], ['しっぽの太さ', tail], ['体重の変化（1週間）', wtxt], ['食欲', app], ['ほねの元気', bone], ['脱皮', shed], ['温度', heat], ['しつど', hum], ['水', water], ['ケース', room]];
+    const rows = [['体調', sick], ['しっぽの太さ', tail], ['体重の変化（1週間）', wtxt], ['食欲', app], ['骨の元気', bone], ['脱皮', shed], ['温度', heat], ['湿度', hum], ['水', water], ['ケース', room]];
     const bad = rows.filter(r => r[1][1] === 'warn').length;
     const sum = bad === 0 ? 'とても元気です' : bad === 1 ? 'おおむね元気です' : 'ちょっと気にしてあげよう';
-    const tips = [g.sick ? 'どうぶつ病院でみてもらおう' : '', tail[2], app[1] === 'warn' ? 'ごはんをあげよう' : '', bone[1] === 'warn' ? 'ごはんにカルシウムをまぶそう' : '', hum[1] === 'warn' ? 'ウェットシェルターを置いて、しつどを保とう' : '', water[1] === 'warn' ? (hasDish(g) ? '水をとりかえよう' : '水入れを置こう') : '', g.stuckShed ? 'ぬるま湯ケアで皮をとろう' : '', room[1] === 'warn' ? 'ケースをおそうじしよう' : '', heat[1] === 'warn' ? 'ヒーターの温度を見なおそう（暖かい側31〜33℃）' : ''].filter(Boolean);
+    const tips = [g.sick ? 'どうぶつ病院でみてもらおう' : '', tail[2], app[1] === 'warn' ? 'ごはんをあげよう' : '', bone[1] === 'warn' ? 'ごはんにカルシウムをまぶそう' : '', hum[1] === 'warn' ? 'ウェットシェルターを置いて、湿度を保とう' : '', water[1] === 'warn' ? (hasDish(g) ? '水をとりかえよう' : '水入れを置こう') : '', g.stuckShed ? 'ぬるま湯ケアで皮をとろう' : '', room[1] === 'warn' ? 'ケースをおそうじしよう' : '', heat[1] === 'warn' ? 'ヒーターの温度を見なおそう（暖かい側31〜33℃）' : ''].filter(Boolean);
     return `<details class="health"${openHealth[g.id] ? ' open' : ''} data-id="${g.id}">
       <summary><span>けんこうチェック</span><span class="pill ${bad ? 'warn' : 'good'}">${sum}</span></summary>
       <div class="health-rows">${rows.map(([k, [v, cls]]) => `<span>${k}</span><b class="hv ${cls}">${v}</b>`).join('')}</div>
