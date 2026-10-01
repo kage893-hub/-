@@ -2015,8 +2015,8 @@
       try { text = await exportSave(); } catch (e) { out.innerHTML = '<p class="notice">控えをつくれませんでした</p>'; return; }
       const kb = Math.round(text.length / 1024);
       out.innerHTML = `<textarea id="bkOutText" class="bk-text" rows="3" readonly spellcheck="false">${text}</textarea>
-        <p class="muted small">${kb >= 1024 ? (kb / 1024).toFixed(1) + 'MB' : kb + 'KB'}・レオパ ${S.geckos.length}匹ぶん。長い文字なので、メモ帳やメッセージアプリに貼って、とっておいてね。</p>
-        <div class="actions"><button class="act" data-action="bkCopy">コピーする</button><button class="act" data-action="bkSave">ファイルにする</button></div>`;
+        <p class="muted small">${kb >= 1024 ? (kb / 1024).toFixed(1) + 'MB' : kb + 'KB'}・レオパ ${S.geckos.length}匹ぶん。長い文字なので、メモ帳やメッセージアプリに貼って、とっておいてね。iPhone は「ファイルに保存」→ 共有メニューの「"ファイル"に保存」で、保存する場所を選べます。</p>
+        <div class="actions"><button class="act" data-action="bkCopy">コピーする</button><button class="act" data-action="bkSave">ファイルに保存</button></div>`;
       window._bkText = text;
     },
     async bkCopy() {
@@ -2030,11 +2030,21 @@
     bkSave() {
       const text = window._bkText;
       if (!text) return;
+      const d = new Date();
+      const name = `leopa-save-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.txt`;
+      // iPhone などは共有メニューから「"ファイル"に保存」を選ぶのがいちばん確実（ホーム画面のアプリでも動く）
+      let file = null;
+      try { file = new File([text], name, { type: 'text/plain' }); } catch (e) { /* 古いブラウザ */ }
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], title: 'レオパといっしょ の控え' })
+          .then(() => toast('控えのファイルを保存しました'))
+          .catch(e => { if (e && e.name !== 'AbortError') toast('保存できませんでした。「コピーする」を使ってください'); });
+        return;
+      }
       try {
-        const d = new Date();
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-        a.download = `leopa-save-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.txt`;
+        a.download = name;
         document.body.appendChild(a); a.click(); a.remove();
         toast('ファイルを保存しました（ダウンロードの中）');
       } catch (e) { toast('ファイルにできませんでした。コピーを使ってください'); }
