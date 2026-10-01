@@ -1222,6 +1222,7 @@
         openSheet(`<div class="show-result">
           <p class="eyebrow">${lv.name} ・ ${th.name}</p>
           <h3 class="morph big">${rank === 1 ? '優勝！' : `${rank}位`}</h3>
+          ${champ && rank <= 3 ? `<img class="champ-prize" src="assets/expo/trophy${rank}.webp" alt="${rank === 1 ? 'トロフィー' : 'リボン'}">` : ''}
           <div class="reveal-art">${portrait(g, stageOf(g), nameOf(g))}</div>
           <ol class="show-rank">${all.map((x, i) => `<li class="${x.me ? 'me' : ''}"><span>${i + 1}位</span><b>${esc(x.name)}</b><small>${x.total}点</small></li>`).join('')}</ol>
           <div class="show-break"><span>見た目 <b>${Math.round(me.base * 0.85)}</b></span><span>お世話 <b>${me.cond >= 0 ? '+' : ''}${me.cond}</b></span><span>当日の調子 <b>${me.luck >= 0 ? '+' : ''}${me.luck}</b></span></div>
@@ -2079,7 +2080,7 @@
         return `<div class="ach${done ? ' done' : ''}"><span>${esc(a.label)}</span>${done ? '<small class="muted">受け取りずみ</small>'
           : `<button class="act ${ok ? 'primary' : ''} sm" data-action="claimAch" data-id="${a.id}" ${ok ? '' : 'disabled'}>${a.reward}</button>`}</div>`;
       }).join('')}</div>
-      ${(S.trophies || []).length ? `<h3 class="h3">レプタイルズショーのトロフィー</h3><div class="trophies">${S.trophies.slice().reverse().map(t => `<div class="trophy r${t.rank}"><span>${t.rank === 1 ? '🏆' : '🎀'}</span><b>${t.rank}位</b><small>${esc(t.name)} ・ ${esc(t.date)}</small></div>`).join('')}</div>` : ''}
+      ${(S.trophies || []).length ? `<h3 class="h3">レプタイルズショーのトロフィー</h3><div class="trophies">${S.trophies.slice().reverse().map(t => `<div class="trophy r${t.rank}"><img src="assets/expo/trophy${t.rank}.webp" alt=""><b>${t.rank}位</b><small>${esc(t.name)} ・ ${esc(t.date)}</small></div>`).join('')}</div>` : ''}
       <h3 class="h3">おぼえた飼育のポイント <small class="muted">${Object.keys(LEARN).filter(k => (S.learned || {})[k]).length} / ${Object.keys(LEARN).length}</small></h3>
       <div class="learn-list">${Object.entries(LEARN).filter(([k]) => (S.learned || {})[k]).map(([k, L]) => `<div class="learn on"><b>✓ ${L.t}</b><p>${L.d}</p></div>`).join('')}
         ${Object.keys(LEARN).some(k => !(S.learned || {})[k]) ? `<div class="learn"><b>？？？ あと ${Object.keys(LEARN).filter(k => !(S.learned || {})[k]).length}こ</b><p>毎日のお世話の中で、少しずつおぼえていきます</p></div>` : ''}</div>
@@ -3286,7 +3287,8 @@
     const tabs = `<div class="shop-tabs expo-tabs" role="tablist">${EXPO_TABS.map(([k, n]) => `<button role="tab" aria-selected="${tab === k}" class="${tab === k ? 'on' : ''}" data-action="expoTab" data-tab="${k}">${n}</button>`).join('')}</div>`;
     let body = '';
     if (tab === 'sale') {
-      body = `<p class="muted small">ブリーダーさんたちが、今日だけの子を連れてきています。1匹ずつの早い者勝ち。夜になるほど、ほかのお客さんにおむかえされていきます（いま ${E.stock.filter(o => !stockGone(o)).length} / ${E.stock.length}匹）。</p>
+      body = `<img class="expo-strip" src="assets/expo/booth.webp" alt="">
+        <p class="muted small">ブリーダーさんたちが、今日だけの子を連れてきています。1匹ずつの早い者勝ち。夜になるほど、ほかのお客さんにおむかえされていきます（いま ${E.stock.filter(o => !stockGone(o)).length} / ${E.stock.length}匹）。</p>
         <div class="offers">${E.stock.map((o, i) => {
           const morph = nameOf(o);
           const hets = G.hets(o.genes);
@@ -3324,7 +3326,7 @@
           <p class="muted small">全国のトップブリーダーが集まる、週に1回だけの大会。エントリーは1週間に1匹まで。優勝 ${CHAMP.reward}コインとトロフィー、2位・3位はリボンがもらえます。</p>
           ${E.champ ? '<p class="notice">今週はもうエントリーしました。また来週！</p>' : '<button class="act primary sm" data-action="showMenu" data-lv="champ">エントリーする</button>'}
         </div>
-        ${(S.trophies || []).length ? `<h3 class="h3">トロフィーとリボン</h3><div class="trophies">${S.trophies.slice().reverse().map(t => `<div class="trophy r${t.rank}"><span>${t.rank === 1 ? '🏆' : '🎀'}</span><b>${t.rank}位</b><small>${esc(t.name)} ・ ${esc(t.date)}</small></div>`).join('')}</div>` : ''}`;
+        ${(S.trophies || []).length ? `<h3 class="h3">トロフィーとリボン</h3><div class="trophies">${S.trophies.slice().reverse().map(t => `<div class="trophy r${t.rank}"><img src="assets/expo/trophy${t.rank}.webp" alt=""><b>${t.rank}位</b><small>${esc(t.name)} ・ ${esc(t.date)}</small></div>`).join('')}</div>` : ''}`;
     } else if (tab === 'goods') {
       const th = L3.CAGE_THEMES[E.theme], has = cageOwn()[E.theme];
       body = `<h3 class="h3">ショー限定のケース</h3>
@@ -3357,7 +3359,8 @@
       const now = Date.now(), info = expoInfo(now), E = expoState(now);
       if (!info || !info.open || !E) { toast(`レプタイルズショーは日曜日の${EXPO_OPEN}:00〜${EXPO_CLOSE}:00です`); return; }
       if (E.ticket) { switchView('expo'); return; }
-      openSheet(`<p class="eyebrow">レプタイルズショー</p><h3 class="sheet-title">入場チケット ${EXPO_TICKET}コイン</h3>
+      openSheet(`<p class="eyebrow">レプタイルズショー</p>
+        <div class="expo-ticket"><img src="assets/expo/ticket.webp" alt=""><div><b>入場チケット</b><span>${EXPO_TICKET} コイン</span><small>${EXPO_OPEN}:00〜${EXPO_CLOSE}:00</small></div></div>
         <p>今日いちにち、何度でも出入りできます。</p>
         <div class="actions"><button class="act" data-action="closeSheet">やめる</button><button class="act primary" data-action="expoTicket" ${S.coins < EXPO_TICKET ? 'disabled' : ''}>チケットを買って入場</button></div>`);
     },
