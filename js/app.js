@@ -728,6 +728,7 @@
         toast(g ? `${v.name}を買って、${g.name}のケースに使いました` : `${v.name}を買いました`);
       } else if (g) toast(`${g.name}のケースを${v.name}にしました`);
       if (g) applyCage(g, kind, id);
+      if (t.closest && t.closest('#sheet')) closeSheet();
       renderView(); save();
     },
     setCageOpt(t) {
@@ -1186,6 +1187,7 @@
       <div class="danger-zone">${isStandalone() || inFrame ? '' : '<button class="act ghost sm" data-action="installMenu">ホーム画面に追加</button>'}<button class="act ghost sm" data-action="giftMenu">ギフトコード</button><button class="act ghost sm" data-action="notifyMenu">おしらせ通知</button><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`,
     };
     setHTML($('#view-shop'), `<h2 class="h2">ショップ</h2>${tabs}${(sec[tab] || sec.leopa)()}`);
+    if (tab === 'interior') fillThumbs();
   }
 
   function welcome() {
@@ -1504,16 +1506,12 @@
     const own = cageOwn(), g = selected();
     const row = (kind, id, v) => {
       const has = own[id], on = g && cageOf(g)[kind] === id;
-      return `<button class="row${on ? ' on' : ''}" data-action="buyCage" data-kind="${kind}" data-id="${id}" ${!has && S.coins < v.price ? 'disabled' : ''}>
-        ${kind === 'theme' ? `<span class="row-art cage-sw cage-${id}"></span>` : ''}
-        <span class="row-main"><b>${v.name}${on ? '（いまのケース）' : ''}</b><small>${v.desc}</small></span>
-        <span class="row-side ${has ? '' : 'price'}">${has ? (on ? '使用中' : 'つかう') : v.price}</span>
-      </button>`;
+      return itemCard(kind, id, v, has ? (on ? '使用中' : '持っている') : String(v.price), on);
     };
     return `<h3 class="h3">ケージの大きさ <small class="muted">${g ? `${esc(g.name)}のケースに使います` : ''}</small></h3>
-      <div class="list">${Object.entries(L3.CAGE_SIZES).map(([id, v]) => row('size', id, v)).join('')}</div>
+      <div class="item-grid">${Object.entries(L3.CAGE_SIZES).map(([id, v]) => row('size', id, v)).join('')}</div>
       <h3 class="h3">ケージの見た目</h3>
-      <div class="list">${Object.entries(L3.CAGE_THEMES).map(([id, v]) => row('theme', id, v)).join('')}</div>
+      <div class="item-grid">${Object.entries(L3.CAGE_THEMES).map(([id, v]) => row('theme', id, v)).join('')}</div>
       <p class="muted small">一度買えば、どのケースでも使えます。ケースごとの切りかえは「もようがえ」からもできます。</p>`;
   }
   function decorOk(g, x, z, t, skip) {
@@ -1596,13 +1594,37 @@
         </button>`;
       }).join('')}</div>`;
   }
+  // 見本写真：撮りおわっていればそのまま、まだなら後で1枚ずつ撮って差しこむ
+  function thumb(kind, id, cls) {
+    if (!L3.supported) return `<span class="item-img ${cls || ''} none"></span>`;
+    const url = L3.itemPhotoReady(kind, id);
+    return `<img class="item-img ${cls || ''}" alt="" ${url ? `src="${url}"` : `data-thumb="${kind}|${id}"`}>`;
+  }
+  let thumbBusy = false;
+  function fillThumbs() {
+    if (thumbBusy) return;
+    const img = document.querySelector('img[data-thumb]:not([src])');
+    if (!img) return;
+    thumbBusy = true;
+    setTimeout(() => {
+      const [kind, id] = img.dataset.thumb.split('|');
+      let url = '';
+      try { url = L3.itemPhoto(kind, id); } catch (e) { /* 撮れなくても続ける */ }
+      document.querySelectorAll(`img[data-thumb="${kind}|${id}"]`).forEach(el => { if (url) el.src = url; else el.removeAttribute('data-thumb'); });
+      thumbBusy = false;
+      fillThumbs();
+    }, 40);
+  }
+  function itemCard(kind, id, v, side, on) {
+    return `<button class="item-card${on ? ' on' : ''}" data-action="itemPreview" data-kind="${kind}" data-id="${id}">
+      ${thumb(kind, id)}
+      <b>${v.name}</b>
+      <span class="item-side ${/^\d+$/.test(side) ? 'price' : ''}">${side}</span>
+    </button>`;
+  }
   function interiorShop() {
-    return `<h3 class="h3">インテリア <small class="muted">買った家具は「もようがえ」で置けます</small></h3>
-      <div class="list">${Object.entries(L3.DECOR).map(([t, d]) => `
-        <button class="row" data-action="buyDecor" data-t="${t}" ${S.coins < d.price ? 'disabled' : ''}>
-          <span class="row-main"><b>${d.name}</b><small>${d.desc}${S.decorInv[t] ? ` ・ 手持ち ${S.decorInv[t]}` : ''}</small></span>
-          <span class="row-side price">${d.price}</span>
-        </button>`).join('')}</div>`;
+    return `<h3 class="h3">家具 <small class="muted">買った家具は「もようがえ」で置けます</small></h3>
+      <div class="item-grid">${Object.entries(L3.DECOR).map(([t, d]) => itemCard('decor', t, d, String(d.price))).join('')}</div>`;
   }
   Object.assign(ACTIONS, {
     editStart() { if (selected()) setEditing({ sel: null, place: null }); },
@@ -1621,6 +1643,31 @@
       toast(`${L3.DECOR[d.t].name}をしまいました`);
       setEditing({ sel: null, place: null }); save();
     },
+    itemPreview(t) {
+      const kind = t.dataset.kind, id = t.dataset.id;
+      const v = kind === 'decor' ? L3.DECOR[id] : (kind === 'size' ? L3.CAGE_SIZES : L3.CAGE_THEMES)[id];
+      if (!v) return;
+      const g = selected();
+      let info = '', btn = '';
+      if (kind === 'decor') {
+        info = `${S.decorInv[id] ? `手持ち ${S.decorInv[id]}個 ・ ` : ''}${v.shelter ? 'もぐって眠れるシェルター' : 'ケースに置ける家具'}`;
+        btn = `<button class="act primary" data-action="buyDecor" data-t="${id}" ${S.coins < v.price ? 'disabled' : ''}>${v.price} コインで買う</button>`;
+      } else {
+        const has = cageOwn()[id], on = g && cageOf(g)[kind] === id;
+        info = kind === 'size' ? '同じ大きさのレオパと並べた見本です' : 'レギュラーサイズの見本です';
+        btn = on ? '<button class="act" disabled>いまのケースで使用中</button>'
+          : has ? `<button class="act primary" data-action="buyCage" data-kind="${kind}" data-id="${id}">${g ? `${esc(g.name)}のケースに使う` : '使う'}</button>`
+          : `<button class="act primary" data-action="buyCage" data-kind="${kind}" data-id="${id}" ${S.coins < v.price ? 'disabled' : ''}>${v.price} コインで買う${g ? `（${esc(g.name)}のケースに使う）` : ''}</button>`;
+      }
+      openSheet(`<div class="item-preview">
+        ${thumb(kind, id, 'big')}
+        <h3 class="sheet-title">${v.name}</h3>
+        <p>${v.desc}</p>
+        <p class="muted small">${info}</p>
+        <div class="sheet-actions">${btn}<button class="act" data-action="closeSheet">とじる</button></div>
+      </div>`);
+      fillThumbs();
+    },
     buyDecor(t) {
       const d = L3.DECOR[t.dataset.t];
       if (!d || S.coins < d.price) { toast('コインが足りません'); return; }
@@ -1628,6 +1675,7 @@
       S.decorInv[t.dataset.t] = (S.decorInv[t.dataset.t] || 0) + 1;
       sfx('buy');
       toast(`${d.name}を買いました。ケースの「もようがえ」で置けます`);
+      if (t.closest && t.closest('#sheet')) closeSheet();
       renderView(); save();
     },
   });

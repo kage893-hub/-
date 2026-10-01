@@ -1474,8 +1474,8 @@
         rock.scale.set(1.75, 1.0, 1.4);
         rock.position.y = 0.1;
         const door = doorMesh(1.15, 0.78);
-        door.position.set(0.25, 0.36, 1.37);
-        door.rotation.x = -0.3;
+        door.position.set(0.25, 0.34, 1.78);
+        door.rotation.x = -0.15;
         g.add(rock, door);
         return g;
       },
@@ -1642,6 +1642,124 @@
     t.anisotropy = 4;
     cageTexCache[kind] = t;
     return t;
+  }
+  // ケージ本体（床・ガラス・枠・背面・飾り）を作る。ケースの中とショップの見本で共用
+  function makeCage(theme, hw, hd, sand) {
+    const g = new T.Group(), front = [];
+    const th = CAGE_THEMES[theme] || CAGE_THEMES.glass;
+    const ftex = th.floor === 'sand' ? sand : cageTex(th.floor);
+    const floor = new T.Mesh(new T.PlaneGeometry(hw * 2, hd * 2), phys(th.tint, { map: ftex, bumpMap: ftex, bumpScale: th.floor === 'cookie' ? 0.03 : 0.012, roughness: th.floor === 'paper' ? 0.95 : 1 }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    g.add(floor);
+    // ガラスと枠（手前は低くして中が見えるように）
+    const glass = phys('#D5E4DD', { transparent: true, opacity: 0.28, roughness: 0.05, clearcoat: 1 });
+    const frame = phys(th.frame, { roughness: th.candy ? 0.35 : 0.4, clearcoat: th.candy ? 0.6 : 0 });
+    const ft = th.thick ? 0.22 : 0.1;
+    for (const [x, z, w, d, h] of [[0, -hd - 0.1, hw * 2 + 0.3, 0.1, 2.2], [-hw - 0.1, 0, 0.1, hd * 2 + 0.2, 2.2], [hw + 0.1, 0, 0.1, hd * 2 + 0.2, 2.2], [0, hd + 0.1, hw * 2 + 0.3, 0.1, 0.5]]) {
+      const m = new T.Mesh(new T.BoxGeometry(w, h, d), glass);
+      m.position.set(x, h / 2, z);
+      g.add(m);
+      const f = new T.Mesh(new T.BoxGeometry(w + ft + 0.02, ft, d + ft + 0.02), frame);
+      f.position.set(x, h, z);
+      f.castShadow = !!th.thick;
+      g.add(f);
+      if (th.thick) {
+        const base = new T.Mesh(new T.BoxGeometry(w + ft + 0.02, ft * 0.8, d + ft + 0.02), frame);
+        base.position.set(x, ft * 0.4, z);
+        g.add(base);
+        if (z > 0) front.push(base);
+      }
+      if (z > 0) front.push(m, f);
+    }
+    if (th.back) {
+      const bt = cageTex(th.back);
+      bt.wrapS = T.RepeatWrapping; bt.repeat.set(Math.max(1, hw / 6.5), 1);
+      const back = new T.Mesh(new T.PlaneGeometry(hw * 2 + 0.2, 2.2), phys('#ffffff', { map: bt, roughness: th.back === 'choco' ? 0.5 : 0.9 }));
+      back.position.set(0, 1.1, -hd - 0.17);
+      back.receiveShadow = true;
+      g.add(back);
+    }
+    if (th.candy) g.add(candyBits(hw, hd));
+    return { group: g, floor, front };
+  }
+  // ---- ショップの見本写真（家具・ケージの見た目・ケージの大きさ）
+  const itemCache = new Map();
+  let ir = null, irSand = null;
+  function itemPhotoReady(kind, id) { return itemCache.get(kind + '|' + id) || null; }
+  function itemPhoto(kind, id) {
+    const key = kind + '|' + id;
+    if (itemCache.has(key)) return itemCache.get(key);
+    if (!supported) return '';
+    if (!ir) {
+      const renderer = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+      renderer.setSize(400, 300);
+      renderer.setPixelRatio(1);
+      renderer.outputEncoding = T.sRGBEncoding;
+      renderer.toneMapping = T.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.0;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = T.PCFSoftShadowMap;
+      const scene = new T.Scene();
+      scene.background = new T.Color('#EFE6D6');
+      scene.environment = makeEnvironment(renderer);
+      const sun = new T.DirectionalLight('#FFF4E6', 1.05);
+      sun.position.set(-4, 12, 7);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(1024, 1024);
+      Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 10, bottom: -10, near: 1, far: 40 });
+      sun.shadow.radius = 4; sun.shadow.normalBias = 0.02;
+      const table = new T.Mesh(new T.PlaneGeometry(80, 60), phys('#C9A57C', { roughness: 0.7 }));
+      table.rotation.x = -Math.PI / 2; table.position.y = -0.02; table.receiveShadow = true;
+      scene.add(new T.HemisphereLight('#FFF6E4', '#9C8A6A', 0.45), sun, table);
+      ir = { renderer, scene, camera: new T.PerspectiveCamera(30, 4 / 3, 0.1, 120), table };
+      irSand = canvasTexture(sandCanvas(), { srgb: true }); irSand.flipY = true;
+    }
+    const g = new T.Group();
+    let gk = null;
+    const cam = ir.camera;
+    ir.table.visible = kind !== 'decor';
+    if (kind === 'decor') {
+      const def = DECOR[id];
+      if (!def) return '';
+      // 家具は砂の上に置いた姿で
+      const pad = new T.Mesh(new T.CircleGeometry(3.2, 40), phys('#ffffff', { map: irSand, roughness: 1 }));
+      pad.rotation.x = -Math.PI / 2; pad.receiveShadow = true;
+      const o = def.build();
+      o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+      g.add(pad, o);
+      ir.scene.add(g);
+      const box = new T.Box3().setFromObject(o), c = box.getCenter(new T.Vector3()), sz = box.getSize(new T.Vector3());
+      const D = Math.max(sz.x, sz.z, sz.y * 1.4, 1.2) * 2.3;
+      cam.position.set(c.x + D * 0.3, c.y + D * 0.42, c.z + D * 0.95);
+      cam.lookAt(c.x, c.y * 0.6, c.z);
+      ir.scene.background.set('#F1E9DA');
+    } else {
+      const dims = kind === 'size' ? CAGE_SIZES[id] : CAGE_SIZES.std;
+      if (!dims) return '';
+      const c = makeCage(kind === 'theme' ? id : 'glass', dims.hw, dims.hd, irSand);
+      g.add(c.group);
+      // 大きさがわかるように、ふつうサイズのレオパを1匹
+      gk = buildGecko({ genes: { snow: 0, alb: 0, ecl: 0, bliz: 0 }, tang: 40, poly: { spots: 50, blotch: 50, head: 50, carrot: 20, lav: 20, aberrant: 10 }, seed: 7, stage: 'adult' }, 'low');
+      gk.root.scale.setScalar(0.95);
+      gk.root.position.set(-0.6, 0, 0.6);
+      gk.root.rotation.y = 0.9;
+      gk.root.traverse(m => { if (m.isMesh) m.castShadow = true; });
+      pose(gk, restPose());
+      g.add(gk.root);
+      ir.scene.add(g);
+      // 大きさの見本は同じカメラで撮って、違いがわかるように
+      if (kind === 'size') { cam.position.set(0, 15.5, 22); cam.lookAt(0, 0, -0.6); }
+      else { cam.position.set(0, 9.6, 14.4); cam.lookAt(0, 0.3, -0.5); }
+      ir.scene.background.set('#E9E4D8');
+    }
+    ir.renderer.render(ir.scene, cam);
+    const url = ir.renderer.domElement.toDataURL('image/jpeg', 0.86);
+    ir.scene.remove(g);
+    if (gk) { g.remove(gk.root); disposeGecko(gk); }
+    disposeTree(g);
+    itemCache.set(key, url);
+    return url;
   }
   // おかしの家の飾り：キャンディの柱、ガムドロップ、ペロペロキャンディ
   function candyBits(hw, hd) {
@@ -1817,42 +1935,11 @@
     let cageKey = '';
     function buildCage(theme) {
       while (cageG.children.length) { const c = cageG.children.pop(); disposeTree(c); }
+      const c = makeCage(theme, TK.hw, TK.hd, sand);
+      floor = c.floor;
       frontGlass.length = 0;
-      const th = CAGE_THEMES[theme] || CAGE_THEMES.glass;
-      const ftex = th.floor === 'sand' ? sand : cageTex(th.floor);
-      floor = new T.Mesh(new T.PlaneGeometry(TK.hw * 2, TK.hd * 2), phys(th.tint, { map: ftex, bumpMap: ftex, bumpScale: th.floor === 'cookie' ? 0.03 : 0.012, roughness: th.floor === 'paper' ? 0.95 : 1 }));
-      floor.rotation.x = -Math.PI / 2;
-      floor.receiveShadow = true;
-      cageG.add(floor);
-      // ガラスと枠（手前は低くして中が見えるように）
-      const glass = phys('#D5E4DD', { transparent: true, opacity: 0.28, roughness: 0.05, clearcoat: 1 });
-      const frame = phys(th.frame, { roughness: th.candy ? 0.35 : 0.4, clearcoat: th.candy ? 0.6 : 0 });
-      const ft = th.thick ? 0.22 : 0.1;
-      for (const [x, z, w, d, h] of [[0, -TK.hd - 0.1, TK.hw * 2 + 0.3, 0.1, 2.2], [-TK.hw - 0.1, 0, 0.1, TK.hd * 2 + 0.2, 2.2], [TK.hw + 0.1, 0, 0.1, TK.hd * 2 + 0.2, 2.2], [0, TK.hd + 0.1, TK.hw * 2 + 0.3, 0.1, 0.5]]) {
-        const m = new T.Mesh(new T.BoxGeometry(w, h, d), glass);
-        m.position.set(x, h / 2, z);
-        cageG.add(m);
-        const f = new T.Mesh(new T.BoxGeometry(w + ft + 0.02, ft, d + ft + 0.02), frame);
-        f.position.set(x, h, z);
-        f.castShadow = !!th.thick;
-        cageG.add(f);
-        if (th.thick) {
-          const base = new T.Mesh(new T.BoxGeometry(w + ft + 0.02, ft * 0.8, d + ft + 0.02), frame);
-          base.position.set(x, ft * 0.4, z);
-          cageG.add(base);
-          if (z > 0) frontGlass.push(base);
-        }
-        if (z > 0) frontGlass.push(m, f);
-      }
-      if (th.back) {
-        const bt = cageTex(th.back);
-        bt.wrapS = T.RepeatWrapping; bt.repeat.set(Math.max(1, TK.hw / 6.5), 1);
-        const back = new T.Mesh(new T.PlaneGeometry(TK.hw * 2 + 0.2, 2.2), phys('#ffffff', { map: bt, roughness: th.back === 'choco' ? 0.5 : 0.9 }));
-        back.position.set(0, 1.1, -TK.hd - 0.17);
-        back.receiveShadow = true;
-        cageG.add(back);
-      }
-      if (th.candy) cageG.add(candyBits(TK.hw, TK.hd));
+      frontGlass.push(...c.front);
+      cageG.add(c.group);
     }
     // 家具（ケースごとに差しかえる）
     const decorG = new T.Group();
@@ -2763,5 +2850,5 @@
   }
   function photoReady(look, opts) { return photoCache.get(photoKey(look, opts)) || null; }
 
-  root.Leopa3D = { CAGE_SIZES, CAGE_THEMES, supported, createTank, createViewer, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR, TANK };
+  root.Leopa3D = { CAGE_SIZES, CAGE_THEMES, itemPhoto, itemPhotoReady, supported, createTank, createViewer, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR, TANK };
 })(typeof window !== 'undefined' ? window : globalThis);

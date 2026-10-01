@@ -180,8 +180,8 @@ button { font: inherit; color: inherit; }
 .row-main { flex: 1; min-width: 0; display: grid; }
 .row-main small { color: var(--muted); font-size: 12.5px; }
 .row-side { flex: none; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.row-side.price { font-weight: 700; color: var(--ink); display: inline-flex; align-items: center; gap: 4px; }
-.row-side.price::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #FBE39A, #D9A12A 70%); }
+.row-side.price, .item-side.price { font-weight: 700; color: var(--ink); display: inline-flex; align-items: center; gap: 4px; }
+.row-side.price::before, .item-side.price::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #FBE39A, #D9A12A 70%); }
 .rename { display: grid; gap: 8px; }
 .rename label { font-size: 13px; color: var(--muted); }
 .rename input { font: inherit; font-size: 17px; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); }
@@ -497,3 +497,14 @@ button { font: inherit; color: inherit; }
 .cage-wood { border-color: #7A4E2C; background: linear-gradient(#9A6A42 0 40%, #E8D4B0 40%); }
 .cage-desert { border-color: #3A2E26; background: linear-gradient(#A8663F 0 40%, #E2A574 40%); }
 .cage-candy { border-color: #F7A8C4; background: linear-gradient(#5A3420 0 40%, #E8B877 40%); box-shadow: inset 0 0 0 2px #fff; }
+
+.item-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.item-card { display: grid; gap: 4px; padding: 6px 6px 10px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface); font: inherit; text-align: left; color: inherit; }
+.item-card.on { border-color: var(--accent); background: var(--accent-soft); }
+.item-card b { font-size: 13.5px; padding: 0 4px; }
+.item-side { font-size: 12.5px; color: var(--muted); padding: 0 4px; font-weight: 700; }
+.item-img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; background: var(--sand-1); }
+.item-img:not([src]) { background: linear-gradient(100deg, var(--sand-1) 30%, var(--surface-2) 50%, var(--sand-1) 70%) 0 0 / 200% 100%; animation: shimmer 1.2s linear infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.item-img.none { background: var(--sand-1); animation: none; }
+.item-preview .item-img.big { border-radius: 16px; margin-bottom: 4px; }
