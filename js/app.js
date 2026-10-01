@@ -422,7 +422,6 @@
       onTapPoop() { ACTIONS.poop(); },
       onFloorTap: (x, z) => floorTap(x, z),
       onDecorTap: i => decorTap(i),
-      onBehavior: id => behaviorSeen(id),
     });
   }
   function sceneMount() {
@@ -1240,48 +1239,7 @@
   }
 
   let dexHTML = '';
-  // ======================================================
-  // しぐさ図鑑：ケースを見ているときに見つけたしぐさを集める
-  // ======================================================
-  const BEHAVIORS = [
-    { id: 'lick', name: '舌ぺろ', desc: 'ぺろっと舌を出して、まわりのにおいを確かめる', hint: 'のんびりしているときに' },
-    { id: 'look', name: 'きょろきょろ', desc: '首をふって、まわりを見回す', hint: 'のんびりしているときに' },
-    { id: 'tilt', name: '首かしげ', desc: 'こてんと首をかしげる。なにか気になったのかな', hint: 'そっとタップしてみると' },
-    { id: 'happy', name: 'しっぽゆらゆら', desc: 'ふれあうと、しっぽをゆらしてごきげん', hint: 'なれてきたら、ふれあってみよう' },
-    { id: 'stalk', name: 'しっぽプルプル', desc: '獲物をねらって、しっぽの先をふるわせる', hint: 'ごはんをあげると' },
-    { id: 'strike', name: '飛びつき', desc: '一瞬で獲物に飛びつく', hint: 'ごはんをあげると' },
-    { id: 'miss', name: '空ぶり', desc: 'コオロギに逃げられて、きょとん', hint: 'すばしっこいコオロギで' },
-    { id: 'shake', name: 'ぶんぶん', desc: 'くわえた獲物を、首をふって弱らせる', hint: 'コオロギやデュビアで' },
-    { id: 'lips', name: '口のまわりペロリ', desc: '食べおわったら、口のまわりをなめる', hint: 'ごはんのあとに' },
-    { id: 'tweezers', name: 'ピンセットから', desc: 'ピンセットのごはんにパクッ', hint: 'ピンセットでごはんをあげると' },
-    { id: 'drink', name: '水を飲む', desc: '水入れのふちに前足をかけて、ぺろぺろ', hint: '水入れを置いておくと' },
-    { id: 'bask', name: 'ひなたぼっこ', desc: '平たい石の上で、じっと温まる', hint: '昼間、石だたみを置いておくと' },
-    { id: 'climb', name: 'よじのぼり', desc: '岩の上までよじ登る', hint: '岩を置いておくと' },
-    { id: 'hide', name: 'シェルターでおやすみ', desc: 'シェルターにもぐって眠る', hint: 'ウェットシェルターを置いておくと' },
-    { id: 'nap', name: 'うたた寝', desc: 'そのへんで、すやすや', hint: '昼間に' },
-    { id: 'night', name: '夜のおさんぽ', desc: '夜になると元気に歩き回る', hint: '夜にケースをのぞくと' },
-    { id: 'shedRub', name: '顔こすり', desc: '脱皮のとき、顔をこすりつけて皮をはがす', hint: '脱皮のときに' },
-    { id: 'shedPull', name: '皮ひっぱり', desc: '古い皮をくわえて、ぐいっと引っぱる', hint: '脱皮のときに' },
-    { id: 'shedEat', name: '皮をもぐもぐ', desc: '脱いだ皮は、栄養なので食べてしまう', hint: '脱皮のときに' },
-  ];
-  function behaviorSeen(id) {
-    const b = BEHAVIORS.find(x => x.id === id);
-    if (!b || !S.welcomed) return;
-    S.beh = S.beh || {};
-    if (S.beh[id]) return;
-    S.beh[id] = Date.now();
-    S.coins += 10;
-    toast(`しぐさ図鑑に「${b.name}」を登録！ +10コイン`);
-    dexHTML = '';
-    save();
-  }
-  function behaviorPage() {
-    const got = S.beh || {}, n = BEHAVIORS.filter(b => got[b.id]).length;
-    return `<p class="muted small">ケースをながめていて見つけたしぐさが、ここに集まります。はじめて見つけると10コイン。 ${n} / ${BEHAVIORS.length}</p>
-      <div class="beh-grid">${BEHAVIORS.map(b => got[b.id]
-        ? `<div class="beh-card"><b>${b.name}</b><small>${b.desc}</small></div>`
-        : `<div class="beh-card locked"><b>？？？</b><small>ヒント：${b.hint}</small></div>`).join('')}</div>`;
-  }
+
   // ======================================================
   // 品評会：その日の部門で審査。1匹につき1日1回まで
   // ======================================================
@@ -1353,12 +1311,7 @@
       return `<div class="dex-card${got ? '' : ' locked'}"><div class="dex-art">${art}</div><b>${esc(d.name)}</b><small class="muted">${esc(d.hint)}</small></div>`;
     }).join('');
     const dtab = S.dexTab || 'dex';
-    const dtabs = `<div class="shop-tabs" role="tablist">${[['dex', '図鑑'], ['beh', 'しぐさ'], ['show', '品評会'], ['rec', '実績']].map(([k, n]) => `<button role="tab" aria-selected="${dtab === k}" class="${dtab === k ? 'on' : ''}" data-action="dexTab" data-tab="${k}">${n}</button>`).join('')}</div>`;
-    if (dtab === 'beh') {
-      const html = `<h2 class="h2">しぐさ図鑑</h2>${dtabs}${behaviorPage()}`;
-      if (html !== dexHTML) { setHTML($('#view-dex'), html); dexHTML = html; }
-      return;
-    }
+    const dtabs = `<div class="shop-tabs three" role="tablist">${[['dex', '図鑑'], ['show', '品評会'], ['rec', '実績']].map(([k, n]) => `<button role="tab" aria-selected="${dtab === k}" class="${dtab === k ? 'on' : ''}" data-action="dexTab" data-tab="${k}">${n}</button>`).join('')}</div>`;
     if (dtab === 'rec') {
       const html = `<h2 class="h2">実績・アルバム</h2>${dtabs}${albumList()}${achSection()}`;
       if (html !== dexHTML) { setHTML($('#view-dex'), html); dexHTML = html; }
