@@ -1497,12 +1497,12 @@
       map = new T.CanvasTexture(c); map.encoding = T.sRGBEncoding; map.wrapS = map.wrapT = T.RepeatWrapping;
     }
     if (name === 'Stone') {
-      const mat = phys('#8E887D', { roughness: 0.92, bumpMap: sandTex(), bumpScale: 0.04, side: T.DoubleSide });
+      const mat = phys('#7A746A', { roughness: 0.92, bumpMap: sandTex(), bumpScale: 0.04, side: T.DoubleSide });
       mat.userData.shared = true;
       return (KIT.mats[name] = mat);
     }
     if (name === 'Terracotta') {
-      const mat = phys('#B55A33', { roughness: 0.88, bumpMap: sandTex(), bumpScale: 0.025, side: T.DoubleSide });
+      const mat = phys('#A44D28', { roughness: 0.88, bumpMap: sandTex(), bumpScale: 0.025, side: T.DoubleSide });
       mat.userData.shared = true;
       return (KIT.mats[name] = mat);
     }
@@ -1635,23 +1635,42 @@
   // 3Dモデル集が読めたらそれを、読めなかったときは手作りの形を使う
   function kitOr(name, fit, opt, fallback) { return kitHas(name) ? buildKit(name, fit, opt) : fallback(); }
   // 水入れ：石をくりぬいた器に水を張る
-  function stoneBasin() {
+  // 同じ形で色ちがいを作るための材質（作ったものは使い回す）
+  const variantMats = {};
+  function variantMat(key, color, opt) {
+    if (!variantMats[key]) { const m = phys(color, Object.assign({ roughness: 0.9, bumpMap: sandTex(), bumpScale: 0.03, side: T.DoubleSide }, opt || {})); m.userData.shared = true; variantMats[key] = m; }
+    return variantMats[key];
+  }
+  function paint(g, mat) { if (mat) g.traverse(o => { if (o.isMesh) o.material = mat; }); return g; }
+  const BASIN_V = {
+    dish: null,
+    dish2: { key: 'sandstone', color: '#94502E', opt: { roughness: 0.95, bumpScale: 0.05 }, w: 2.1, h: 1.0 },
+    dish3: { key: 'marble', color: '#E9E6E0', opt: { roughness: 0.25, clearcoat: 0.8, bumpScale: 0.006 }, w: 1.8, h: 1.15 },
+  };
+  function stoneBasin(t) {
     if (!kitHas('Basin')) return OLD_DECOR.dish.build();
-    const g = new T.Group(), W = 2.0;
-    const body = buildKit('Basin', W);
+    const v = BASIN_V[t] || null;
+    const g = new T.Group(), W = (v && v.w) || 2.0;
+    const body = paint(buildKit('Basin', W, { h: (v && v.h) || 1 }), v && variantMat(v.key, v.color, v.opt));
     const it = KIT.data.items.Basin, k = W / Math.max(it.size[0], it.size[2]);
     const water = new T.Mesh(new T.CircleGeometry(it.size[2] * k * 0.42, 40), phys('#6FAECB', { roughness: 0.02, clearcoat: 1, transparent: true, opacity: 0.85 }));
     water.rotation.x = -Math.PI / 2;
-    water.position.set(-W * 0.06, it.size[1] * k * 0.72, 0);
+    water.position.set(-W * 0.06, it.size[1] * k * ((v && v.h) || 1) * 0.72, 0);
     g.add(body, water);
     return g;
   }
   // ウェットシェルター：テラコッタのトンネル。両はしの穴から中に入れる。上の受け皿に水をためる
   const WET_FIT = 3.0;
-  function wetShelter() {
+  const WET_V = {
+    wet: null,
+    wet2: { key: 'glazeWhite', color: '#F2EFE8', opt: { roughness: 0.22, clearcoat: 1, bumpScale: 0.004 } },
+    wet3: { key: 'charcoal', color: '#24211F', opt: { roughness: 0.75, bumpScale: 0.04 } },
+  };
+  function wetShelter(t) {
     if (!kitHas('Wet')) return OLD_DECOR.wet.build();
+    const v = WET_V[t] || null;
     const g = new T.Group();
-    const body = buildKit('Wet', WET_FIT);
+    const body = paint(buildKit('Wet', WET_FIT), v && variantMat(v.key, v.color, v.opt));
     const it = KIT.data.items.Wet, k = WET_FIT / Math.max(it.size[0], it.size[2]);
     const water = new T.Mesh(new T.PlaneGeometry(it.size[0] * k * 0.52, it.size[2] * k * 0.66), phys('#6FAECB', { roughness: 0.02, clearcoat: 1, transparent: true, opacity: 0.85 }));
     water.rotation.x = -Math.PI / 2;
@@ -1673,7 +1692,17 @@
     wet: {
       name: 'ウェットシェルター', price: 40, r: 1.3, shelter: { x: 0, z: 0 }, tunnel: true,
       desc: 'テラコッタのトンネル型。上に水をためて中をしっとり。両はしの穴から出入りできます',
-      build: wetShelter,
+      build: () => wetShelter('wet'),
+    },
+    wet2: {
+      name: 'ウェットシェルター（白い陶器）', price: 45, r: 1.3, shelter: { x: 0, z: 0 }, tunnel: true,
+      desc: 'つやのある白い陶器。明るく清潔な雰囲気に',
+      build: () => wetShelter('wet2'),
+    },
+    wet3: {
+      name: 'ウェットシェルター（炭焼き）', price: 45, r: 1.3, shelter: { x: 0, z: 0 }, tunnel: true,
+      desc: '黒い炭焼きの素焼き。落ち着いた大人っぽい雰囲気に',
+      build: () => wetShelter('wet3'),
     },
     log: {
       name: '枯れ木（ひろがり）', price: 20, r: 0.9,
@@ -1738,7 +1767,17 @@
     dish: {
       name: '水入れ', price: 10, r: 1.0,
       desc: '石をくりぬいた水入れ。いつでも新鮮なお水を',
-      build: stoneBasin,
+      build: () => stoneBasin('dish'),
+    },
+    dish2: {
+      name: '水入れ（赤い砂岩）', price: 12, r: 1.05,
+      desc: '赤茶色の砂岩の水入れ。荒野ふうのケースに',
+      build: () => stoneBasin('dish2'),
+    },
+    dish3: {
+      name: '水入れ（白い大理石）', price: 15, r: 0.95,
+      desc: 'つるっとした白い大理石の水入れ。上品な雰囲気に',
+      build: () => stoneBasin('dish3'),
     },
   };
   const DEFAULT_DECOR = [{ t: 'wet', x: -4.4, z: -2.6, rot: 0 }, { t: 'dish', x: -5.0, z: 3.2, rot: 0 }, { t: 'plant', x: 1.8, z: -3.8, rot: 0 }];
@@ -2839,7 +2878,7 @@
           st.wait -= dt;
           if (st.wait <= 0) {
             st.walkTime = 0;
-            const dish = placed.find(o => o.t === 'dish'), stone = placed.find(o => o.t === 'stone' || o.t === 'stone2');
+            const dish = placed.find(o => /^dish/.test(o.t)), stone = placed.find(o => o.t === 'stone' || o.t === 'stone2');
             const nextTo = (o, gap) => {
               // 家具の手前（ケースの中心に近い側）に、鼻先を向けて止まる
               const a = Math.atan2(-o.x * 0.6 - o.x * 0.4 + rand(-1.2, 1.2), -o.z + rand(-1, 1));
