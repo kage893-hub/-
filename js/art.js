@@ -128,8 +128,9 @@
     return `<svg class="swatch" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="${c.base}" stroke="${c.outline}" stroke-width="1.2"/>${dots}</svg>`;
   }
 
-  function egg() {
-    return '<svg class="egg-svg" viewBox="0 0 60 80" aria-hidden="true"><ellipse cx="30" cy="44" rx="21" ry="29" fill="#F7F2E6" stroke="#D6CBB5" stroke-width="2"/><ellipse cx="23" cy="32" rx="5" ry="8" fill="#fff" opacity=".75"/><circle cx="38" cy="55" r="1.2" fill="#DCD2BE"/><circle cx="33" cy="62" r="1" fill="#DCD2BE"/></svg>';
+  // mark：上下がわかるように、えんぴつでつけたしるし
+  function egg(mark) {
+    return `<svg class="egg-svg" viewBox="0 0 60 80" aria-hidden="true"><ellipse cx="30" cy="44" rx="21" ry="29" fill="#F7F2E6" stroke="#D6CBB5" stroke-width="2"/><ellipse cx="23" cy="32" rx="5" ry="8" fill="#fff" opacity=".75"/><circle cx="38" cy="55" r="1.2" fill="#DCD2BE"/><circle cx="33" cy="62" r="1" fill="#DCD2BE"/>${mark ? '<path d="M25 24 L35 24 M30 19 L30 29" stroke="#55524C" stroke-width="2.4" stroke-linecap="round"/>' : ''}</svg>`;
   }
 
   const FOOD_SVG = {

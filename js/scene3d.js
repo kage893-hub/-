@@ -1399,6 +1399,11 @@
     g.traverse(o => { if (o.isMesh) o.castShadow = true; });
     return g;
   }
+  // カルシウムをまぶしたえさは、白い粉をうっすらまとう
+  function dustFood(g) {
+    g.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.color.lerp(new T.Color('#EEE9DC'), 0.5); o.material.roughness = 0.85; o.material.clearcoat = 0; } });
+    return g;
+  }
   function buildPoop() {
     const g = new T.Group();
     const p = new T.Mesh(new T.SphereGeometry(0.13, 14, 10), phys('#4A3524', { roughness: 0.85 }));
@@ -2601,22 +2606,33 @@
       blob.visible = true;
     }
 
-    function spawnFood(kind) {
+    function spawnFood(kind, opt) {
+      opt = opt || {};
       const obj = buildFood(kind);
+      if (opt.dust) dustFood(obj);
       let x, z;
       let tries = 0;
       do { x = rand(-TK.hw + 2, TK.hw - 1.5); z = rand(-TK.hd + 1.4, TK.hd - 1); tries++; } while ((Math.hypot(x - st.x, z - st.z) < 3 || !freeAt(x, z, 0.4) || heightAt(x, z) > 0.05) && tries < 60);
       obj.position.set(x, 0, z);
       obj.rotation.y = rand(0, 6.28);
       scene.add(obj);
-      st.foods.push({ kind, obj, t: rand(0.4, 1), hop: null });
-      if (st.sleeping) wake();
+      st.foods.push({ kind, obj, t: rand(0.4, 1), hop: null, dust: !!opt.dust, refuse: !!opt.refuse });
+      if (opt.refuse) {
+        // 気づいて見るけれど、ぷいっと向きを変える
+        if (!opt.quiet && !st.sleeping) { st.peek = clamp(angleTo(st.yaw, Math.atan2(x - st.x, z - st.z)), -0.7, 0.7); st.peekT = 1.6; st.refuseT = 1.7; }
+      } else if (st.sleeping) wake();
+    }
+    // 食べ残し：食べなかったえさの数を、保存されている数にそろえる
+    function setLeftovers(kinds) {
+      const have = st.foods.filter(f => f.refuse);
+      for (let i = kinds.length; i < have.length; i++) { const f = have[i]; st.foods.splice(st.foods.indexOf(f), 1); scene.remove(f.obj); disposeTree(f.obj); }
+      for (let i = have.length; i < kinds.length; i++) spawnFood(kinds[i], { refuse: true, quiet: true });
     }
     function takeFoods() {
       endMealObj(); st.meal = null; st.hunt = null; endTweezers(false); endHandling(true);
       if (st.shedAct && st.shedAct.flake) scene.remove(st.shedAct.flake);
       st.shedAct = null;
-      const kinds = st.foods.map(f => f.kind);
+      const kinds = st.foods.map(f => ({ kind: f.kind, dust: f.dust, refuse: f.refuse }));
       st.foods.forEach(f => { scene.remove(f.obj); disposeTree(f.obj); });
       st.foods = [];
       return kinds;
@@ -2768,6 +2784,15 @@
         if (f) handlers.onFloorTap && handlers.onFloorTap(f.point.x, f.point.z);
         return;
       }
+      for (let i = st.foods.length - 1; i >= 0; i--) {
+        const f = st.foods[i];
+        if (f.held || !f.refuse) continue;
+        if (ray.ray.distanceToPoint(f.obj.position) < 0.8) {
+          st.foods.splice(i, 1); scene.remove(f.obj); disposeTree(f.obj);
+          handlers.onTakeFood && handlers.onTakeFood(f.kind);
+          return;
+        }
+      }
       for (let i = st.poops.length - 1; i >= 0; i--) {
         if (ray.intersectObject(st.poops[i], true).length || ray.ray.distanceToPoint(st.poops[i].position) < 0.45) {
           handlers.onTapPoop && handlers.onTapPoop();
@@ -2880,7 +2905,7 @@
       if (food.held && st.tw) { food.held = false; st.tw.food = null; st.tw.doneAt = performance.now(); seen('tweezers'); }
       st.hunt = null; st.stalk = 0;
       fx('パクッ', 'eat');
-      handlers.onEat && handlers.onEat(food.kind);
+      handlers.onEat && handlers.onEat(food.kind, food.dust);
     }
     function endMealObj() {
       const M = st.meal;
@@ -2994,13 +3019,14 @@
       outer.traverse(o => { if (o.isMesh) o.castShadow = true; });
       return outer;
     }
-    function startTweezers(kind) {
+    function startTweezers(kind, opt) {
       endTweezers(false);
       const grp = buildTweezers();
       scene.add(grp);
       const obj = buildFood(kind);
+      if (opt && opt.dust) dustFood(obj);
       scene.add(obj);
-      const food = { kind, obj, t: 999, hop: null, held: true };
+      const food = { kind, obj, t: 999, hop: null, held: true, dust: !!(opt && opt.dust) };
       st.foods.unshift(food);
       st.tw = { kind, grp, food, tip: new T.Vector3(), anchor: null, off: new T.Vector3(), lastMove: performance.now() - 5000, born: performance.now(), wig: 0, prevClose: st.close };
       if (st.sleeping) wake();
@@ -3516,7 +3542,8 @@
       const gk = st.gk;
       if (!gk) return;
       let step = 0;
-      const food = st.foods[0];
+      const food = st.foods.find(f => !f.refuse);
+      if (st.refuseT > 0) { st.refuseT -= dt; if (st.refuseT <= 0 && !st.sleeping && !food && st.mode === 'idle') { st.wait = 0; } }
       const nf = st.night ? 1.35 : 1;
       const S = 0.95 * st.size;
 
@@ -3710,9 +3737,9 @@
       if (moving && st.night) seen('night');
       if (gk.U) {
         const pk = shedPeel();
-        gk.U.uShedOn.value = st.shedP == null ? 0 : 1;
+        gk.U.uShedOn.value = st.shedP == null && !st.stuck ? 0 : 1;
         // 頭の先から、しっぽの先まで、境目がだんだん下がっていく
-        gk.U.uShedEdge.value = pk < 0 ? 9 : 1.9 - pk * 5.8;
+        gk.U.uShedEdge.value = st.shedP == null && st.stuck ? -3.1 : pk < 0 ? 9 : 1.9 - pk * 5.8;
         gk.U.uTailFat.value = st.fat || 0;
         gk.U.uTailLift.value = st.tailLift || 0;
         if (gk.corneaMat) gk.corneaMat.opacity = st.shedP != null && pk < 0.12 ? 0.4 : 0.1;
@@ -3798,12 +3825,23 @@
         heat.intensity = 0.8 * st.heatGlow;
       },
       setShed(p) { st.shedP = p; },
+      setStuck(on) { st.stuck = !!on; },
+      setLeftovers,
+      // 水のよごれ（0：きれい 〜 1：よごれ）
+      setWaterDirty(k) {
+        st.waterDirty = k;
+        decorG.traverse(o => {
+          if (!o.isMesh || o.name !== 'water') return;
+          if (!o.userData.base) { o.material = o.material.clone(); o.userData.base = o.material.color.clone(); }
+          o.material.color.copy(o.userData.base).lerp(new T.Color('#8C8A5A'), k * 0.55);
+        });
+      },
       setFat(f) { st.fat = f; },
       startTweezers, tweezersActive: () => !!st.tw,
       startPairing, skipPairing, endPairing: () => endPairing(true), pairing: () => st.pair ? st.pair.ph : null,
       startHandling, endHandling: () => endHandling(true), handCmd, handling: () => st.hand ? st.hand.phase : null,
       _st: st, _cam: camera, _hide: () => HIDE, refreshDecor, setCage, setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
-      pendingFoods: () => st.foods.map(f => f.kind),
+      pendingFoods: () => st.foods.filter(f => !f.refuse).map(f => f.kind),
       lick() { st.lick = 0.9; },
       happy() { st.happy = 1.4; if (st.sleeping) wake(); seen('happy'); },
       setActive(v) { st.active = v; if (v) { last = performance.now(); resize(); } },

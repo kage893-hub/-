@@ -620,3 +620,22 @@ body.full-view .tank.camera-on .full-shutter, body.full-view .tank:has(.hand-bar
 html.kids .muted.small, html.kids .small { font-size: 13px; line-height: 1.7; }
 html.kids .pill { white-space: normal; }
 .offer-main { min-width: 0; }
+
+/* 本物の飼育のポイント */
+.care-warn p { line-height: 1.75; }
+.dust-row { margin: 8px 0; }
+.dust-row .switch { flex: none; width: 42px; height: 24px; border-radius: 12px; background: var(--line); position: relative; transition: background .2s; }
+.dust-row .switch i { position: absolute; left: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .2); transition: transform .2s; }
+.dust-row.on .switch { background: var(--good); }
+.dust-row.on .switch i { transform: translateX(18px); }
+.tag.warn { background: #FBE3D6; color: #A4512A; }
+.body-label { margin: 10px 0 4px; font-weight: 700; font-size: 13px; }
+.body-check { display: flex; flex-wrap: wrap; gap: 6px; }
+.body-check .chip { cursor: pointer; }
+.t-hum.low { color: #C0602F; font-weight: 700; }
+.laybox { border: 2px dashed var(--accent); }
+.lay-eggs { display: flex; gap: 10px; margin: 8px 0; }
+.lay-eggs .egg-art { width: 48px; }
+.learn-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.learn { font-size: 12.5px; padding: 4px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--muted, #8A8273); }
+.learn.on { background: #EAF4E4; border-color: #BFDDB0; color: #3D6B2E; font-weight: 700; }

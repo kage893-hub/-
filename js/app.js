@@ -106,6 +106,9 @@
     movePhotosOut(s);
     if (!s.tut) s.tut = { step: 99 }; // 前から遊んでいる人にはガイドを出さない
     s.decorInv = s.decorInv || {};
+    if (s.calc == null) { s.calc = 10; s.dust = true; }
+    s.layBox = s.layBox || [];
+    s.learned = s.learned || {};
     return s;
   }
   // 保存は操作が落ちついてからまとめて1回（アプリを閉じるときはすぐ保存）
@@ -178,6 +181,7 @@
       v: 2, coins: 60, cases: 4, incTemp: 29.5, food: { cricket: 20, dubia: 3, worm: 3 },
       tut: { step: 0 }, geckos: [], eggs: [], dex: {}, names: {}, decorInv: { grass: 1 }, decorV3: true, selected: null, offers: [], offersAt: 0,
       lastTick: Date.now(), nextId: 1, welcomed: false, stats: { hatched: 0, rehomed: 0 },
+      calc: 10, dust: true, layBox: [], learned: {},
     };
     // はじめはショップでレオパを選ぶところから
     S.starters = makeStarters();
@@ -228,14 +232,17 @@
     const dtH = (now - S.lastTick) / HOUR;
     if (dtH > 0) {
       for (const g of S.geckos) {
-        const fedH = Math.max(0, Math.min(dtH, (g.hunger - 30) / RATE.hunger));
-        g.hunger = clamp(g.hunger - RATE.hunger * dtH);
+        // ベビーはおなかがすきやすく、おとなはゆっくり（ベビーは毎日、おとなは2〜3日に1回が目安）
+        const rh = RATE.hunger * HUNGER_K[stageOf(g)];
+        const fedH = Math.max(0, Math.min(dtH, (g.hunger - 30) / rh));
+        g.hunger = clamp(g.hunger - rh * dtH);
         g.clean = clamp(g.clean - RATE.clean * dtH);
         // おなかが空いている時間が長いと、しっぽの栄養を使う
         const hungryH = Math.max(0, dtH - fedH);
         g.cond = clamp((g.cond == null ? 55 : g.cond) - hungryH * 0.6 * speedX() + (fedH > 0 && g.cond < 50 ? fedH * 0.1 * speedX() : 0));
         if (fedH > 0) grow(g, fedH * GROWTH.perHour * speedX() * heatInfo(heatOf(g)).growth, now);
       }
+      for (const g of S.geckos) checkSick(g, dtH * HOUR, now);
       S.lastTick = now;
       for (const g of S.geckos) {
         recordWeight(g, now); checkMilestones(g);
@@ -247,10 +254,20 @@
       if (g.poopAt && now >= g.poopAt) { g.poop = Math.min(3, g.poop + 1); g.clean = clamp(g.clean - 10); g.poopAt = 0; mile(g, 'poop', 'はじめてのフンをした（元気なしるし！）', false); }
       if (g.shedUntil && now >= g.shedUntil) finishShed(g);
       if (g.gravid && now >= g.gravid.layAt) layEggs(g, now);
+      if (!g.waterAt) g.waterAt = now;
+      // 食べ残しのコオロギを夜まで残すと、寝ているレオパをかじってしまうことがある
+      if (g.left && g.left.length && isNight() && g.leftNight !== new Date().toDateString()) {
+        g.leftNight = new Date().toDateString();
+        g.tame = clamp(g.tame - 2);
+        if (g.id === S.selected) toast(`${g.name}は、残ったえさが気になって落ちつかないみたい（なれ度 -2）。食べ残しは取り出そう`);
+        learn('leftover');
+      }
     }
   }
   function grow(g, amt, now) {
     if (g.growth >= GROWTH.max) return;
+    // 体調がわるいときや、カルシウムが足りないときは成長がゆっくり
+    amt *= (g.sick ? 0.7 : 1) * (boneOf(g) < 30 ? 0.85 : 1);
     const before = g.growth, st = stageOf(g);
     g.growth = Math.min(GROWTH.max, g.growth + amt);
     if (Math.floor(before / GROWTH.shedEvery) < Math.floor(g.growth / GROWTH.shedEvery) && !g.shedUntil) {
@@ -262,12 +279,14 @@
     if (!g.shedUntil) g._shedMemo = false;
   }
   function layEggs(g, now) {
-    if (S.eggs.length + 2 > EGG_CAP) return; // インキュベーターが空くまで待つ
+    if (S.eggs.length + (S.layBox || []).length + 2 > EGG_CAP) return; // インキュベーターが空くまで待つ
+    S.layBox = S.layBox || [];
     const dad = g.gravid.dad;
     const temp = TEMPS.find(t => t.t === S.incTemp) || TEMPS[1];
     for (let i = 0; i < 2; i++) {
       const child = G.breed(g, dad);
-      S.eggs.push({
+      // 産んだ卵はまず産卵床に。しるしをつけてからインキュベーターへ移す
+      S.layBox.push({
         id: 'e' + (S.nextId++), genes: child.genes, tang: child.tang, poly: child.poly,
         sex: Math.random() < temp.pMale ? 'M' : 'F', temp: temp.t,
         laidAt: now, hatchAt: now + realDays(temp.days), mom: g.name, dad: dad.name, pmom: snap(g, 1), pdad: trimSnap(Object.assign({ sex: 'M' }, dad), 1),
@@ -277,7 +296,7 @@
     g.gravid = null;
     g.restUntil = now + realDays(14);
     sfx('lay');
-    toast(`${g.name}が卵を2個産みました！インキュベーターに移しました`);
+    toast(`${g.name}が卵を2個産みました！「たまご」の画面で、インキュベーターに移してあげよう`);
     memo(g, `${dad.name}とのあいだに、卵を2個産んだ`);
     g.clutches = (g.clutches || 0) + 1;
     if (g.clutches === 1) mile(g, 'mom', 'はじめて卵を産んで、お母さんになった', true);
@@ -419,7 +438,8 @@
       return;
     }
     tank = L3.createTank(box, {
-      onEat(kind) { const g = S.geckos.find(x => x.id === tankGid); if (g) applyEat(g, kind); },
+      onEat(kind, dust) { const g = S.geckos.find(x => x.id === tankGid); if (g) applyEat(g, kind, dust); },
+      onTakeFood(kind) { const g = S.geckos.find(x => x.id === tankGid); if (g) takeLeft(g, kind, true); },
       onTapGecko() { const g = selected(); sfx('tap'); if (g && g.tame >= 40) tank.hearts(1); },
       onTapPoop() { ACTIONS.poop(); },
       onFloorTap: (x, z) => floorTap(x, z),
@@ -438,17 +458,22 @@
     tank.setCage(g ? cageOf(g) : null);
     tank.setDecor(g ? decorOf(g) : []);
     tank.setPoops(g ? g.poop : 0);
+    if (tank.setLeftovers) {
+      tank.setLeftovers(g ? g.left || [] : []);
+      tank.setStuck(!!(g && g.stuckShed));
+      tank.setWaterDirty(g && waterDirty(g, Date.now()) ? 1 : 0);
+    }
     tank.setDirty(!!g && g.clean < 35);
     tankCondition(g);
     tank.setClock(clockNow(), seasonNow());
     if (g && tank.setHeat) tank.setHeat(heatOf(g));
     const th = $('.thermo');
-    if (th) th.innerHTML = `<span class="t-when">${SEASON_JA[seasonNow()]}の${timeJa(clockNow())}</span><span class="t-temps"><span class="t-hot">暖かい側 ${g ? heatOf(g) : 32}℃</span> ／ <span class="t-cool">涼しい側 ${coolTemp()}℃</span></span>`;
+    if (th) th.innerHTML = `<span class="t-when">${SEASON_JA[seasonNow()]}の${timeJa(clockNow())}${g ? ` ・ <span class="t-hum${humidOf(g) < 45 ? ' low' : ''}">しつど ${humidOf(g)}%</span>` : ''}</span><span class="t-temps"><span class="t-hot">${window.LKids && LKids.on ? 'あったか' : '暖かい側'} ${g ? heatOf(g) : 32}℃</span> ／ <span class="t-cool">${window.LKids && LKids.on ? 'すずしい' : '涼しい側'} ${coolTemp()}℃</span></span>`;
   }
   function flushFoods() {
     if (!tank) return;
     const g = S.geckos.find(x => x.id === tankGid);
-    for (const k of tank.takeFoods()) if (g) applyEat(g, k);
+    for (const f of tank.takeFoods()) if (g && !f.refuse) applyEat(g, f.kind, f.dust);
   }
   // 写真は重いので、まだ撮っていないものは1枚ずつ順番に撮って差しこむ
   const photoQueue = new Map();
@@ -479,6 +504,12 @@
   // 脱皮の進み具合（0：白くなりはじめ → 0.6：脱ぎはじめ → 1：おわり）
   function shedProgress(g, now) { if (!g.shedUntil) return -1; const d = g.shedDur || 40 * MIN; return clamp(1 - (g.shedUntil - now) / d, 0, 1); }
   function finishShed(g) {
+    // しつどが足りないと、しっぽの先や指先に皮が残ってしまう
+    if (!g.misted && humidOf(g) < 50) {
+      g.stuckShed = Date.now();
+      memo(g, '脱皮の皮が、しっぽの先に残ってしまった');
+      if (g.id === S.selected) setTimeout(() => toast(`${g.name}のしっぽの先に、皮が残っています。「ぬるま湯ケア」でとってあげよう`), 1200);
+    }
     g.shedUntil = 0; g.misted = false;
     g.sheds = (g.sheds || 0) + 1;
     if (g.sheds === 1) g.mile = Object.assign(g.mile || {}, { shed1: Date.now() });
@@ -486,6 +517,83 @@
     memo(g, '脱皮が完了。脱いだ皮はぱくっと食べた');
     if (g.id === S.selected) toast(`${g.name}の脱皮が終わりました。つやつや！`);
   }
+  // ======================================================
+  // 本物の飼育で大切なこと（まちがえても死なない。なぜダメかをやさしく教える）
+  // ======================================================
+  const HUNGER_K = { baby: 1.2, young: 1, adult: 0.65 };
+  const boneOf = g => (g.bone == null ? 50 : g.bone);
+  const hasDish = g => decorOf(g).some(d => L3.DECOR[d.t] && L3.DECOR[d.t].drink);
+  const hasWet = g => decorOf(g).some(d => /^wet/.test(d.t));
+  const waterDirty = (g, now) => hasDish(g) && now - (g.waterAt || now) > realDays(1);
+  // しつど：ウェットシェルターと水入れ、しっとりケアで上がる
+  function humidOf(g, now) {
+    now = now || Date.now();
+    return Math.min(85, 35 + (hasWet(g) ? 20 : 0) + (hasDish(g) ? 8 : 0) + (g.mistAt && now - g.mistAt < realDays(0.25) ? 20 : 0));
+  }
+  // まなんだ飼育のポイント（がんばりきろくに並ぶ）
+  const LEARN = {
+    shed: '脱皮中はさわらない', meal: '食後すぐはさわらない', nap: '昼はねかせてあげる', newcomer: 'おむかえ直後はそっと',
+    appetite: '脱皮前は食欲が落ちる', size: 'えさは目と目の間より小さく', calcium: 'カルシウムをまぶす', leftover: '食べ残しは取り出す',
+    water: '水は毎日とりかえる', stuck: '脱皮の皮のこりはぬるま湯で', humid: 'しつどを保つ', sick: '体調がわるいときは病院へ', egg: '卵の上下を変えない',
+  };
+  function learn(key) {
+    S.learned = S.learned || {};
+    if (S.learned[key]) return;
+    S.learned[key] = Date.now();
+    setTimeout(() => toast(`飼育のポイントをおぼえた！「${LEARN[key]}」`), 1600);
+  }
+  const CARE_RULES = {
+    shed: { title: '脱皮中は、そっと見守ろう', why: '脱皮中は皮がやわらかく、体もびんかんです。さわると皮がうまくぬげなくなることがあります。ぬぎおわるまで待ってあげよう。', tame: 3 },
+    meal: { title: 'ごはんのあとは、さわらないで', why: '食べたものを消化しているところです。食後すぐにさわると、吐きもどしてしまうことがあります。1日くらいはそっとしておこう。', tame: 2 },
+    nap: { title: 'いまはお昼寝中', why: 'レオパは夕方から夜に活発になる生き物です。昼はかくれ家などで休む時間なので、起こさないであげよう。ふれあうなら夕方から。', tame: 1 },
+    newcomer: { title: 'おむかえしたばかり', why: '新しいおうちになれるまで、1週間ほどかかります。まずはごはんを食べてくれるまで、さわらずに見守ろう。', tame: 2 },
+  };
+  let careForce = null;
+  function careWarn(g, key, onForce) {
+    const R = CARE_RULES[key];
+    learn(key);
+    careForce = { id: g.id, key, fn: onForce };
+    openSheet(`<div class="care-warn"><p class="eyebrow">飼育のポイント</p><h3 class="sheet-title">${R.title}</h3><p>${R.why}</p>
+      <div class="actions"><button class="act primary" data-action="careWait">そっとしておく</button><button class="act ghost" data-action="careForce">それでもさわる</button></div></div>`);
+  }
+  // ふれあう前に、いまさわってもいいかを確かめる
+  function careCheck(g, then) {
+    const now = Date.now();
+    if (tutStep() >= 0) return then();
+    if (g.shedUntil) return careWarn(g, 'shed', then);
+    if (now - (g.adopted || 0) < realDays(7) && !g.newOk) return careWarn(g, 'newcomer', then);
+    if (g.fedAt && now - g.fedAt < realDays(1)) return careWarn(g, 'meal', then);
+    if (tank && tank._st && tank._st.sleeping && !isNight()) return careWarn(g, 'nap', () => { tank.wake(); then(); });
+    then();
+  }
+  // 体調不良：お世話が足りない時間が長く続くと、まれに起こる（死んだりはしない）
+  const SICK = {
+    mouth: { name: '口のまわりが赤い', why: 'ケースがよごれたままだと、口のまわりにばい菌が入ることがあります', fix: 'フンはこまめにひろって、ケースを清潔にしよう' },
+    bone: { name: 'あごがやわらかい', why: 'カルシウムが足りないと、骨が弱くなります（くる病）', fix: 'ごはんにカルシウムをまぶしてあげよう' },
+    tummy: { name: 'フンがゆるい', why: '体が冷えていると消化がうまくいきません。脂肪の多いミルワームのあげすぎも原因に', fix: '暖かい側を31〜33℃に。ミルワームはおやつ程度に' },
+  };
+  function checkSick(g, dms, now) {
+    g.bad = g.bad || {};
+    const cond = { mouth: g.clean < 25 || g.poop >= 3, bone: boneOf(g) < 20, tummy: heatOf(g) <= 29 || (g.wormRun || 0) >= 4 };
+    for (const k in cond) g.bad[k] = cond[k] ? (g.bad[k] || 0) + dms : Math.max(0, (g.bad[k] || 0) - dms);
+    if (g.sick) return;
+    const k = Object.keys(cond).find(x => g.bad[x] > realDays(1.5));
+    if (!k) return;
+    g.sick = { type: k, at: now };
+    g.bad[k] = 0;
+    memo(g, `体調をくずした（${SICK[k].name}）`);
+    if (g.id === S.selected) toast(`${g.name}の様子がいつもとちがうみたい。けんこうチェックを見てみよう`);
+  }
+
+  function takeLeft(g, kind) {
+    const i = (g.left || []).indexOf(kind);
+    if (i >= 0) g.left.splice(i, 1);
+    learn('leftover');
+    sfx('tap');
+    toast('食べ残しを取り出しました');
+    renderView(); save();
+  }
+
   // ---- ふれあい（手に乗せる）のごほうび
   let handSession = null;
   function handleReward(g) {
@@ -560,8 +668,12 @@
     if (!silent && mom) toast(`ペアリング成功！${mom.name}は約${fmtLeft(realDays(28))}後に卵を産みます`);
     renderView();
   }
-  function applyEat(g, kind) {
+  function applyEat(g, kind, dust) {
     mile(g, 'eat', `はじめての${FOODS[kind].name}をぱくっと食べた`, true);
+    g.bone = clamp(boneOf(g) + (dust ? 8 : -3));
+    if (dust) learn('calcium');
+    g.fedAt = Date.now();
+    g.wormRun = kind === 'worm' ? (g.wormRun || 0) + 1 : 0;
     const F = FOODS[kind];
     g.hunger = clamp(g.hunger + F.hunger);
     // しっぽの栄養：ミルワームは脂肪が多いので、たくさんあげるとぽっちゃりに
@@ -612,13 +724,20 @@
       </div>
       <p class="small">${info.text}</p>
       <p class="muted small">涼しい側は部屋の温度（いまは ${coolTemp()}℃）。季節と時間帯で変わります。</p>
+      <h4 class="h4">しつど ${humidOf(g)}%</h4>
+      <p class="muted small">ケースのしつどは 40〜60% くらいが目安。ウェットシェルター（+20%）や水入れ（+8%）で保ちます。かわいていると、脱皮の皮がのこりやすくなります。</p>
       <button class="act primary" data-action="closeSheet">とじる</button>`);
+    learn('humid');
   }
 
   function statusOf(g, now) {
     if (pairScene && (g.id === pairScene.mom || g.id === pairScene.dad)) return { cls: 'pink', text: 'ペアリング中' };
     if (g.gravid) return { cls: 'pink', text: S.eggs.length + 2 > EGG_CAP ? '抱卵中・インキュベーター満杯' : `抱卵中 あと${fmtLeft(g.gravid.layAt - now)}` };
     if (g.shedUntil) return { cls: 'info', text: '脱皮中' };
+    if (g.sick) return { cls: 'warn', text: '体調がわるい' };
+    if (g.stuckShed) return { cls: 'warn', text: '皮がのこっている' };
+    if (g.left && g.left.length) return { cls: 'warn', text: '食べ残しがある' };
+    if (waterDirty(g, now)) return { cls: 'warn', text: '水をかえてほしい' };
     if (heatOf(g) <= 30) return { cls: 'info', text: 'ちょっと寒そう' };
     if (heatOf(g) >= 34) return { cls: 'warn', text: 'ちょっと暑そう' };
     if (g.hunger < 25) return { cls: 'warn', text: 'おなかぺこぺこ' };
@@ -627,7 +746,7 @@
     if (g.hunger >= 60 && g.clean >= 60) return { cls: 'good', text: 'ごきげん' };
     return { cls: 'muted', text: 'のんびり' };
   }
-  function needsCare(g) { return g.hunger < 25 || g.poop > 0 || g.clean < 35 || !!g.shedUntil; }
+  function needsCare(g) { const now = Date.now(); return g.hunger < 25 || g.poop > 0 || g.clean < 35 || !!g.shedUntil || !!g.stuckShed || !!g.sick || (g.left && g.left.length > 0) || waterDirty(g, now); }
 
   function hatch(id) {
     const e = S.eggs.find(x => x.id === id);
@@ -688,14 +807,20 @@
           <button role="radio" aria-checked="${tw}" class="${tw ? 'on' : ''}" data-action="feedMode" data-m="tw"><b>ピンセットで</b><small>目の前でゆらしてあげる</small></button>
         </div>
         ${full ? `<p class="notice">${esc(g.name)}はおなかいっぱいみたい。また少したってから。</p>` : ''}
+        ${g.shedUntil && shedProgress(g, Date.now()) < 0.6 ? '<p class="notice">脱皮の前で白っぽいときは、食欲が落ちて食べないことがあります。</p>' : ''}
+        <button class="row dust-row${S.dust && S.calc > 0 ? ' on' : ''}" data-action="dustToggle" role="switch" aria-checked="${!!S.dust}">
+          <span class="row-main"><b>カルシウムをまぶす</b><small>${S.calc > 0 ? `のこり ${S.calc}回 ・ 骨を強くするために、ごはんに粉をまぶします` : 'カルシウムがありません。ショップの「ごはん」で買えます'}</small></span>
+          <span class="switch" aria-hidden="true"><i></i></span>
+        </button>
         <div class="list">${Object.entries(FOODS).map(([k, F]) => `
           <button class="row" data-action="feed" data-kind="${k}" ${full || !S.food[k] ? 'disabled' : ''}>
             <span class="row-art">${A.food(k)}</span>
-            <span class="row-main"><b>${F.name}</b><small>${F.desc}</small></span>
+            <span class="row-main"><b>${F.name}${k === 'dubia' && stageOf(g) === 'baby' ? ' <span class="tag warn">まだ大きい</span>' : ''}</b><small>${F.desc}</small></span>
             <span class="row-side">のこり ${S.food[k]}</span>
           </button>`).join('')}</div>
-        <p class="muted small">なくなったらショップで買えます。</p>`);
+        <p class="muted small">${{ baby: 'ベビーは毎日', young: 'ヤングは1〜2日に1回', adult: 'おとなは2〜3日に1回' }[stageOf(g)]}が目安。えさは目と目の間の幅より小さいものを選ぼう。なくなったらショップで買えます。</p>`);
     },
+    dustToggle() { S.dust = !S.dust; if (S.dust && S.calc <= 0) toast('カルシウムがありません。ショップで買えます'); save(); ACTIONS.feedMenu(); },
     feedMode(t) { S.feedMode = t.dataset.m; save(); ACTIONS.feedMenu(); },
     feed(t) {
       const g = selected();
@@ -704,11 +829,25 @@
       if (g.hunger + pendingHunger() >= 90) { toast('おなかいっぱいみたい'); return; }
       S.food[k]--;
       closeSheet();
+      const dust = !!S.dust && S.calc > 0;
+      if (dust) S.calc--;
+      // 食べないことがある：ベビーに大きすぎるえさ／脱皮の前
+      const sp = g.shedUntil ? shedProgress(g, Date.now()) : -1;
+      const refuse = k === 'dubia' && stageOf(g) === 'baby' ? 'size' : sp >= 0 && sp < 0.6 && Math.random() < 0.5 ? 'appetite' : '';
+      if (refuse) {
+        g.left = (g.left || []).concat(k);
+        learn(refuse);
+        if (tank) { tank.setLeftovers(g.left); }
+        toast(refuse === 'size' ? `${FOODS[k].name}は大きすぎて食べられないみたい。えさは目と目の間の幅より小さいものを。食べ残しはタップして取り出そう`
+          : `${g.name}は脱皮の前で、食欲がないみたい。食べ残しはタップして取り出そう`);
+        renderView(); save();
+        return;
+      }
       if (tank && S.feedMode === 'tw') {
-        tank.startTweezers(k);
+        tank.startTweezers(k, { dust });
         if (!S.twHint) { S.twHint = true; toast('画面を指でこすると、ピンセットのエサがゆれます。ゆらして気づかせよう'); }
-      } else if (tank) tank.spawnFood(k);
-      else applyEat(g, k);
+      } else if (tank) tank.spawnFood(k, { dust });
+      else applyEat(g, k, dust);
       save();
     },
     poop() {
@@ -726,6 +865,40 @@
     clean() {
       const g = selected();
       if (!g) return;
+      const now = Date.now(), left = (g.left || []).length, dirty = waterDirty(g, now);
+      openSheet(`<h3 class="sheet-title">${ic('clean')}おそうじ</h3>
+        <div class="list">
+          <button class="row" data-action="cleanCase"><span class="row-main"><b>フンをひろって、ケースをふく</b><small>${g.poop ? `フンが ${g.poop}こ あります` : g.clean >= 95 ? 'もうピカピカです' : 'よごれをふきとります'}</small></span></button>
+          <button class="row" data-action="cleanWater" ${hasDish(g) ? '' : 'disabled'}><span class="row-main"><b>水をかえる</b><small>${!hasDish(g) ? '水入れがありません。「もようがえ」で置いてあげよう' : dirty ? '水がよごれてきました' : 'まだきれい。水は毎日とりかえよう'}</small></span></button>
+          <button class="row" data-action="cleanLeft" ${left ? '' : 'disabled'}><span class="row-main"><b>食べ残しをとる</b><small>${left ? `えさが ${left}ひき 残っています` : '食べ残しはありません'}</small></span></button>
+        </div>`);
+    },
+    cleanWater() {
+      const g = selected();
+      if (!g || !hasDish(g)) return;
+      const was = waterDirty(g, Date.now());
+      g.waterAt = Date.now();
+      learn('water');
+      if (was) S.coins += 1;
+      daily('cleaned');
+      closeSheet();
+      toast('きれいな水にとりかえました。水入れの水は毎日かえよう');
+      renderView(); save();
+    },
+    cleanLeft() {
+      const g = selected();
+      if (!g || !(g.left || []).length) return;
+      const n = g.left.length;
+      g.left = [];
+      learn('leftover');
+      closeSheet();
+      toast(`食べ残しを${n}ひき取り出しました。コオロギは、寝ているレオパをかじることがあるよ`);
+      renderView(); save();
+    },
+    cleanCase() {
+      const g = selected();
+      if (!g) return;
+      closeSheet();
       if (g.poop === 0 && g.clean >= 95) { toast('もうピカピカです'); return; }
       if (g.clean < 70 || g.poop > 0) S.coins += 2;
       g.clean = 100;
@@ -741,9 +914,31 @@
       if (!g) return;
       if (!tank || !tank.startHandling) { handleReward(g); return; }
       if (tank.handling()) { tank.handCmd('down'); return; }
-      tank.startHandling(g.tame);
-      showHandBar(true);
-      handSession = { id: g.id, strokes: 0 };
+      careCheck(g, () => {
+        if (!tank || tank.handling()) return;
+        tank.startHandling(g.tame);
+        showHandBar(true);
+        handSession = { id: g.id, strokes: 0 };
+      });
+    },
+    careWait() {
+      const g = careForce && S.geckos.find(x => x.id === careForce.id);
+      careForce = null;
+      closeSheet();
+      if (g) toast(`${g.name}も安心しているみたい`);
+    },
+    careForce() {
+      const c = careForce;
+      careForce = null;
+      closeSheet();
+      const g = c && S.geckos.find(x => x.id === c.id);
+      if (!g) return;
+      const d = CARE_RULES[c.key].tame;
+      g.tame = clamp(g.tame - d);
+      if (c.key === 'newcomer') g.newOk = true;
+      toast(`${g.name}は少しいやがっているみたい（なれ度 -${d}）`);
+      save();
+      if (c.fn) c.fn();
     },
     credits() {
       openSheet(`<h3 class="sheet-title">素材のクレジット</h3>
@@ -759,13 +954,53 @@
     },
     handWalk() { if (tank) tank.handCmd('walk'); },
     handDown() { if (tank) tank.handCmd('down'); },
+    soak() {
+      const g = selected();
+      if (!g || !g.stuckShed) return;
+      g.stuckShed = 0;
+      learn('stuck');
+      S.coins += 1;
+      toast('ぬるま湯で皮をふやかして、そっととりました。のこった皮は指先やしっぽをしめつけることがあるので、ウェットシェルターでしつどを保とう');
+      renderView(); save();
+    },
+    clinic() {
+      const g = selected();
+      if (!g || !g.sick) return;
+      if (S.coins < 20) { toast('コインが足りません（20コイン）'); return; }
+      const k = SICK[g.sick.type];
+      S.coins -= 20;
+      g.sick = null;
+      learn('sick');
+      memo(g, 'どうぶつ病院でみてもらって、元気になった');
+      closeSheet();
+      openSheet(`<p class="eyebrow">どうぶつ病院</p><h3 class="sheet-title">${esc(g.name)}、元気になったよ</h3>
+        <p>先生より：「${k.why}。${k.fix}」</p>
+        <p class="muted small">爬虫類をみてもらえる病院は多くありません。本物のレオパをおむかえする前に、近くの病院を探しておこう。</p>
+        <button class="act primary" data-action="closeSheet">とじる</button>`);
+      renderView(); save();
+    },
+    bodyCheck(t) {
+      const g = selected();
+      if (!g) return;
+      const part = t.dataset.part, sk = g.sick && g.sick.type;
+      const P = {
+        eye: ['目', 'ぱっちり開いて、すんでいるかな。目やにや、皮がのこっていないか見よう', g.shedUntil && shedProgress(g, Date.now()) < 0.6 ? '脱皮の前なので、少しくもって見えます' : 'すんでいて、きれいです'],
+        mouth: ['口', '口のまわりが赤くはれていないか、口をあけっぱなしにしていないか見よう', sk === 'mouth' ? '口のまわりが少し赤くなっています' : 'きれいです'],
+        jaw: ['あご・足', 'あごがやわらかかったり、足がふらついたりしないか見よう（カルシウム不足のサイン）', sk === 'bone' ? 'あごが少しやわらかいみたい' : boneOf(g) < 40 ? '今は大丈夫。カルシウムをわすれずに' : 'しっかりしています'],
+        toe: ['指・しっぽの先', '脱皮の皮がのこって、しめつけていないか見よう', g.stuckShed ? 'しっぽの先に皮がのこっています' : 'きれいにぬげています'],
+        poop: ['フン', '茶色いかたまりと白い尿酸があれば元気なしるし。ゆるいときは体が冷えているかも', sk === 'tummy' ? '少しゆるいみたい' : 'いいフンです'],
+      }[part];
+      if (!P) return;
+      openSheet(`<p class="eyebrow">からだチェック</p><h3 class="sheet-title">${P[0]}</h3><p class="small">見るところ：${P[1]}</p><p><b>${esc(g.name)}：</b>${P[2]}</p>
+        <button class="act" data-action="closeSheet">とじる</button>`);
+    },
     mist() {
       const g = selected();
       if (!g || !g.shedUntil) return;
       // しっとりさせると、すぐに脱ぎはじめる（脱ぎおわるまで2分半くらい）
       const now = Date.now(), peel = 150000;
       if (shedProgress(g, now) < 0.6) { g.shedDur = peel / 0.4; g.shedUntil = now + peel; }
-      g.misted = true;
+      g.misted = true; g.mistAt = now;
       toast('しっとりして、脱ぎはじめました。そっと見守ってね');
       renderView();
       save();
@@ -879,6 +1114,30 @@
     },
     temp(t) { S.incTemp = Number(t.dataset.t); renderView(); save(); },
     hatch(t) { hatch(t.dataset.id); },
+    eggMark() {
+      for (const e of S.layBox || []) e.marked = true;
+      sfx('tap');
+      toast('えんぴつで、卵の上にそっとしるしをつけました');
+      renderView(); save();
+    },
+    eggMove() {
+      const box = S.layBox || [];
+      if (!box.length) return;
+      if (!box.every(e => e.marked)) {
+        learn('egg');
+        openSheet(`<p class="eyebrow">飼育のポイント</p><h3 class="sheet-title">先に、上にしるしをつけよう</h3>
+          <p>卵は産まれてから上下の向きを変えると、中の赤ちゃんが育たなくなることがあります。移す前に、えんぴつで上にしるしをつけて、しるしを上にしたままそっと移します。</p>
+          <button class="act primary" data-action="closeSheet">わかった</button>`);
+        return;
+      }
+      const now = Date.now();
+      for (const e of box) { e.hatchAt += now - e.laidAt; e.laidAt = now; S.eggs.push(e); }
+      S.layBox = [];
+      learn('egg');
+      sfx('coin');
+      toast('しるしを上にしたまま、インキュベーターに移しました');
+      renderView(); save();
+    },
     dexTab(t) { S.dexTab = t.dataset.tab; renderView(); window.scrollTo(0, 0); },
     showMenu(t) {
       const lv = SHOW_LEVELS[Number(t.dataset.lv)], day = todayKey(), th = themeOf(lv, day);
@@ -999,6 +1258,12 @@
       }
       S.speed = v.x;
       toast(`せいちょうの速さを${v.name}にしました`);
+      renderView(); save();
+    },
+    buyCalc() {
+      if (S.coins < 15) { toast('コインが足りません'); return; }
+      S.coins -= 15; S.calc = (S.calc || 0) + 20; S.dust = true;
+      toast('カルシウムパウダーを買いました');
       renderView(); save();
     },
     buyFood(t) {
@@ -1204,7 +1469,7 @@
     setHTML($('#coins'), `<span class="coin" aria-hidden="true"></span><b>${S.coins}</b><span class="sr">コイン</span>`);
     if (lastCoins != null && S.coins > lastCoins) coinPop(S.coins - lastCoins);
     lastCoins = S.coins;
-    const ready = S.eggs.filter(e => Date.now() >= e.hatchAt).length;
+    const ready = S.eggs.filter(e => Date.now() >= e.hatchAt).length + (S.layBox || []).length;
     const badge = $('#eggBadge');
     badge.hidden = !ready;
     badge.textContent = ready;
@@ -1279,6 +1544,7 @@
       </div>
       ${tutCoach()}
       ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮をうながす</button>' : ''}
+      ${g.stuckShed ? '<button class="act wide mist" data-action="soak">ぬるま湯ケアで、のこった皮をとる</button>' : ''}
       ${installCard()}
       ${dailyCard()}
       <div class="card gecko-card">
@@ -1326,12 +1592,22 @@
     const now = Date.now();
     const temp = TEMPS.find(t => t.t === S.incTemp) || TEMPS[1];
     const gravids = S.geckos.filter(g => g.gravid);
-    const full = S.eggs.length + 2 > EGG_CAP;
+    const full = S.eggs.length + (S.layBox || []).length + 2 > EGG_CAP;
+    const box = S.layBox || [], marked = box.length && box.every(e => e.marked);
+    const layCard = box.length ? `<div class="card laybox">
+        <b>産卵床に卵が ${box.length}こ あります</b>
+        <p class="small">しめった土の中に産んだ卵です。インキュベーターに移してあげよう。</p>
+        <div class="lay-eggs">${box.map(e => `<div class="egg-art">${A.egg(e.marked)}</div>`).join('')}</div>
+        <div class="actions">
+          <button class="act${marked ? '' : ' primary'}" data-action="eggMark" ${marked ? 'disabled' : ''}>① 上にしるしをつける</button>
+          <button class="act${marked ? ' primary' : ''}" data-action="eggMove">② しるしを上にしたまま移す</button>
+        </div>
+      </div>` : '';
     const eggs = S.eggs.slice().sort((a, b) => a.hatchAt - b.hatchAt).map(e => {
       const ready = now >= e.hatchAt;
       const p = clamp((now - e.laidAt) / (e.hatchAt - e.laidAt) * 100);
       return `<div class="egg-card${ready ? ' ready' : ''}">
-        <div class="egg-art">${A.egg()}</div>
+        <div class="egg-art">${A.egg(e.marked)}</div>
         <div class="egg-meta">
           <b>${esc(e.mom)} × ${esc(e.dad)}</b>
           <small class="muted">${e.temp}℃ ・ 第${e.gen}世代</small>
@@ -1340,6 +1616,7 @@
         </div></div>`;
     }).join('');
     setHTML($('#view-eggs'), `
+      ${layCard}
       <h2 class="h2">インキュベーター <small class="muted">${S.eggs.length} / ${EGG_CAP}</small></h2>
       <div class="card">
         <div class="label" id="tempLabel">温度（次に産まれる卵から）</div>
@@ -1482,7 +1759,11 @@
           <span class="row-art">${A.food(k)}</span>
           <span class="row-main"><b>${F.name} ${F.pack}匹</b><small>いま ${S.food[k]}匹 ・ ${F.desc}</small></span>
           <span class="row-side price">${F.price}</span>
-        </button>`).join('')}</div>`,
+        </button>`).join('')}
+        <button class="row" data-action="buyCalc" ${S.coins < 15 ? 'disabled' : ''}>
+          <span class="row-main"><b>カルシウムパウダー 20回分</b><small>いま ${S.calc || 0}回分 ・ ごはんにまぶして骨を強く。足りないと骨が弱くなります</small></span>
+          <span class="row-side price">15</span>
+        </button></div>`,
       interior: () => `${cageShop()}${interiorShop()}`,
       other: () => `${speedShop()}
       <h3 class="h3">ケース <small class="muted">${S.geckos.length} / ${S.cases} 使用中</small></h3>
@@ -1724,7 +2005,10 @@
         const done = !!S.ach[a.id], ok = !done && a.test();
         return `<div class="ach${done ? ' done' : ''}"><span>${esc(a.label)}</span>${done ? '<small class="muted">受け取りずみ</small>'
           : `<button class="act ${ok ? 'primary' : ''} sm" data-action="claimAch" data-id="${a.id}" ${ok ? '' : 'disabled'}>${a.reward}</button>`}</div>`;
-      }).join('')}</div>`;
+      }).join('')}</div>
+      <h3 class="h3">おぼえた飼育のポイント <small class="muted">${Object.keys(LEARN).filter(k => (S.learned || {})[k]).length} / ${Object.keys(LEARN).length}</small></h3>
+      <div class="learn-list">${Object.entries(LEARN).map(([k, n]) => `<span class="learn${(S.learned || {})[k] ? ' on' : ''}">${(S.learned || {})[k] ? '✓ ' + n : '？？？'}</span>`).join('')}</div>
+      <p class="muted small">お世話をしていると、本物のレオパの飼い方で大切なことをおぼえていきます。</p>`;
   }
   Object.assign(ACTIONS, {
     claimDaily() {
@@ -2293,14 +2577,22 @@
     const h = heatInfo(heatOf(g));
     const heat = [h.label, h.cls === 'good' ? 'good' : 'warn'];
     const room = g.clean >= 60 && !g.poop ? ['きれい', 'good'] : g.clean >= 35 ? ['まあまあ', 'info'] : ['おそうじしよう', 'warn'];
-    const rows = [['しっぽの太さ', tail], ['体重の変化（1週間）', wtxt], ['食欲', app], ['脱皮', shed], ['温度', heat], ['ケース', room]];
+    if (g.stuckShed && sp < 0) shed[0] = 'しっぽの先に皮がのこっている', shed[1] = 'warn';
+    const b = boneOf(g), bone = b >= 60 ? ['しっかり', 'good'] : b >= 30 ? ['ふつう', 'info'] : ['よわっている', 'warn'];
+    const hu = humidOf(g, now), hum = hu >= 45 ? [`${hu}%（ちょうどいい）`, 'good'] : [`${hu}%（かわきぎみ）`, 'warn'];
+    const sick = g.sick ? [SICK[g.sick.type].name, 'warn'] : ['いつもどおり', 'good'];
+    const water = !hasDish(g) ? ['水入れがない', 'warn'] : waterDirty(g, now) ? ['よごれてきた', 'warn'] : ['きれい', 'good'];
+    const rows = [['体調', sick], ['しっぽの太さ', tail], ['体重の変化（1週間）', wtxt], ['食欲', app], ['ほねの元気', bone], ['脱皮', shed], ['温度', heat], ['しつど', hum], ['水', water], ['ケース', room]];
     const bad = rows.filter(r => r[1][1] === 'warn').length;
     const sum = bad === 0 ? 'とても元気です' : bad === 1 ? 'おおむね元気です' : 'ちょっと気にしてあげよう';
-    const tips = [tail[2], app[1] === 'warn' ? 'ごはんをあげよう' : '', room[1] === 'warn' ? 'ケースをおそうじしよう' : '', heat[1] === 'warn' ? 'ヒーターの温度を見なおそう（暖かい側31〜33℃）' : ''].filter(Boolean);
+    const tips = [g.sick ? 'どうぶつ病院でみてもらおう' : '', tail[2], app[1] === 'warn' ? 'ごはんをあげよう' : '', bone[1] === 'warn' ? 'ごはんにカルシウムをまぶそう' : '', hum[1] === 'warn' ? 'ウェットシェルターを置いて、しつどを保とう' : '', water[1] === 'warn' ? (hasDish(g) ? '水をとりかえよう' : '水入れを置こう') : '', g.stuckShed ? 'ぬるま湯ケアで皮をとろう' : '', room[1] === 'warn' ? 'ケースをおそうじしよう' : '', heat[1] === 'warn' ? 'ヒーターの温度を見なおそう（暖かい側31〜33℃）' : ''].filter(Boolean);
     return `<details class="health"${openHealth[g.id] ? ' open' : ''} data-id="${g.id}">
       <summary><span>けんこうチェック</span><span class="pill ${bad ? 'warn' : 'good'}">${sum}</span></summary>
       <div class="health-rows">${rows.map(([k, [v, cls]]) => `<span>${k}</span><b class="hv ${cls}">${v}</b>`).join('')}</div>
       ${tips.length ? `<p class="small">アドバイス：${tips.join('。')}。</p>` : '<p class="muted small">このままの暮らしで大丈夫。</p>'}
+      ${g.sick ? '<button class="act primary wide" data-action="clinic">どうぶつ病院でみてもらう（20コイン）</button>' : ''}
+      <p class="body-label">からだチェック</p>
+      <div class="body-check">${[['eye', '目'], ['mouth', '口'], ['jaw', 'あご・足'], ['toe', '指・しっぽ'], ['poop', 'フン']].map(([k, n]) => `<button class="chip" data-action="bodyCheck" data-part="${k}">${n}</button>`).join('')}</div>
     </details>`;
   }
   const openHealth = {};
