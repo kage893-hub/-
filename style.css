@@ -438,3 +438,11 @@ button { font: inherit; color: inherit; }
 .confetti { position: absolute; inset: 0; pointer-events: none; }
 .confetti i { position: absolute; top: -12px; left: var(--x); width: 8px; height: 14px; border-radius: 2px; background: var(--c); animation: fall 2.6s ease-in var(--d) infinite; }
 @keyframes fall { to { transform: translateY(360px) rotate(520deg); opacity: .2; } }
+
+.offer-art { cursor: pointer; }
+.viewer3d { width: 100%; aspect-ratio: 1; border-radius: 16px; background: var(--sand-1); overflow: hidden; touch-action: none; position: relative; }
+.viewer3d canvas { width: 100%; height: 100%; display: block; }
+.viewer3d img, .viewer3d svg { width: 100%; height: 100%; object-fit: contain; }
+.viewer-btns { display: flex; gap: 8px; justify-content: center; margin: 8px 0 2px; }
+.viewer-sheet .sheet-actions { display: flex; gap: 8px; margin-top: 12px; }
+.viewer-sheet .sheet-actions .act { flex: 1; }

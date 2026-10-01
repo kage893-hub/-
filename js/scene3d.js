@@ -2284,6 +2284,98 @@
   }
 
   // ======================================================
+  // 生体ビューアー：ショップで買う前に、3Dで回して確認する
+  // ======================================================
+  function createViewer(container, look) {
+    if (!supported) return null;
+    const renderer = new T.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(root.devicePixelRatio || 1, 2));
+    renderer.outputEncoding = T.sRGBEncoding;
+    renderer.toneMapping = T.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = T.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+    const scene = new T.Scene();
+    scene.environment = makeEnvironment(renderer);
+    const key1 = new T.DirectionalLight('#FFF4E6', 1.1);
+    key1.position.set(-2, 8, 5);
+    key1.castShadow = true;
+    key1.shadow.mapSize.set(1024, 1024);
+    Object.assign(key1.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 1, far: 20 });
+    key1.shadow.radius = 5; key1.shadow.normalBias = 0.02;
+    const rimL = new T.DirectionalLight('#DDE8FF', 0.4);
+    rimL.position.set(3, 3, -6);
+    const ground = new T.Mesh(new T.CircleGeometry(4, 48), new T.MeshBasicMaterial({ color: '#E9D9B2' }));
+    ground.rotation.x = -Math.PI / 2; ground.position.y = -0.01;
+    const shadowCatcher = new T.Mesh(new T.CircleGeometry(4, 48), new T.ShadowMaterial({ opacity: 0.22 }));
+    shadowCatcher.rotation.x = -Math.PI / 2; shadowCatcher.receiveShadow = true;
+    scene.add(new T.HemisphereLight('#FFF6E4', '#B9A57E', 0.35), key1, rimL, ground, shadowCatcher);
+    const camera = new T.PerspectiveCamera(30, 1, 0.1, 60);
+    const gk = buildGecko(look, 'high');
+    const P = restPose();
+    P.drop = 0.05; P.look = 0; P.t = 0;
+    gk.root.scale.setScalar(1.0);
+    scene.add(gk.root);
+    const aim = new T.Vector3(0, 0.4, 0.2);
+    const st = { az: 0.7, el: 0.38, zoom: 1, t: 0, auto: true, done: false };
+    const aimGoal = aim.clone();
+    const ro = () => {
+      const w = container.clientWidth, h = container.clientHeight;
+      if (!w || !h) return;
+      renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    };
+    ro();
+    if (root.ResizeObserver) new ResizeObserver(ro).observe(container);
+    const el = renderer.domElement;
+    el.style.touchAction = 'none'; el.style.cursor = 'grab';
+    const touches = new Map(); let pinch = 0, lx = 0, ly = 0;
+    el.addEventListener('pointerdown', e => { touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); lx = e.clientX; ly = e.clientY; st.auto = false; try { el.setPointerCapture(e.pointerId); } catch (err) { /* noop */ } if (touches.size === 2) { const [a, b] = [...touches.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); } });
+    el.addEventListener('pointermove', e => {
+      if (!touches.has(e.pointerId)) return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size === 2) { const [a, b] = [...touches.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); if (pinch) st.zoom = clamp(st.zoom * pinch / d, 0.45, 1.5); pinch = d; return; }
+      st.az -= (e.clientX - lx) * 0.012; st.el = clamp(st.el + (e.clientY - ly) * 0.006, 0.05, 1.3); lx = e.clientX; ly = e.clientY;
+    });
+    const up = e => { touches.delete(e.pointerId); if (touches.size < 2) pinch = 0; };
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+    el.addEventListener('wheel', e => { e.preventDefault(); st.zoom = clamp(st.zoom * Math.exp(e.deltaY * 0.0015), 0.45, 1.5); }, { passive: false });
+    // 見る位置のおすすめ：顔・全身・横
+    const views = { face: { el: 0.2, zoom: 0.5 }, body: { az: 0.7, el: 0.38, zoom: 1 }, side: { az: Math.PI / 2, el: 0.12, zoom: 0.9 }, top: { az: 0.2, el: 1.25, zoom: 0.95 } };
+    let last = performance.now();
+    function loop(now) {
+      if (st.done) return;
+      const dt = Math.min(0.1, (now - last) / 1000); last = now;
+      st.t += dt; P.t = st.t; P.breathe = Math.sin(st.t * 2.4);
+      P.blink = (st.t % 4.2) < 0.13 ? 1 : 0;
+      if (st.auto) st.az += dt * 0.35;
+      pose(gk, P);
+      const D = 7.2 * st.zoom;
+      aim.lerp(aimGoal, 0.12);
+      camera.position.set(aim.x + Math.sin(st.az) * Math.cos(st.el) * D, aim.y + Math.sin(st.el) * D, aim.z + Math.cos(st.az) * Math.cos(st.el) * D);
+      camera.lookAt(aim);
+      renderer.render(scene, camera);
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+    return {
+      view(name) {
+        const v = views[name]; if (!v) return;
+        st.auto = false; Object.assign(st, v);
+        st.focus = name === 'face';
+        if (st.focus) {
+          gk.root.updateMatrixWorld(true);
+          const h = gk.bones.head.getWorldPosition(new T.Vector3()), m = gk.mouth.getWorldPosition(new T.Vector3());
+          const fwd = m.clone().sub(h).setY(0).normalize();
+          st.az = Math.atan2(fwd.x, fwd.z) + 0.55;
+          aimGoal.copy(h).lerp(m, 0.35); aimGoal.y += 0.15;
+        } else aimGoal.set(0, 0.4, 0.2);
+      },
+      destroy() { st.done = true; try { disposeGecko(gk); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); } catch (e) { /* noop */ } },
+    };
+  }
+
+  // ======================================================
   // 図鑑やショップ用の写真
   // ======================================================
   let pr = null;
@@ -2371,5 +2463,5 @@
   }
   function photoReady(look, opts) { return photoCache.get(photoKey(look, opts)) || null; }
 
-  root.Leopa3D = { supported, createTank, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR, TANK };
+  root.Leopa3D = { supported, createTank, createViewer, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR, TANK };
 })(typeof window !== 'undefined' ? window : globalThis);

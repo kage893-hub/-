@@ -280,10 +280,13 @@
     const wrap = $('#sheet');
     $('#sheetBody').innerHTML = html;
     wrap.hidden = false;
+    killViewer();
     const f = $('#sheetBody input, #sheetBody button');
     if (f) setTimeout(() => f.focus(), 50);
   }
-  function closeSheet() { $('#sheet').hidden = true; $('#sheetBody').innerHTML = ''; }
+  let viewer = null;
+  function killViewer() { if (viewer) { try { viewer.destroy(); } catch (e) {} viewer = null; } }
+  function closeSheet() { killViewer(); $('#sheet').hidden = true; $('#sheetBody').innerHTML = ''; }
 
   // ======================================================
   // ケースの中（3D）
@@ -646,6 +649,31 @@
       toast('ケースを1つ増やしました');
       renderView(); save();
     },
+    viewOffer(t) {
+      const i = Number(t.dataset.i), o = S.offers[i];
+      if (!o) return;
+      const morph = nameOf(o), hets = G.hets(o.genes), st = stageOf(o);
+      const w = weightOf(Object.assign({}, o, { hunger: 70 }));
+      const can = S.coins >= o.price && S.geckos.length < S.cases;
+      openSheet(`<div class="viewer-sheet">
+        <p class="eyebrow">この子を見てみよう</p>
+        <h3 class="morph big">${esc(morph)}</h3>
+        <div class="viewer3d" id="offerViewer">${L3.supported ? '' : portrait(o, st, morph)}</div>
+        ${L3.supported ? `<div class="viewer-btns">${[['face', '顔'], ['body', '全身'], ['side', '横'], ['top', '上']].map(([k, n]) => `<button class="chip" data-action="viewAngle" data-v="${k}">${n}</button>`).join('')}</div><p class="muted tiny">ドラッグで回転・ピンチで拡大</p>` : ''}
+        <p class="muted">${o.sex === 'M' ? '♂ オス' : '♀ メス'} ・ ${STAGE_LABEL[st]} ・ 体重 約${w}g</p>
+        ${hets.length ? `<p class="het-line">${hets.map(h => 'het ' + h).join(' / ')}</p>` : ''}
+        ${unseen(o) ? '<p class="new-line">図鑑にまだいない</p>' : ''}
+        ${traitTable(o, false)}
+        <div class="sheet-actions">
+          <button class="act primary" data-action="buyGecko" data-i="${i}" ${can ? '' : 'disabled'}>${o.price} コインでおむかえ</button>
+          <button class="act" data-action="closeSheet">もどる</button>
+        </div></div>`);
+      const el = $('#offerViewer');
+      if (L3.supported && el) {
+        viewer = L3.createViewer(el, { genes: G.normGenes(o.genes), tang: o.tang, poly: o.poly, seed: o.seed || 1, stage: st });
+      }
+    },
+    viewAngle(t) { if (viewer) viewer.view(t.dataset.v); },
     buyGecko(t) {
       const i = Number(t.dataset.i);
       const o = S.offers[i];
@@ -890,7 +918,7 @@
     const cards = G.DEX.map((d, i) => {
       const got = !!S.dex[d.id];
       const art = portrait({ genes: d.rep.genes, tang: d.rep.tang, poly: d.rep.poly, seed: 1000 + i * 7919 }, 'adult', got ? d.name : '');
-      return `<div class="dex-card${got ? '' : ' locked'}"><div class="dex-art">${art}</div><b>${got ? esc(d.name) : '？？？'}</b><small class="muted">${esc(d.hint)}</small></div>`;
+      return `<div class="dex-card${got ? '' : ' locked'}"><div class="dex-art">${art}</div><b>${esc(d.name)}</b><small class="muted">${esc(d.hint)}</small></div>`;
     }).join('');
     const html = `
       <h2 class="h2">モルフ図鑑 <small class="muted">${found} / ${G.DEX.length}</small></h2>
@@ -914,13 +942,14 @@
       const morph = nameOf(o);
       const hets = G.hets(o.genes);
       return `<div class="offer">
-        <div class="offer-art">${portrait(o, stageOf(o), morph)}</div>
+        <div class="offer-art" data-action="viewOffer" data-i="${i}">${portrait(o, stageOf(o), morph)}</div>
         <div class="offer-main">
           <b>${esc(morph)}</b>
           <small class="muted">${o.sex === 'M' ? '♂ オス' : '♀ メス'} ・ ${STAGE_LABEL[stageOf(o)]}</small>
           ${hets.length ? `<small class="het-line">${hets.map(h => 'het ' + h).join(' / ')}</small>` : ''}
           ${unseen(o) ? '<small class="new-line">図鑑にまだいない</small>' : ''}
           ${traitTable(o, true)}
+          <button class="act sm" data-action="viewOffer" data-i="${i}">じっくり見る</button>
           <button class="act primary sm" data-action="buyGecko" data-i="${i}" ${S.coins < o.price || S.geckos.length >= S.cases ? 'disabled' : ''}>${o.price} コインでおむかえ</button>
         </div></div>`;
     }).join('');
