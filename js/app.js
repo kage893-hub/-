@@ -408,7 +408,9 @@
     tank.setFat(g ? fatOf(g) : 0);
   }
   function lookOf(g) {
-    return { id: g.id, genes: g.genes, tang: g.tang, poly: g.poly, seed: g.seed, stage: stageOf(g), gravid: !!g.gravid, shed: !!g.shedUntil, size: sizeOf(g) };
+    // ペアリングの演出中は、まだおなかをふくらませない
+    const gravid = !!g.gravid && !(pairScene && pairScene.mom === g.id);
+    return { id: g.id, genes: g.genes, tang: g.tang, poly: g.poly, seed: g.seed, stage: stageOf(g), gravid, shed: !!g.shedUntil, size: sizeOf(g) };
   }
   function initTank() {
     const box = $('#tank3d');
@@ -423,11 +425,12 @@
       onFloorTap: (x, z) => floorTap(x, z),
       onDecorTap: i => decorTap(i),
       onHandling: type => onHandling(type),
+      onPairing: ev => onPairing(ev),
     });
   }
   function sceneMount() {
     const g = selected();
-    if (tankGid && (!g || tankGid !== g.id)) { flushFoods(); showHandBar(false); }
+    if (tankGid && (!g || tankGid !== g.id)) { flushFoods(); showHandBar(false); if (pairScene && (!g || g.id !== pairScene.mom)) finishPairScene(true); }
     tankGid = g ? g.id : null;
     $('#tankEmpty').hidden = !!g;
     if (!tank) return;
@@ -518,6 +521,45 @@
     else if (type === 'walked') { /* 手から手へ */ }
     else if (type === 'end') { showHandBar(false); handSession = null; renderView(); }
   }
+  // ---- ペアリングの演出（オスがメスのケースにやってきて、寄りそう）
+  let pairScene = null;
+  const PAIR_SAY = {
+    enter: d => `${d}がやってきました`,
+    notice: d => `${d}がにおいに気づいたみたい`,
+    approach: () => 'しっぽをふるわせて、アピール中',
+    shy: m => `${m}は少しはずかしそう`,
+    woo: d => `${d}がそっと近づいて…`,
+    snuggle: () => '2匹でよりそっています',
+    leave: d => `${d}をもとのケースにもどします`,
+  };
+  function showPairBar(on) {
+    let bar = $('#pairBar');
+    if (!on) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'pairBar'; bar.className = 'hand-bar pair-bar';
+      bar.innerHTML = '<p class="pair-say" id="pairSay"></p><button class="act ghost" data-action="pairSkip">スキップ</button>';
+      $('#tank').appendChild(bar);
+    }
+  }
+  function onPairing(ev) {
+    if (!pairScene) return;
+    if (ev === 'done') { finishPairScene(false); return; }
+    const say = PAIR_SAY[ev];
+    const el = $('#pairSay');
+    if (say && el) { el.textContent = say(ev === 'shy' ? pairScene.momName : pairScene.dadName); el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+    if (ev === 'snuggle') sfx('tap');
+  }
+  function finishPairScene(silent) {
+    const P = pairScene;
+    if (!P) return;
+    pairScene = null;
+    showPairBar(false);
+    if (tank && tank.pairing && tank.pairing()) tank.endPairing();
+    const mom = S.geckos.find(x => x.id === P.mom);
+    if (!silent && mom) toast(`ペアリング成功！${mom.name}は約${fmtLeft(realDays(28))}後に卵を産みます`);
+    renderView();
+  }
   function applyEat(g, kind) {
     mile(g, 'eat', `はじめての${FOODS[kind].name}をぱくっと食べた`, true);
     const F = FOODS[kind];
@@ -574,6 +616,7 @@
   }
 
   function statusOf(g, now) {
+    if (pairScene && (g.id === pairScene.mom || g.id === pairScene.dad)) return { cls: 'pink', text: 'ペアリング中' };
     if (g.gravid) return { cls: 'pink', text: S.eggs.length + 2 > EGG_CAP ? '抱卵中・インキュベーター満杯' : `抱卵中 あと${fmtLeft(g.gravid.layAt - now)}` };
     if (g.shedUntil) return { cls: 'info', text: '脱皮中' };
     if (heatOf(g) <= 30) return { cls: 'info', text: 'ちょっと寒そう' };
@@ -633,6 +676,7 @@
     closeSheet() { closeSheet(); },
 
     feedMenu() {
+      if (pairScene) return;
       const g = selected();
       if (!g) return;
       if (tank && tank.handling && tank.handling()) { toast('手からおろしてから、ごはんにしよう'); return; }
@@ -692,6 +736,7 @@
       save();
     },
     handle() {
+      if (pairScene) return;
       const g = selected();
       if (!g) return;
       if (!tank || !tank.startHandling) { handleReward(g); return; }
@@ -779,10 +824,21 @@
       mom.gravid = { layAt: now + realDays(28), dad: snap(dad, 1) };
       dad.restUntil = now + realDays(3);
       closeSheet();
+      save();
+      // メスのケースで、オスがやってくる演出を見せる（結果は先に保存しておく）
+      if (tank && tank.startPairing && !document.hidden) {
+        if (tank.handling && tank.handling()) tank.endHandling();
+        showHandBar(false);
+        pairScene = { mom: mom.id, dad: dad.id, momName: mom.name, dadName: dad.name };
+        S.selected = mom.id;
+        if (view !== 'case') switchView('case'); else renderView();
+        if (tank.startPairing(lookOf(dad))) { showPairBar(true); onPairing('enter'); return; }
+        pairScene = null;
+      }
       toast(`ペアリング成功！${mom.name}は約${fmtLeft(realDays(28))}後に卵を産みます`);
       renderView();
-      save();
     },
+    pairSkip() { if (tank && tank.skipPairing) tank.skipPairing(); else finishPairScene(false); },
     // お別れの確認（里親・ブリーダー依頼 共通）
     farewell(g, to, reward, btnAttrs) {
       const days = Math.max(0, Math.floor((Date.now() - (g.adopted || g.born)) / DAYMS));

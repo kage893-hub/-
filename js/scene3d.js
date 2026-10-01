@@ -2519,22 +2519,23 @@
     }
     function setEdit(e) { edit = e; if (e) setClose(false); showSel(); }
     // 家具にめりこまないように、体にそって押し出す
-    function resolveObstacles() {
-      const S = 0.95 * st.size;
+    function resolveObstacles(g) {
+      g = g || st;
+      const S = 0.95 * g.size;
       // 鼻先から尻尾の先まで、体にそって点を取る（尻尾は細いので余裕を小さく）
       const pts = [[2.0, 0.22], [1.4, 0.34], [0.6, 0.4], [-0.2, 0.4], [-1.0, 0.34], [-1.8, 0.3], [-2.6, 0.2], [-3.4, 0.12]];
       for (let it = 0; it < 4; it++) {
         for (const o of obstacles) {
-          if (HIDE && !HIDE.tunnel && o === HIDE.ob && (st.sleeping || st.mode === 'toHide')) continue;
+          if (HIDE && !HIDE.tunnel && o === HIDE.ob && (g.sleeping || g.mode === 'toHide')) continue;
           for (const [k, w] of pts) {
-            const px = st.x + Math.sin(st.yaw) * k * S, pz = st.z + Math.cos(st.yaw) * k * S;
+            const px = g.x + Math.sin(g.yaw) * k * S, pz = g.z + Math.cos(g.yaw) * k * S;
             const r = sdObstacle(o, px, pz), min = w * S;
-            if (r.d < min) { st.x += r.wx * (min - r.d); st.z += r.wz * (min - r.d); }
+            if (r.d < min) { g.x += r.wx * (min - r.d); g.z += r.wz * (min - r.d); }
           }
         }
-        const m = 1.4 * st.size;
-        st.x = clamp(st.x, -BOUNDS.x + m, BOUNDS.x - m);
-        st.z = clamp(st.z, BOUNDS.zMin + m, BOUNDS.zMax - m * 0.6);
+        const m = 1.4 * g.size;
+        g.x = clamp(g.x, -BOUNDS.x + m, BOUNDS.x - m);
+        g.z = clamp(g.z, BOUNDS.zMin + m, BOUNDS.zMax - m * 0.6);
       }
     }
     const freeAt = (x, z, pad) => obstacles.every(o => sdObstacle(o, x, z).d > pad);
@@ -2687,9 +2688,9 @@
       p.project(camera);
       return { x: (p.x + 1) / 2 * 100, y: (1 - p.y) / 2 * 100 };
     }
-    function fx(text, cls) {
+    function fx(text, cls, at) {
       if (!st.gk) return;
-      const pos = screenPos(st.gk.bones.head);
+      const pos = screenPos(at || st.gk.bones.head);
       const s = document.createElement('span');
       s.className = 'fx-item ' + (cls || '');
       s.textContent = text;
@@ -2788,15 +2789,16 @@
     // ---------- 動き
     const _m = new T.Vector3();
     function mouthWorld() { st.gk.mouth.getWorldPosition(_m); return _m; }
-    function moveToward(tx, tz, speed, dt) {
-      const dx = tx - st.x, dz = tz - st.z;
+    function moveToward(tx, tz, speed, dt, g) {
+      g = g || st;
+      const dx = tx - g.x, dz = tz - g.z;
       const d = Math.hypot(dx, dz);
       if (d < 0.05) return 0;
-      const diff = angleTo(st.yaw, Math.atan2(dx, dz));
-      st.yaw += diff * Math.min(1, dt * 3.5);
+      const diff = angleTo(g.yaw, Math.atan2(dx, dz));
+      g.yaw += diff * Math.min(1, dt * 3.5);
       const step = Math.min(d, speed * dt * (Math.abs(diff) > 1.1 ? 0.3 : 1));
-      st.x += Math.sin(st.yaw) * step;
-      st.z += Math.cos(st.yaw) * step;
+      g.x += Math.sin(g.yaw) * step;
+      g.z += Math.cos(g.yaw) * step;
       return step;
     }
     function clampPos() {
@@ -3103,6 +3105,7 @@
     function surfaceAt(x, z) {
       let y = heightAt(x, z);
       if (st.hand) for (const h of st.hand.hands) { const v = handHeightAt(h, x, z); if (v > y) y = v; }
+      if (st.pair && st.pair.hand && !st.pair.handUp) { const v = handHeightAt(st.pair.hand, x, z); if (v > y) y = v; }
       return y;
     }
     const handFwd = () => new T.Vector3(Math.sin(st.yaw), 0, Math.cos(st.yaw));
@@ -3231,6 +3234,282 @@
       }
     }
 
+    // ---------- ペアリング：オスが手に乗ってやってきて、メスに求愛する（寄りそうまで約40秒）
+    const P2 = restPose();
+    const pairMid = new T.Object3D();
+    scene.add(pairMid);
+    let mateBlob = null;
+    function pairSay(ev) { handlers.onPairing && handlers.onPairing(ev); }
+    function startPairing(look) {
+      endPairing(true);
+      endHandling(true);
+      endTweezers(false);
+      if (!st.gk || !look) return false;
+      if (st.sleeping) wake();
+      const S = 0.95 * st.size, SM = 0.95 * look.size;
+      // 1回ごとに少しずつ長さを変える（すぐ受け入れる子も、じらす子もいる）
+      const j = () => rand(0.85, 1.15);
+      const D = { enter: 6 * j(), notice: 5 * j(), approach: 10 * j(), shy: 8 * j(), woo: 4 * j(), snuggle: 7 * j() };
+      // メスは家具から離れた、まんなかの広いところへ出てくる
+      const meet = freePoint(1.9 * S, -TK.hw * 0.45, TK.hw * 0.45, -TK.hd + 2.6, TK.hd - 2.2);
+      // オスは、メスからいちばん離れた空きスペースに、手に乗せて入れる
+      const len = 5.4 * SM;
+      let drop = null;
+      for (let k = 0; k < 24; k++) {
+        const c = freePoint(len * 0.45, -BOUNDS.x + len * 0.55, BOUNDS.x - len * 0.55, BOUNDS.zMin + len * 0.35, BOUNDS.zMax - len * 0.35);
+        const d = Math.hypot(c.x - meet.x, c.z - meet.z);
+        if (!drop || d > drop.d) drop = { x: c.x, z: c.z, d };
+      }
+      // 手は横向きにおろす（おりたオスが、あとでメスに気づいてふりむけるように）
+      const toMeet = Math.atan2(meet.x - drop.x, meet.z - drop.z);
+      let hyaw = toMeet + Math.PI / 2;
+      { const ex = drop.x + Math.sin(hyaw) * len * 0.6, ez = drop.z + Math.cos(hyaw) * len * 0.6; if (Math.abs(ex) > BOUNDS.x - 1 || ez < BOUNDS.zMin + 1 || ez > BOUNDS.zMax - 1) hyaw = toMeet - Math.PI / 2; }
+      const hand = buildHand(len);
+      scene.add(hand);
+      // 手の中心は、手首側に少しずらしておく（指先から前へおりられるように）
+      placeHand(hand, drop.x - Math.sin(hyaw) * len * 0.15, drop.z - Math.cos(hyaw) * len * 0.15, hyaw, 6);
+      const gk = buildGecko(look, 'high');
+      setPupil(gk, st.night);
+      gk.root.scale.setScalar(SM);
+      scene.add(gk.root);
+      if (!mateBlob) { mateBlob = blob.clone(); scene.add(mateBlob); }
+      mateBlob.visible = true;
+      const M = {
+        gk, size: look.size, x: hand.position.x, z: hand.position.z, yaw: hyaw, y: 6, slope: 0, mode: 'pair',
+        phase: 0, walkW: 0, look: 0, pitch: 0, stalk: 0, happy: 0, lick: 0, tilt: 0, drop: 0.04, blinkT: 2, blinkV: 0, content: 0, onHand: true,
+      };
+      st.pair = { ph: 'enter', t: 0, all: 0, D, meet, hand, M, fLook: 0, fStill: false, heartT: 0, prevClose: st.close };
+      st.mode = 'idle'; st.wait = 999; st.meal = null; st.hunt = null;
+      setClose(false);
+      pairSay('enter');
+      return true;
+    }
+    function endPairing(silent) {
+      const R = st.pair;
+      if (!R) return;
+      if (R.hand) { scene.remove(R.hand); disposeTree(R.hand); }
+      scene.remove(R.M.gk.root); disposeGecko(R.M.gk);
+      if (mateBlob) mateBlob.visible = false;
+      st.pair = null;
+      st.mode = 'idle'; st.wait = rand(1, 3); st.drop = 0.06;
+      if (!silent) pairSay('done');
+    }
+    function skipPairing() { if (st.pair) endPairing(false); }
+    const hctr = (h, k) => ({ x: h.position.x + Math.sin(h.rotation.y + Math.PI / 2) * k, z: h.position.z + Math.cos(h.rotation.y + Math.PI / 2) * k });
+    function nextPair(R, ph) { R.ph = ph; R.t = 0; R.sub = null; pairSay(ph); }
+    // メス（いつものレオパ）の動き。歩いた距離を返す
+    function stepPairF(dt, S) {
+      const R = st.pair, M = R.M;
+      const toM = Math.atan2(M.x - st.x, M.z - st.z);
+      let step = 0;
+      st.stalk = 0;
+      R.fLook = clamp(angleTo(st.yaw, toM), -0.75, 0.75);
+      if (R.ph === 'enter') {
+        // 物音に気づいて、広いところへ出てくる
+        step = moveToward(R.meet.x, R.meet.z, 1.2, dt);
+        if (!step) st.yaw += angleTo(st.yaw, toM + 0.9) * Math.min(1, dt * 1.5);
+      } else if (R.ph === 'notice' || R.ph === 'approach') {
+        if (R.ph === 'notice' && R.t > 1 && R.t < 1.1 && st.lick <= 0) st.lick = 0.9;
+        // 横を向いたまま、目だけでオスを追う
+        st.yaw += angleTo(st.yaw, toM + 1.1) * Math.min(1, dt * 0.8);
+      } else if (R.ph === 'shy') {
+        // 少しだけ逃げて、立ち止まって、ふりかえる
+        if (!R.flee) {
+          const away = toM + Math.PI + rand(-0.5, 0.5);
+          let best = null;
+          for (const da of [0, 0.5, -0.5, 1, -1, 1.5, -1.5]) {
+            const x = clamp(st.x + Math.sin(away + da) * 2.6 * S, -BOUNDS.x + 1.6, BOUNDS.x - 1.6), z = clamp(st.z + Math.cos(away + da) * 2.6 * S, BOUNDS.zMin + 1.6, BOUNDS.zMax - 1.2);
+            if (freeAt(x, z, 1.2 * S)) { best = { x, z }; break; }
+            if (!best) best = { x, z };
+          }
+          R.flee = best;
+        }
+        if (R.t < R.D.shy * 0.45) step = moveToward(R.flee.x, R.flee.z, 1.1, dt);
+        else {
+          st.yaw += angleTo(st.yaw, toM + 1.3) * Math.min(1, dt * 1);
+          if (R.t > R.D.shy * 0.6 && !R.tilted) { st.tiltT = 1.2; R.tilted = true; }
+        }
+      } else {
+        // 受け入れて、体を低くしてじっとする
+        st.drop = lerp(st.drop, 0.1, Math.min(1, dt * 2));
+        R.fLook = clamp(angleTo(st.yaw, toM), -0.5, 0.5);
+        if (R.ph === 'snuggle') st.content = 1;
+      }
+      return step;
+    }
+    // オスの動き
+    function stepPairM(dt) {
+      const R = st.pair, M = R.M, S = 0.95 * st.size, SM = 0.95 * M.size;
+      const toF = Math.atan2(st.x - M.x, st.z - M.z);
+      const dF = Math.hypot(st.x - M.x, st.z - M.z);
+      let step = 0, rattle = 0, look = 0, pitch = 0, tilt = 0, happy = 0;
+      if (R.ph === 'enter') {
+        const h = R.hand;
+        if (R.t < 2.6) {
+          // 手に乗って、上からそっとおりてくる
+          h.position.y = lerp(6, 0, smooth(R.t / 2.6));
+          const c = hctr(h, 0); M.x = c.x; M.z = c.z;
+          look = Math.sin(R.t * 1.6) * 0.4;
+        } else if (M.onHand) {
+          const e = hctr(h, h.userData.len * 0.9);
+          step = moveToward(e.x, e.z, 0.9, dt, M);
+          if (Math.hypot(e.x - M.x, e.z - M.z) < 0.3) M.onHand = false;
+        } else {
+          R.handUp = true;
+          look = clamp(angleTo(M.yaw, toF), -0.7, 0.7) * 0.5;
+        }
+      } else if (R.ph === 'notice') {
+        // ぴたっと止まって、メスのにおいをかぐ（舌をぺろっ）
+        M.yaw += angleTo(M.yaw, toF) * Math.min(1, dt * 1.2);
+        look = clamp(angleTo(M.yaw, toF), -0.6, 0.6);
+        if ((R.t > 0.8 && R.t < 0.85) || (R.t > 2.8 && R.t < 2.85)) M.lick = 0.9;
+        pitch = -0.06;
+        rattle = R.t > 3 ? 1 : 0;
+      } else if (R.ph === 'approach' || (R.ph === 'shy' && R.t > R.D.shy * 0.3)) {
+        // しっぽの先をぶるぶるふるわせながら、少し進んでは止まって近づく
+        R.sub = R.sub || { go: true, t: rand(1.5, 2.5) };
+        R.sub.t -= dt;
+        if (R.sub.t <= 0) { R.sub.go = !R.sub.go; R.sub.t = R.sub.go ? rand(1.6, 2.6) : rand(0.8, 1.4); }
+        const back = toF + Math.PI;
+        const gx = st.x + Math.sin(back) * 2.3 * Math.max(S, SM), gz = st.z + Math.cos(back) * 2.3 * Math.max(S, SM);
+        if (R.sub.go) step = moveToward(gx, gz, 0.55, dt, M);
+        else M.yaw += angleTo(M.yaw, toF) * Math.min(1, dt * 2);
+        rattle = step ? 1 : 2;
+        look = clamp(angleTo(M.yaw, toF), -0.6, 0.6);
+        pitch = -0.08;
+      } else if (R.ph === 'shy') {
+        // 逃げられて、首をかしげる
+        tilt = Math.sin(Math.min(1, R.t / 1.2) * Math.PI) * 0.22;
+        look = clamp(angleTo(M.yaw, toF), -0.6, 0.6);
+      } else if (R.ph === 'woo' || R.ph === 'snuggle') {
+        // メスの横にならんで、そっと寄りそう
+        const fy = st.yaw;
+        if (R.side == null) R.side = Math.sin(angleTo(fy, Math.atan2(M.x - st.x, M.z - st.z))) >= 0 ? 1 : -1;
+        const off = 1.05 * (S + SM) / 2 * 1.15;
+        const sx = st.x + Math.cos(fy) * off * R.side - Math.sin(fy) * 0.3 * SM, sz = st.z - Math.sin(fy) * off * R.side - Math.cos(fy) * 0.3 * SM;
+        const dS = Math.hypot(sx - M.x, sz - M.z);
+        if (dS > 0.12) step = moveToward(sx, sz, 0.5, dt, M);
+        if (dS < 0.5) M.yaw += angleTo(M.yaw, fy) * Math.min(1, dt * 2);
+        rattle = R.ph === 'woo' ? 2 : 0;
+        look = clamp(angleTo(M.yaw, toF), -0.5, 0.5) * 0.6;
+        if (R.ph === 'snuggle') { happy = 1; M.content = 1; tilt = -R.side * 0.12; }
+      }
+      // 寄りそうとき以外は、体が重ならないように
+      if (R.ph !== 'woo' && R.ph !== 'snuggle' && !M.onHand && dF < 1.9 * Math.max(S, SM)) {
+        const k = 1.9 * Math.max(S, SM) - dF;
+        M.x -= Math.sin(toF) * k; M.z -= Math.cos(toF) * k;
+      }
+      if (!M.onHand) resolveObstacles(M);
+      return { step, rattle, look, pitch, tilt, happy };
+    }
+    function stepPairing(dt) {
+      const R = st.pair;
+      if (!R) return;
+      R.t += dt; R.all += dt;
+      const M = R.M, SM = 0.95 * M.size;
+      if (R.ph === 'enter' && R.t > R.D.enter && !M.onHand && !R.hand) nextPair(R, 'notice');
+      else if (R.ph === 'notice' && R.t > R.D.notice) nextPair(R, 'approach');
+      else if (R.ph === 'approach' && R.t > R.D.approach) nextPair(R, 'shy');
+      else if (R.ph === 'shy' && R.t > R.D.shy) nextPair(R, 'woo');
+      else if (R.ph === 'woo' && R.t > R.D.woo) nextPair(R, 'snuggle');
+      else if (R.ph === 'snuggle' && R.t > R.D.snuggle) {
+        nextPair(R, 'leave');
+        if (R.hand) { scene.remove(R.hand); disposeTree(R.hand); R.hand = null; R.handUp = false; }
+        // 手をオスの鼻先におろして、迎えにいく
+        const len = 5.4 * SM;
+        const h = buildHand(len);
+        scene.add(h);
+        let yaw = M.yaw, cx = 0, cz = 0;
+        for (const d of [0, 0.7, -0.7, 1.4, -1.4, 2.1, -2.1, Math.PI]) {
+          yaw = M.yaw + d;
+          cx = M.x + Math.sin(yaw) * (1.6 * SM + len * 0.5); cz = M.z + Math.cos(yaw) * (1.6 * SM + len * 0.5);
+          if (Math.abs(cx) < BOUNDS.x - len * 0.35 && cz > BOUNDS.zMin + len * 0.25 && cz < BOUNDS.zMax - len * 0.25) break;
+        }
+        placeHand(h, cx, cz, Math.atan2(cx - M.x, cz - M.z), 6);
+        R.hand = h;
+      }
+      // オスをおろした手は、上へ引きあげて片づける
+      if (R.handUp && R.hand && R.ph !== 'leave') {
+        R.hand.position.y += dt * 2.2;
+        if (R.hand.position.y > 7) { scene.remove(R.hand); disposeTree(R.hand); R.hand = null; R.handUp = false; }
+      }
+      let o = { step: 0, rattle: 0, look: 0, pitch: 0, tilt: 0, happy: 0 };
+      if (R.ph === 'leave') {
+        const h = R.hand, len = h.userData.len;
+        if (R.t < 1.6) h.position.y = lerp(6, 0, smooth(R.t / 1.6));
+        else if (!M.onHand) {
+          const c = hctr(h, len * 0.02);
+          o.step = moveToward(c.x, c.z, 0.9, dt, M);
+          if (Math.hypot(c.x - M.x, c.z - M.z) < 0.2) { M.onHand = true; R.upT = 0; }
+          if (R.t > 9) { M.x = c.x; M.z = c.z; M.onHand = true; R.upT = 0; }
+        } else {
+          R.upT += dt;
+          M.yaw += angleTo(M.yaw, h.rotation.y + Math.PI / 2) * Math.min(1, dt * 2);
+          h.position.y += dt * 2.4 * smooth(Math.min(1, R.upT));
+          if (h.position.y > 7.5) { endPairing(false); return; }
+        }
+        o.look = Math.sin(R.all * 1.3) * 0.3;
+        if (R.t < 0.1) st.happy = 0;
+      } else o = stepPairM(dt);
+      // ハートは2匹のあいだに
+      pairMid.position.set((st.x + M.x) / 2, Math.max(st.y || 0, M.y || 0) + 0.6, (st.z + M.z) / 2);
+      if (R.ph === 'snuggle') {
+        R.heartT -= dt;
+        if (R.heartT <= 0) { fx('♥', 'heart', pairMid); R.heartT = rand(0.9, 1.4); }
+      }
+      // オスの見た目
+      M.walkW = lerp(M.walkW, o.step > 0 ? 1 : 0, Math.min(1, dt * 6));
+      M.phase += o.step / SM * Math.PI;
+      M.blinkT -= dt;
+      if (M.blinkT <= 0) M.blinkT = rand(2.5, 6);
+      const closing = M.blinkT < 0.13 || (M.content > 0 && Math.sin(R.all * 2.2) > 0.2);
+      M.blinkV = lerp(M.blinkV, closing ? 1 : 0, Math.min(1, dt * (closing ? 28 : 16)));
+      M.look = lerp(M.look, o.look, Math.min(1, dt * 2.5));
+      M.pitch = lerp(M.pitch, o.pitch, Math.min(1, dt * 3));
+      M.tilt = lerp(M.tilt, o.tilt, Math.min(1, dt * 3));
+      M.drop = lerp(M.drop, o.rattle ? 0.09 : o.step ? 0 : 0.06, Math.min(1, dt * 2));
+      if (M.lick > 0) M.lick -= dt;
+      if (M.onHand && R.hand) {
+        const hy = handHeightAt(R.hand, M.x, M.z);
+        M.y = hy > -0.5 ? hy : R.hand.position.y; M.slope = lerp(M.slope, 0, Math.min(1, dt * 6)); M.tailLift = 0.4;
+      } else ground(M, dt, SM, false);
+      Object.assign(P2, {
+        t: R.all + 3.7, phase: M.phase, walk: M.walkW, look: M.look,
+        pitch: M.pitch + Math.sin(M.phase * 2) * 0.035 * M.walkW, tilt: M.tilt, curl: 0,
+        stalk: o.rattle ? (o.rattle > 1 ? 2.2 : 1.2) : 0, happy: o.happy, drop: M.drop, blink: M.blinkV,
+        tongue: M.lick > 0 ? Math.sin((0.9 - M.lick) / 0.9 * Math.PI) : 0, breathe: Math.sin(R.all * 2.4), sway: 1,
+      });
+      const gk = M.gk;
+      if (gk.U) { gk.U.uShedOn.value = 0; gk.U.uShedEdge.value = 9; gk.U.uTailFat.value = 0.05; gk.U.uTailLift.value = M.tailLift || 0; }
+      gk.root.position.set(M.x, M.y, M.z);
+      gk.root.rotation.order = 'YXZ';
+      gk.root.rotation.set(-M.slope, M.yaw, 0);
+      pose(gk, P2);
+      mateBlob.position.set(M.x, 0.012 + M.y, M.z);
+      mateBlob.scale.set(2.2 * SM, 5.0 * SM, 1);
+      mateBlob.rotation.z = M.yaw;
+    }
+
+    // 岩や石の上では、足もとの高さに合わせて体を持ちあげ、坂なら体をかたむける
+    function ground(g, dt, S, fast) {
+      const sy = Math.sin(g.yaw), cy = Math.cos(g.yaw);
+      const hf = surfaceAt(g.x + sy * 1.3 * S, g.z + cy * 1.3 * S), hm = surfaceAt(g.x, g.z), hb = surfaceAt(g.x - sy * 1.1 * S, g.z - cy * 1.1 * S);
+      g.y = lerp(g.y || 0, Math.max(hm, (hf + hb) / 2), Math.min(1, dt * (fast ? 14 : 8)));
+      g.slope = lerp(g.slope || 0, clamp(Math.atan2(hf - hb, 2.4 * S), -0.8, 0.8), Math.min(1, dt * 6));
+      // しっぽの途中と先が、足もとの床や岩より下にならない高さを計算して、しっぽを持ちあげる
+      const cs = Math.cos(g.slope), sn = Math.sin(g.slope);
+      let lift = 0;
+      const dropM = (g.drop || 0) - 0.04;
+      for (const [k, yb] of [[0.35, 0.03], [0.65, 0.005], [1, 0]]) {
+        const zl = -1.55 - k * 2.93;
+        const wx = g.x + sy * zl * S * cs, wz = g.z + cy * zl * S * cs;
+        const wy = g.y + S * ((yb - dropM) * cs + zl * sn);
+        const need = (surfaceAt(wx, wz) + 0.02 - wy) / S / k;
+        if (need > lift) lift = need;
+      }
+      g.tailLift = lerp(g.tailLift || 0, Math.min(lift, 3), Math.min(1, dt * 10));
+    }
+
     function stepGecko(dt) {
       const gk = st.gk;
       if (!gk) return;
@@ -3243,6 +3522,9 @@
       if (st.hand) {
         step = stepHandling(dt) || 0;
         st.stalk = 0; st.hunt = null;
+      } else if (st.pair) {
+        step = stepPairF(dt, S);
+        st.hunt = null;
       } else if (st.meal) {
         stepMeal(dt, S);
       } else if (food) {
@@ -3372,7 +3654,7 @@
       // こっちを見る・えさを見る
       let wantLook = 0;
       // じっとしているときは、ときどき舌をぺろっと出したり、きょろきょろ見回したりする
-      if (!moving && !st.sleeping && !food && st.mode === 'idle') {
+      if (!moving && !st.sleeping && !food && st.mode === 'idle' && !st.pair) {
         st.idleT = (st.idleT == null ? rand(3, 7) : st.idleT) - dt;
         if (st.idleT <= 0) {
           const r0 = Math.random(), pk = shedPeel();
@@ -3386,7 +3668,9 @@
         }
       }
       if (st.peekT > 0) st.peekT -= dt;
-      if (!moving && !st.sleeping && !food && st.peekT > 0) {
+      if (st.pair) {
+        wantLook = st.pair.fLook;
+      } else if (!moving && !st.sleeping && !food && st.peekT > 0) {
         wantLook = st.peek;
       } else if (!moving && !st.sleeping && !food) {
         wantLook = clamp(angleTo(st.yaw, Math.atan2(camera.position.x - st.x, camera.position.z - st.z)), -0.75, 0.75);
@@ -3396,7 +3680,7 @@
         wantLook = clamp(angleTo(st.yaw, Math.atan2(food.obj.position.x - st.x, food.obj.position.z - st.z)), -0.6, 0.6);
       }
       st.look = lerp(st.look, wantLook, Math.min(1, dt * 2.5));
-      st.drop = lerp(st.drop, st.sleeping || st.mode === 'bask' ? 0.13 : st.hunt && st.hunt.ph === 'strike' ? -0.02 : st.stalk ? 0.11 : moving ? 0 : 0.06, Math.min(1, dt * 2));
+      if (!(st.pair && (st.pair.ph === 'woo' || st.pair.ph === 'snuggle'))) st.drop = lerp(st.drop, st.sleeping || st.mode === 'bask' ? 0.13 : st.hunt && st.hunt.ph === 'strike' ? -0.02 : st.stalk ? 0.11 : moving ? 0 : 0.06, Math.min(1, dt * 2));
       st.curl = lerp(st.curl, st.sleeping ? 1 : 0, Math.min(1, dt * 1.5));
       st.pitch = lerp(st.pitch, st.sleeping ? 0.22 : (st.stalk > 0 ? -0.08 : 0), Math.min(1, dt * 3));
       if (st.lick > 0) st.lick -= dt;
@@ -3419,25 +3703,7 @@
       P.tongue = st.lick > 0 ? Math.sin((0.9 - st.lick) / 0.9 * Math.PI) : 0;
       P.breathe = Math.sin(st.t * (st.sleeping ? 1.4 : 2.4));
       P.sway = 1;
-      // 岩や石の上では、足もとの高さに合わせて体を持ちあげ、坂なら体をかたむける
-      {
-        const sy = Math.sin(st.yaw), cy = Math.cos(st.yaw);
-        const hf = surfaceAt(st.x + sy * 1.3 * S, st.z + cy * 1.3 * S), hm = surfaceAt(st.x, st.z), hb = surfaceAt(st.x - sy * 1.1 * S, st.z - cy * 1.1 * S);
-        st.y = lerp(st.y || 0, Math.max(hm, (hf + hb) / 2), Math.min(1, dt * (st.hand ? 14 : 8)));
-        st.slope = lerp(st.slope || 0, clamp(Math.atan2(hf - hb, 2.4 * S), -0.8, 0.8), Math.min(1, dt * 6));
-        // しっぽの途中と先が、足もとの床や岩より下にならない高さを計算して、しっぽを持ちあげる
-        const cs = Math.cos(st.slope), sn = Math.sin(st.slope);
-        let lift = 0;
-        const dropM = (st.drop || 0) - 0.04;
-        for (const [k, yb] of [[0.35, 0.03], [0.65, 0.005], [1, 0]]) {
-          const zl = -1.55 - k * 2.93;
-          const wx = st.x + sy * zl * S * cs, wz = st.z + cy * zl * S * cs;
-          const wy = st.y + S * ((yb - dropM) * cs + zl * sn);
-          const need = (surfaceAt(wx, wz) + 0.02 - wy) / S / k;
-          if (need > lift) lift = need;
-        }
-        st.tailLift = lerp(st.tailLift || 0, Math.min(lift, 3), Math.min(1, dt * 10));
-      }
+      ground(st, dt, S, !!st.hand);
       if (st.y > 0.6) seen('climb');
       if (moving && st.night) seen('night');
       if (gk.U) {
@@ -3474,9 +3740,17 @@
       } else {
         // 縦長の画面（全画面の縦持ちなど）では、ケースの左右が切れないように少し引く
         const fit = camera.aspect < 1.2 ? (4 / 3) / camera.aspect * 1.32 : 1;
-        _c.copy(HOME.pos).sub(HOME.look).multiplyScalar(fit).add(HOME.look);
-        camera.position.lerp(_c, Math.min(1, dt * 3));
-        camLook.lerp(st.gk ? _t.set(st.x * 0.18, 0, st.z * 0.12 + 0.2) : HOME.look, Math.min(1, dt * 2));
+        if (st.pair && st.gk) {
+          // ペアリング中は、2匹のあいだを少し寄って見る
+          const mx = (st.x + st.pair.M.x) / 2, mz = (st.z + st.pair.M.z) / 2;
+          _c.copy(HOME.pos).sub(HOME.look).multiplyScalar(fit * 0.8).add(_t.set(mx * 0.6, 0, mz * 0.5 + 0.2));
+          camera.position.lerp(_c, Math.min(1, dt * 1.5));
+          camLook.lerp(_t, Math.min(1, dt * 1.5));
+        } else {
+          _c.copy(HOME.pos).sub(HOME.look).multiplyScalar(fit).add(HOME.look);
+          camera.position.lerp(_c, Math.min(1, dt * 3));
+          camLook.lerp(st.gk ? _t.set(st.x * 0.18, 0, st.z * 0.12 + 0.2) : HOME.look, Math.min(1, dt * 2));
+        }
       }
       camera.lookAt(camLook);
     }
@@ -3504,6 +3778,7 @@
         st.t += dt;
         stepFoods(dt); stepPuffs(dt); stepTweezers(dt);
         stepGecko(dt);
+        stepPairing(dt);
         stepCamera(dt);
         renderer.render(scene, camera);
       }
@@ -3523,6 +3798,7 @@
       setShed(p) { st.shedP = p; },
       setFat(f) { st.fat = f; },
       startTweezers, tweezersActive: () => !!st.tw,
+      startPairing, skipPairing, endPairing: () => endPairing(true), pairing: () => st.pair ? st.pair.ph : null,
       startHandling, endHandling: () => endHandling(true), handCmd, handling: () => st.hand ? st.hand.phase : null,
       _st: st, _cam: camera, _hide: () => HIDE, refreshDecor, setCage, setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
       pendingFoods: () => st.foods.map(f => f.kind),
