@@ -177,6 +177,7 @@
         if (fedH > 0) grow(g, fedH * GROWTH.perHour * heatInfo(heatOf(g)).growth, now);
       }
       S.lastTick = now;
+      for (const g of S.geckos) recordWeight(g, now);
     }
     for (const g of S.geckos) {
       if (g.poopAt && now >= g.poopAt) { g.poop = Math.min(3, g.poop + 1); g.clean = clamp(g.clean - 10); g.poopAt = 0; }
@@ -817,6 +818,7 @@
         </div>
         <div class="tags">
           <span class="tag">${STAGE_LABEL[st]}</span>
+          <span class="tag">${weightOf(g)}g</span>
           <span class="tag">第${g.gen}世代</span>
           ${hets.map(h => `<span class="tag het">het ${h}</span>`).join('')}
         </div>
@@ -830,11 +832,13 @@
           ${bar('なれ度', g.tame, 'var(--female)')}
           ${bar('せいちょう', g.growth / GROWTH.max * 100, 'var(--good)', growSide)}
         </div>
+        ${weightCard(g)}
         <p class="muted small">${st === 'adult' ? (g.growth >= GROWTH.max ? 'りっぱなおとなです' : 'おとなになりました。ペアリングできます') : `${STAGE_LABEL[st === 'baby' ? 'young' : 'adult']}まで あと ${Math.ceil(next - g.growth)}`}${g.hunger <= 30 ? ' ・ おなかが空いていると成長が止まります' : ''}</p>
       </div>
 
       <div class="actions sub">
         <button class="act ghost" data-action="pairMenu">ペアリング${block ? '' : ' OK'}</button>
+        <button class="act ghost" data-action="camera">カメラで撮る</button>
         <button class="act ghost" data-action="album">アルバム</button>
         <button class="act ghost" data-action="editStart">もようがえ</button>
         <button class="act ghost" data-action="rehomeMenu">里親に出す</button>
@@ -1505,6 +1509,154 @@
         location.reload();
       } catch (e) {
         toast('もどせませんでした（保存できる量をこえたかもしれません）。いまのデータはそのままです');
+      }
+    },
+  });
+
+  // ======================================================
+  // 体重（グラム）
+  // 成長に合わせて、ベビー 3g → ヤング 20g → アダルト 45〜70g。個体差・性別・おなか・しっぽ・抱卵で変わる。
+  // ======================================================
+  function bodyBase(g) {
+    const t = clamp(g.growth / GROWTH.max, 0, 1);
+    // 成長のS字カーブ（ベビーは小さく、ヤングで伸び、おとなでゆるやかに）
+    const curve = t < 0.19 ? 3 + (t / 0.19) * 7 : t < 0.54 ? 10 + ((t - 0.19) / 0.35) * 20 : 30 + Math.pow((t - 0.54) / 0.46, 0.8) * 26;
+    const sexMul = g.sex === 'M' ? 1.12 : 0.94;
+    const seedMul = 0.92 + (Math.abs(g.seed || 0) % 1000) / 1000 * 0.16; // 個体差 ±8%
+    return curve * sexMul * seedMul;
+  }
+  function weightOf(g) {
+    let w = bodyBase(g);
+    w *= 0.93 + (g.hunger / 100) * 0.1;                       // おなかが空くと軽く、満腹だと少し重く
+    if (g.gravid) w *= 1.18;                                   // 卵のぶん
+    return Math.round(w * 10) / 10;
+  }
+  function weightLog(g) {
+    const log = g.wlog || (g.wlog = []);
+    return log;
+  }
+  // 1日1回、その日の体重を記録する（同じ日は上書き）
+  function recordWeight(g, now) {
+    const day = new Date(now); const key = `${day.getFullYear()}-${day.getMonth() + 1}-${day.getDate()}`;
+    const log = weightLog(g), w = weightOf(g);
+    if (log.length && log[log.length - 1].d === key) log[log.length - 1].w = w;
+    else { log.push({ d: key, t: now, w }); if (log.length > 90) log.shift(); }
+  }
+  function weightChart(g) {
+    const log = weightLog(g).slice(-30);
+    const cur = weightOf(g);
+    const pts = log.concat([{ t: Date.now(), w: cur, now: true }]);
+    if (pts.length < 2) return '';
+    const W = 300, H = 90, pad = 8;
+    const ws = pts.map(p => p.w), lo = Math.min(...ws) * 0.9, hi = Math.max(...ws) * 1.08 + 0.1;
+    const X = i => pad + (W - pad * 2) * (pts.length === 1 ? 0.5 : i / (pts.length - 1));
+    const Y = w => H - pad - (H - pad * 2) * ((w - lo) / (hi - lo));
+    const line = pts.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(p.w).toFixed(1)}`).join(' ');
+    const area = `${line} L${X(pts.length - 1).toFixed(1)} ${H - pad} L${X(0).toFixed(1)} ${H - pad} Z`;
+    return `<svg class="wchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="体重の記録">
+      <path d="${area}" fill="var(--accent)" opacity=".16"/><path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${X(pts.length - 1).toFixed(1)}" cy="${Y(cur).toFixed(1)}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/></svg>`;
+  }
+  function weightCard(g) {
+    const log = weightLog(g), cur = weightOf(g);
+    const first = log.length ? log[0] : null;
+    const prev = log.length > 1 ? log[log.length - 2].w : null;
+    const diff = prev != null ? Math.round((cur - prev) * 10) / 10 : null;
+    const st = stageOf(g);
+    const guide = st === 'adult' ? (g.sex === 'M' ? '60〜80g' : '45〜65g') : st === 'young' ? '10〜30g' : '3〜10g';
+    return `<div class="wbox"><div class="wmain"><small class="muted">体重</small><b>${cur}<small>g</small></b>
+        ${diff != null && diff !== 0 ? `<span class="pill ${diff > 0 ? 'good' : 'warn'}">きのうより ${diff > 0 ? '＋' : ''}${diff}g</span>` : '<span class="pill">ふつう</span>'}</div>
+      ${weightChart(g)}
+      <p class="muted small">${first ? `はじめて量ったのは ${first.w}g。` : ''}${STAGE_LABEL[st]}の目安は ${guide} です。</p></div>`;
+  }
+
+  // ======================================================
+  // カメラ：好きな角度にしてシャッター → 名前と日付つきの写真に。アルバムに残す／スマホに保存
+  // ======================================================
+  let shot = null; // { img(dataUrl), id }
+  function cameraSheet(g) {
+    const sc = $('#tank');
+    if (tank) tank.setClose(true);
+    const bar = $('#camBar');
+    if (bar) bar.remove();
+    const el = document.createElement('div');
+    el.id = 'camBar';
+    el.className = 'cam-bar';
+    el.innerHTML = `<button class="act" data-action="camCancel">やめる</button><button class="shutter" data-action="camShoot" aria-label="シャッター"><span></span></button><div class="cam-hint">ドラッグで回して、2本の指で拡大。きまったら ◎</div>`;
+    sc.appendChild(el);
+    sc.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    sc.classList.add('camera-on');
+    window._camGecko = g.id;
+  }
+  function camClose() {
+    const bar = $('#camBar'); if (bar) bar.remove();
+    const sc = $('#tank'); if (sc) sc.classList.remove('camera-on');
+  }
+  function stamp(dataUrl, g) {
+    return new Promise(res => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+        const x = c.getContext('2d'); x.drawImage(img, 0, 0);
+        const h = Math.round(c.height * 0.13);
+        const grad = x.createLinearGradient(0, c.height - h * 1.4, 0, c.height);
+        grad.addColorStop(0, 'rgba(30,22,10,0)'); grad.addColorStop(0.45, 'rgba(30,22,10,.55)'); grad.addColorStop(1, 'rgba(30,22,10,.8)');
+        x.fillStyle = grad; x.fillRect(0, c.height - h * 1.4, c.width, h * 1.4);
+        x.textBaseline = 'alphabetic'; x.fillStyle = '#FFFFFF';
+        const d = new Date();
+        const pad = Math.round(h * 0.34);
+        x.font = `700 ${Math.round(h * 0.4)}px "Zen Maru Gothic","Hiragino Maru Gothic ProN",sans-serif`;
+        x.fillText(`${g.name} ${g.sex === 'M' ? '♂' : '♀'}  ${weightOf(g)}g`, pad, c.height - h * 0.42);
+        x.font = `500 ${Math.round(h * 0.26)}px "Zen Maru Gothic","Hiragino Maru Gothic ProN",sans-serif`;
+        x.fillStyle = 'rgba(255,255,255,.85)';
+        x.fillText(`${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}  レオパといっしょ`, pad, c.height - h * 0.12);
+        res(c.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = dataUrl;
+    });
+  }
+  Object.assign(ACTIONS, {
+    camera() { const g = selected(); if (!g || !tank) return; cameraSheet(g); },
+    camCancel() { camClose(); if (tank) tank.setClose(false); },
+    async camShoot() {
+      const g = S.geckos.find(x => x.id === window._camGecko);
+      if (!g || !tank) { camClose(); return; }
+      let raw;
+      try { raw = tank.snapshot(1200, false); } catch (e) { toast('写真をとれませんでした'); return; }
+      camClose();
+      tank.setClose(false);
+      sfx('tap');
+      const img = await stamp(raw, g);
+      shot = { img, id: g.id };
+      openSheet(`<p class="eyebrow">撮影</p><h3 class="sheet-title">いい写真がとれました</h3>
+        <div class="shot-view"><img src="${img}" alt="${esc(g.name)}の写真"></div>
+        <div class="actions"><button class="act primary" data-action="shotAlbum">アルバムに残す</button><button class="act" data-action="shotSave">スマホに保存</button></div>
+        <button class="act ghost" data-action="closeSheet">とじる</button>`);
+    },
+    shotAlbum() {
+      const g = S.geckos.find(x => x.id === (shot && shot.id)); if (!g) return;
+      const a = albumOf(g);
+      if (a.entries.filter(e => e.img || e.pid).length >= MAX_PHOTOS) { toast(`アルバムは${MAX_PHOTOS}枚までです。いらない写真を消してね`); return; }
+      let pid;
+      try { pid = putPhoto(shot.img); } catch (err) { toast('保存できる写真がいっぱいです'); return; }
+      a.entries.push({ t: Date.now(), text: `${weightOf(g)}g のころの一枚`, pid });
+      save(); toast('アルバムに残しました'); sfx('coin'); closeSheet();
+    },
+    async shotSave() {
+      if (!shot) return;
+      const g = S.geckos.find(x => x.id === shot.id);
+      const name = `leopa-${(g ? g.name : 'photo')}-${Date.now()}.jpg`;
+      try {
+        const blob = await (await fetch(shot.img)).blob();
+        const file = new File([blob], name, { type: 'image/jpeg' });
+        // スマホなら共有メニュー（「画像を保存」を選べる）。使えないときは、ダウンロード
+        if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'レオパといっしょ' }); return; }
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        toast('写真を保存しました（ダウンロードの中）');
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+        toast('保存できませんでした。写真を長押しして、保存してください');
       }
     },
   });

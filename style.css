@@ -411,3 +411,19 @@ button { font: inherit; color: inherit; }
 .bk-card { display: grid; gap: 8px; border-color: var(--accent); }
 .bk-rows { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 14px; }
 .bk-rows b { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- 体重・カメラ */
+.wbox { display: grid; gap: 4px; margin-top: 10px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.wmain { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.wmain b { font-family: var(--font-display); font-weight: 400; font-size: 26px; font-variant-numeric: tabular-nums; }
+.wmain b small { font-family: var(--font-body); font-size: 14px; margin-left: 2px; }
+.wchart { width: 100%; height: 70px; display: block; }
+.cam-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 9; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; background: linear-gradient(transparent, rgba(0, 0, 0, .45)); }
+.cam-bar .act { flex: none; min-height: 40px; padding-inline: 14px; background: rgba(255, 255, 255, .9); color: #2C2A25; }
+.cam-bar .cam-hint { position: absolute; left: 0; right: 0; top: -26px; text-align: center; font-size: 11.5px; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); pointer-events: none; }
+.shutter { width: 64px; height: 64px; border-radius: 50%; border: 4px solid #fff; background: transparent; padding: 0; cursor: pointer; display: grid; place-items: center; }
+.shutter span { width: 46px; height: 46px; border-radius: 50%; background: #fff; transition: transform .1s; }
+.shutter:active span { transform: scale(.85); }
+.tank.camera-on .tank-name, .tank.camera-on .thermo, .tank.camera-on .cam-btn { opacity: 0; pointer-events: none; }
+.shot-view { border-radius: 14px; overflow: hidden; background: var(--sand-1); }
+.shot-view img { display: block; width: 100%; height: auto; }

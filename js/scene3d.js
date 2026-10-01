@@ -1914,10 +1914,10 @@
     }
     function setNight(on) { setClock(on ? 22 : 13, 'summer'); }
     // 今のケースを写真に撮る（アルバム用。小さめの JPEG）
-    function snapshot() {
+    function snapshot(width, preserve) {
       renderer.render(scene, camera);
       const src = renderer.domElement;
-      const w = 480, h = Math.round(w * src.height / src.width);
+      const w = Math.min(width || 480, src.width), h = Math.round(w * src.height / src.width);
       const c = document.createElement('canvas');
       c.width = w; c.height = h;
       c.getContext('2d').drawImage(src, 0, 0, w, h);
