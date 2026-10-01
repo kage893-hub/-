@@ -55,3 +55,7 @@ node tests/genetics.test.js # 遺伝ロジックのテスト
 | `sw.js` | オフライン用のキャッシュ（ファイルを変えたら `VERSION` を上げる） |
 
 3D表示には [Three.js](https://threejs.org/) r128（MIT ライセンス、`js/vendor/`）を使っています。
+
+## 素材のクレジット
+
+- 家具の3Dモデル：[Quaternius「Stylized Nature MegaKit」](https://quaternius.com/packs/stylizednaturemegakit.html)（CC0）。使うものだけを `tools/pack_decor.py` で `assets/decor-kit.bin` にまとめています。

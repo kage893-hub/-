@@ -2446,6 +2446,7 @@
   initTank();
   // 3D モデルが読みこめたら、レオパを差しかえる
   const hideLoading = () => { const el = $('#tankLoading'); if (el) el.classList.add('done'); };
+  if (L3.supported && L3.loadKit) L3.loadKit('assets/decor-kit.bin').then(ok => { if (!ok) return; if (tank && tank.refreshDecor) tank.refreshDecor(); dexHTML = ''; const v = $('#view-shop'); if (v) v._html = ''; renderView(); });
   if (L3.supported && L3.loadModel) L3.loadModel('assets/gecko.glb').then(ok => { hideLoading(); if (ok) { dexHTML = ''; renderView(); } });
   else hideLoading();
   tick();

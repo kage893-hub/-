@@ -1004,8 +1004,8 @@
   }
   function disposeTree(obj) {
     obj.traverse(o => {
-      if (o.geometry) o.geometry.dispose();
-      if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
+      if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
+      if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (!m.userData.shared) m.dispose(); });
     });
   }
   function lookKey(look) {
@@ -1457,6 +1457,77 @@
     if (!sandTexCache) { sandTexCache = canvasTexture(sandCanvas(), { srgb: true }); sandTexCache.flipY = true; }
     return sandTexCache;
   }
+  // ---- 家具の3Dモデル集（Quaternius「Stylized Nature MegaKit」CC0 から必要なものだけまとめたもの）
+  const KIT = { ready: null, data: null, buf: null, tex: {}, mats: {} };
+  function loadKit(url) {
+    if (!KIT.ready) {
+      const embedded = root.LEOPA_KIT_B64 ? Promise.resolve(Uint8Array.from(atob(root.LEOPA_KIT_B64), c => c.charCodeAt(0)).buffer) : null;
+      KIT.ready = (embedded || fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }))
+        .then(buf => {
+          const dv = new DataView(buf);
+          if (dv.getUint32(0, true) !== 0x54494B4C) throw new Error('bad kit');
+          const jl = dv.getUint32(4, true);
+          KIT.data = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 8, jl)));
+          KIT.base = 8 + jl; KIT.buf = buf;
+          // 画像を先に全部読みこんでから使えるようにする（読みこみ途中の白い家具が出ないように）
+          return Promise.all(KIT.data.images.map((im, i) => new Promise(res => {
+            const url = URL.createObjectURL(new Blob([new Uint8Array(buf, KIT.base + im.data[0], im.data[1])], { type: im.mime }));
+            const img = new Image();
+            img.onload = () => { const t = new T.Texture(img); t.encoding = T.sRGBEncoding; t.flipY = false; t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 4; t.needsUpdate = true; KIT.tex[i] = t; res(); };
+            img.onerror = () => res();
+            img.src = url;
+          })));
+        })
+        .then(() => { photoCache.clear(); itemCache.clear(); return true; })
+        .catch(() => { KIT.data = null; return false; });
+    }
+    return KIT.ready;
+  }
+  const kitHas = name => !!(KIT.data && KIT.tex && KIT.data.items[name]);
+  function kitMat(name) {
+    if (KIT.mats[name]) return KIT.mats[name];
+    const m = KIT.data.mats[name] || {};
+    let map = m.img != null ? KIT.tex[m.img] : null;
+    if (!map && /Bark|Wood/i.test(name)) {
+      // 樹皮のテクスチャは同梱されていないので、白っぽい流木の木肌を描く
+      const c = document.createElement('canvas'); c.width = 256; c.height = 512;
+      const ctx = c.getContext('2d'); const r = prng(41);
+      ctx.fillStyle = '#C9B8A0'; ctx.fillRect(0, 0, 256, 512);
+      for (let i = 0; i < 120; i++) { ctx.strokeStyle = `rgba(${r() < 0.6 ? '110,90,70' : '235,225,210'},${0.15 + r() * 0.3})`; ctx.lineWidth = 1 + r() * 3; const x = r() * 256; ctx.beginPath(); ctx.moveTo(x, 0); for (let y = 0; y <= 512; y += 32) ctx.lineTo(x + Math.sin(y / 50 + i) * 4, y); ctx.stroke(); }
+      map = new T.CanvasTexture(c); map.encoding = T.sRGBEncoding; map.wrapS = map.wrapT = T.RepeatWrapping;
+    }
+    const mat = new T.MeshStandardMaterial({ color: '#ffffff', map, roughness: 0.92, metalness: 0, alphaTest: m.alpha ? 0.5 : 0, side: m.alpha ? T.DoubleSide : T.FrontSide });
+    mat.userData.shared = true;
+    KIT.mats[name] = mat;
+    return mat;
+  }
+  const kitGeo = {};
+  // 名前の家具を作る。fit：横幅（XZの大きいほう）をこの長さに、h があれば高さを h 倍に
+  function buildKit(name, fit, opt) {
+    const it = KIT.data.items[name];
+    const g = new T.Group();
+    const k = fit / Math.max(it.size[0], it.size[2]);
+    it.prims.forEach((p, i) => {
+      const key = name + i;
+      if (!kitGeo[key]) {
+        const geo = new T.BufferGeometry();
+        const f32 = r => new Float32Array(KIT.buf.slice(KIT.base + r[0], KIT.base + r[0] + r[1]));
+        geo.setAttribute('position', new T.BufferAttribute(f32(p.pos), 3));
+        geo.setAttribute('normal', new T.BufferAttribute(f32(p.nrm), 3));
+        if (p.uv) geo.setAttribute('uv', new T.BufferAttribute(f32(p.uv), 2));
+        const ib = KIT.buf.slice(KIT.base + p.idx[0], KIT.base + p.idx[0] + p.idx[1]);
+        geo.setIndex(new T.BufferAttribute(p.i32 ? new Uint32Array(ib) : new Uint16Array(ib), 1));
+        geo.computeBoundingSphere();
+        geo.userData.shared = true;
+        kitGeo[key] = geo;
+      }
+      const m = new T.Mesh(kitGeo[key], kitMat(p.mat));
+      m.castShadow = true; m.receiveShadow = true;
+      g.add(m);
+    });
+    g.scale.set(k, k * ((opt && opt.h) || 1), k);
+    return g;
+  }
   function doorMesh(w, h) {
     const m = new T.Mesh(new T.CircleGeometry(0.62, 32), new T.MeshBasicMaterial({
       map: gradientCanvasTexture([[0, 'rgba(18,14,10,1)'], [0.7, 'rgba(30,24,18,.95)'], [1, 'rgba(30,24,18,0)']]), transparent: true, depthWrite: false,
@@ -1464,7 +1535,7 @@
     m.scale.set(w, h, 1);
     return m;
   }
-  const DECOR = {
+  const OLD_DECOR = {
     rock: {
       name: '岩シェルター', price: 30, r: 1.45, shelter: { x: 0.25, z: 2.75 },
       desc: '中にもぐって眠れる。定番のかくれ家',
@@ -1557,6 +1628,98 @@
         return g;
       },
     },
+  };
+  const OLD = OLD_DECOR;
+  // 3Dモデル集が読めたらそれを、読めなかったときは手作りの形を使う
+  function kitOr(name, fit, opt, fallback) { return kitHas(name) ? buildKit(name, fit, opt) : fallback(); }
+  // 岩シェルター：岩のモデルの正面に、入口の暗がりをつける
+  function rockShelter(name, fit, h) {
+    if (!kitHas(name)) return OLD_DECOR.rock.build();
+    const g = new T.Group();
+    const rock = buildKit(name, fit, { h });
+    g.add(rock);
+    g.updateMatrixWorld(true);
+    const hit = new T.Raycaster(new T.Vector3(0, 0.4, 20), new T.Vector3(0, 0, -1)).intersectObject(rock, true)[0];
+    const door = doorMesh(1.1, 0.8);
+    door.position.set(0, 0.36, (hit ? hit.point.z : fit * 0.45) + 0.04);
+    door.rotation.x = -0.12;
+    g.add(door);
+    return g;
+  }
+  const DECOR = {
+    rock: {
+      name: '岩シェルター（赤茶）', price: 30, r: 1.45, shelter: { x: 0, z: 2.6 },
+      desc: '赤茶色の岩のかくれ家。荒野っぽい雰囲気に',
+      build: () => rockShelter('Rock_Medium_1_Desert', 3.3, 0.62),
+    },
+    rock2: {
+      name: '岩シェルター（苔むし）', price: 30, r: 1.4, shelter: { x: 0, z: 2.5 },
+      desc: '苔がついた灰色の岩のかくれ家',
+      build: () => rockShelter('Rock_Medium_2', 3.2, 0.72),
+    },
+    wet: OLD.wet,
+    cork: OLD.cork,
+    log: {
+      name: '枯れ木（ひろがり）', price: 20, r: 0.9,
+      desc: '枝が大きく広がった白い枯れ木。ケースの主役に',
+      build: () => kitOr('DeadTree_1', 1.75, null, () => OLD_DECOR.log.build()),
+    },
+    log2: {
+      name: '枯れ木（すらり）', price: 20, r: 0.85,
+      desc: 'すらりと背の高い枯れ木',
+      build: () => kitOr('DeadTree_2', 1.6, null, () => OLD_DECOR.log.build()),
+    },
+    stone: {
+      name: '石だたみ（まる）', price: 15, r: 1.0,
+      desc: '丸い石を並べた床。ひなたぼっこにも',
+      build: () => kitOr('RockPath_Round_Wide', 2.1, { h: 1.5 }, () => OLD_DECOR.stone.build()),
+    },
+    stone2: {
+      name: '石だたみ（しかく）', price: 15, r: 1.0,
+      desc: '四角い石を並べた床。ひなたぼっこにも',
+      build: () => kitOr('RockPath_Square_Wide', 2.0, { h: 1.2 }, () => OLD_DECOR.stone.build()),
+    },
+    plant: {
+      name: 'アガベ風の植物', price: 13, r: 0.6,
+      desc: 'とがった葉がかっこいい、乾燥地の植物',
+      build: () => kitOr('Plant_1', 1.3, null, () => OLD_DECOR.plant.build()),
+    },
+    plant2: {
+      name: 'シダ', price: 13, r: 0.8, soft: true,
+      desc: 'ふんわり広がる緑のシダ',
+      build: () => kitOr('Fern_1', 1.9, { h: 1.2 }, () => OLD_DECOR.plant.build()),
+    },
+    grass: {
+      name: 'かれ草', price: 8, r: 0.55, soft: true,
+      desc: '金色のかれ草。荒野の雰囲気に',
+      build: () => kitOr('Grass_Wispy_Tall', 1.2, { h: 0.85 }, () => OLD_DECOR.plant.build()),
+    },
+    grass2: {
+      name: '青い草', price: 8, r: 0.45, soft: true,
+      desc: 'すっと伸びた緑の草',
+      build: () => kitOr('Grass_Common_Tall', 0.85, { h: 0.75 }, () => OLD_DECOR.plant.build()),
+    },
+    flower: {
+      name: '赤い花', price: 12, r: 0.55, soft: true,
+      desc: 'ケースがぱっと明るくなる赤い花',
+      build: () => kitOr('Flower_3_Group', 1.05, { h: 0.8 }, () => OLD_DECOR.plant.build()),
+    },
+    flower2: {
+      name: '黄色い花', price: 12, r: 0.55, soft: true,
+      desc: 'あざやかな黄色の花',
+      build: () => kitOr('Flower_4_Group', 1.1, { h: 0.7 }, () => OLD_DECOR.plant.build()),
+    },
+    mush: {
+      name: '白いきのこ', price: 10, r: 0.4,
+      desc: 'ちょこんと生えた小さなきのこ（飾りです）',
+      build: () => kitOr('Mushroom_Common', 0.75, null, () => OLD_DECOR.plant.build()),
+    },
+    mush2: {
+      name: 'オレンジのきのこ', price: 10, r: 0.55,
+      desc: '重なりあって生えるきのこ（飾りです）',
+      build: () => kitOr('Mushroom_Laetiporus', 1.1, null, () => OLD_DECOR.plant.build()),
+    },
+    dish: OLD.dish,
   };
   const DEFAULT_DECOR = [{ t: 'rock', x: -4.4, z: -3.0, rot: 0 }, { t: 'dish', x: -5.0, z: 3.2, rot: 0 }, { t: 'plant', x: 1.8, z: -3.8, rot: 0 }];
   // ケースの広さ（床の半分の幅・奥行き）
@@ -1768,9 +1931,9 @@
     let gk = null;
     const cam = ir.camera;
     ir.table.visible = kind !== 'decor';
-    if (kind === 'decor') {
-      const def = DECOR[id];
-      if (!def) return '';
+    if (kind === 'decor' || kind === 'kit') {
+      const def = kind === 'kit' ? { build: () => buildKit(id, 2.4) } : DECOR[id];
+      if (!def || (kind === 'kit' && !kitHas(id))) return '';
       // 家具は砂の上に置いた姿で
       const pad = new T.Mesh(new T.CircleGeometry(3.2, 40), phys('#ffffff', { map: irSand, roughness: 1 }));
       pad.rotation.x = -Math.PI / 2; pad.receiveShadow = true;
@@ -2101,7 +2264,7 @@
       built.position.set(0, 0, 0); built.rotation.y = 0; built.updateMatrixWorld(true);
       const b = new T.Box3().setFromObject(built);
       built.position.copy(keepPos); built.rotation.y = keepRot; built.updateMatrixWorld(true);
-      const k = 0.92;
+      const k = def.soft ? 0.5 : 0.92;
       return (boxCache[t] = {
         cx: (b.min.x + b.max.x) / 2, cz: (b.min.z + b.max.z) / 2,
         hx: Math.max(0.2, (b.max.x - b.min.x) / 2 * k), hz: Math.max(0.2, (b.max.z - b.min.z) / 2 * k),
@@ -2121,7 +2284,11 @@
       else { d = qz; nx = 0; nz = Math.sign(lz) || 1; }
       return { d, wx: nx * c + nz * sn, wz: -nx * sn + nz * c };
     }
+    let lastDecor = [];
+    // 家具の3Dモデルを読みこみおえたら、置いてある家具を作り直す
+    function refreshDecor() { for (const k in boxCache) delete boxCache[k]; decorKey = ''; setDecor(lastDecor); }
     function setDecor(list) {
+      lastDecor = list || [];
       const key = JSON.stringify(list || []);
       if (key === decorKey) return;
       decorKey = key;
@@ -2610,7 +2777,7 @@
           st.wait -= dt;
           if (st.wait <= 0) {
             st.walkTime = 0;
-            const dish = obstacles.find(o => o.t === 'dish'), stone = obstacles.find(o => o.t === 'stone');
+            const dish = obstacles.find(o => o.t === 'dish'), stone = obstacles.find(o => o.t === 'stone' || o.t === 'stone2');
             const nextTo = (o, gap) => {
               // 家具の手前（ケースの中心に近い側）に、鼻先を向けて止まる
               const a = Math.atan2(-o.x * 0.6 - o.x * 0.4 + rand(-1.2, 1.2), -o.z + rand(-1, 1));
@@ -2758,7 +2925,7 @@
         st.heatPref = temp <= 30 ? 1 : temp >= 34 ? -1 : 0;
         heat.intensity = 0.8 * st.heatGlow;
       },
-      _st: st, setCage, setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
+      _st: st, refreshDecor, setCage, setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
       pendingFoods: () => st.foods.map(f => f.kind),
       lick() { st.lick = 0.9; },
       happy() { st.happy = 1.4; if (st.sleeping) wake(); },
@@ -2946,5 +3113,5 @@
   }
   function photoReady(look, opts) { return photoCache.get(photoKey(look, opts)) || null; }
 
-  root.Leopa3D = { CAGE_SIZES, CAGE_THEMES, itemPhoto, itemPhotoReady, supported, createTank, createViewer, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR, TANK };
+  root.Leopa3D = { loadKit, CAGE_SIZES, CAGE_THEMES, itemPhoto, itemPhotoReady, supported, createTank, createViewer, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR, TANK };
 })(typeof window !== 'undefined' ? window : globalThis);
