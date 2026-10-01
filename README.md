@@ -62,3 +62,5 @@ node tests/genetics.test.js # 遺伝ロジックのテスト
 - 恐竜フィギュア：[Quaternius「Animated Dinosaur Pack」](https://quaternius.com/packs/animateddinosaurs.html)（CC0）
 - おかしの飾り：[Kenney「Food Kit」](https://kenney.nl/assets/food-kit)（CC0）
 - ウェットシェルター・水入れ：Meshy AI で作成したモデル
+- 手のモデル："Hand Topology (CC0)" (https://sketchfab.com/3d-models/hand-topology-cc0-acdc0137ee6246ffbdebb88b69c6fff7) by Nanoglyph (https://sketchfab.com/nanoglyph), licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)。形を軽くして使用
+- ピンセット：Meshy AI で作成したモデル

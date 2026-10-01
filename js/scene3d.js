@@ -1537,6 +1537,11 @@
       return (KIT.mats[name] = mat);
     }
     if (m.nearest && map) { map.magFilter = T.NearestFilter; map.minFilter = T.NearestFilter; map.generateMipmaps = false; map.needsUpdate = true; }
+    if (name === 'Skin' || name === 'Metal') {
+      const mat = name === 'Skin' ? phys('#B87556', { roughness: 0.6, side: T.DoubleSide }) : phys('#CDD2D7', { metalness: 0.9, roughness: 0.22, side: T.DoubleSide });
+      mat.userData.shared = true;
+      return (KIT.mats[name] = mat);
+    }
     if (name === 'Stone') {
       const mat = phys('#7A746A', { roughness: 0.92, bumpMap: sandTex(), bumpScale: 0.04, side: T.DoubleSide });
       mat.userData.shared = true;
@@ -2605,7 +2610,7 @@
       if (st.sleeping) wake();
     }
     function takeFoods() {
-      endMealObj(); st.meal = null; st.hunt = null; endTweezers(false);
+      endMealObj(); st.meal = null; st.hunt = null; endTweezers(false); endHandling(true);
       if (st.shedAct && st.shedAct.flake) scene.remove(st.shedAct.flake);
       st.shedAct = null;
       const kinds = st.foods.map(f => f.kind);
@@ -2707,14 +2712,23 @@
       st.zoom = clamp(st.zoom * Math.exp(e.deltaY * 0.0015), 0.45, 1.6);
     }, { passive: false });
     el.addEventListener('pointerdown', e => {
-      if (st.tw && !edit) { st.twDrag = true; try { el.setPointerCapture(e.pointerId); } catch (err) { /* noop */ } aimTweezers(e); return; }
+      if (st.tw && !edit) { st.twDrag = { x: e.clientX, y: e.clientY }; try { el.setPointerCapture(e.pointerId); } catch (err) { /* noop */ } return; }
+      if (st.hand) { st.strokeDrag = { x: e.clientX, y: e.clientY }; try { el.setPointerCapture(e.pointerId); } catch (err) { /* noop */ } return; }
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size === 2) { const [a, b] = [...touches.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
       down = { lx: e.clientX, ly: e.clientY, moved: 0 };
       if (st.close) { try { el.setPointerCapture(e.pointerId); } catch (err) { /* noop */ } }
     });
     el.addEventListener('pointermove', e => {
-      if (st.twDrag && st.tw) { aimTweezers(e); return; }
+      if (st.twDrag && st.tw) { wiggleTweezers(e.clientX - st.twDrag.x, e.clientY - st.twDrag.y); st.twDrag = { x: e.clientX, y: e.clientY }; return; }
+      if (st.strokeDrag && st.hand) {
+        const r = el.getBoundingClientRect();
+        ray.setFromCamera({ x: (e.clientX - r.left) / r.width * 2 - 1, y: -(e.clientY - r.top) / r.height * 2 + 1 }, camera);
+        const a = new T.Vector3(); st.gk.bones.mid.getWorldPosition(a);
+        if (ray.ray.distanceToPoint(a) < 1.4 * st.size) strokeGecko(Math.hypot(e.clientX - st.strokeDrag.x, e.clientY - st.strokeDrag.y));
+        st.strokeDrag = { x: e.clientX, y: e.clientY };
+        return;
+      }
       if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size === 2 && st.close) {
         const [a, b] = [...touches.values()];
@@ -2734,7 +2748,8 @@
       }
     });
     el.addEventListener('pointerup', e => {
-      if (st.twDrag) { st.twDrag = false; return; }
+      if (st.twDrag) { st.twDrag = null; return; }
+      if (st.strokeDrag) { st.strokeDrag = null; if (st.hand && st.gk) { st.lick = 0.9; st.tiltT = 1.2; } return; }
       touches.delete(e.pointerId);
       if (touches.size < 2) pinch = 0;
       if (!down) return;
@@ -2785,6 +2800,7 @@
       return step;
     }
     function clampPos() {
+      if (st.hand && st.hand.phase !== 'offer' && st.hand.phase !== 'shy') return;
       resolveObstacles();
       // 家具にはばまれて進めないときは、行き先を変える
       if (st.mode === 'walk' || st.mode === 'toHide' || st.mode === 'toDrink' || st.mode === 'toBask') {
@@ -2946,19 +2962,33 @@
       }
     }
 
-    // ---- ピンセットでごはん：指でピンセットを動かして、目の前でゆらすと飛びついてくる
+    // ---- ピンセットでごはん：レオパの目の前にエサをさし出し、指でこするとエサがゆれる。ゆらすと飛びつく
     const twMat = phys('#C9CED3', { metalness: 0.9, roughness: 0.28 });
+    let twTip = null; // ピンセットの先（モデルの中の位置）
     function buildTweezers() {
-      const g = new T.Group();
-      for (const sgn of [-1, 1]) {
-        const arm = new T.Mesh(new T.BoxGeometry(0.07, 3.2, 0.03), twMat);
-        arm.geometry.translate(0, 1.6, 0);
-        arm.position.x = sgn * 0.045;
-        arm.rotation.z = -sgn * 0.02;
-        g.add(arm);
+      const outer = new T.Group();
+      if (kitHas('Tweezers')) {
+        const m = buildKit('Tweezers', 3.0);
+        if (!twTip) {
+          // 先端＝いちばん前（+Z）でいちばん低いところ
+          const it = KIT.data.items.Tweezers, k = 3.0 / Math.max(it.size[0], it.size[2]);
+          let best = null;
+          m.traverse(o => { if (!o.isMesh) return; const pa = o.geometry.attributes.position; for (let i = 0; i < pa.count; i++) { const z = pa.getZ(i), y = pa.getY(i); if (!best || z - y * 0.2 > best.s) best = { s: z - y * 0.2, x: pa.getX(i), y, z }; } });
+          twTip = new T.Vector3(best.x * k, best.y * k, best.z * k);
+        }
+        m.position.copy(twTip).multiplyScalar(-1);
+        outer.add(m);
+      } else {
+        for (const sgn of [-1, 1]) {
+          const arm = new T.Mesh(new T.BoxGeometry(0.07, 0.03, 3.2), twMat);
+          arm.geometry.translate(0, 0, -1.6);
+          arm.position.x = sgn * 0.045;
+          arm.rotation.x = -0.6;
+          outer.add(arm);
+        }
       }
-      g.traverse(o => { if (o.isMesh) o.castShadow = true; });
-      return g;
+      outer.traverse(o => { if (o.isMesh) o.castShadow = true; });
+      return outer;
     }
     function startTweezers(kind) {
       endTweezers(false);
@@ -2966,53 +2996,238 @@
       scene.add(grp);
       const obj = buildFood(kind);
       scene.add(obj);
-      const S = 0.95 * st.size;
-      const tip = new T.Vector3(st.x + Math.sin(st.yaw) * 3.2 * S, 0.5, st.z + Math.cos(st.yaw) * 3.2 * S);
-      tip.x = clamp(tip.x, -BOUNDS.x, BOUNDS.x); tip.z = clamp(tip.z, BOUNDS.zMin, BOUNDS.zMax);
       const food = { kind, obj, t: 999, hop: null, held: true };
       st.foods.unshift(food);
-      st.tw = { kind, grp, food, tip, target: tip.clone(), lastMove: performance.now() - 5000, born: performance.now(), wig: 0 };
+      st.tw = { kind, grp, food, tip: new T.Vector3(), anchor: null, off: new T.Vector3(), lastMove: performance.now() - 5000, born: performance.now(), wig: 0, prevClose: st.close };
       if (st.sleeping) wake();
+      setClose(true);
+      st.zoom = 1.25; st.elev = 0.45;
     }
     // ピンセットを片づける。drop：つまんでいたごはんを床に落とす
     function endTweezers(drop) {
       const W = st.tw;
       if (!W) return;
       scene.remove(W.grp); disposeTree(W.grp);
-      if (W.food && W.food.held) {
-        if (drop) { W.food.held = false; W.food.obj.position.y = 0; W.food.t = rand(0.5, 1.2); }
-      }
+      if (W.food && W.food.held && drop) { W.food.held = false; W.food.obj.position.y = 0; W.food.t = rand(0.5, 1.2); }
       st.tw = null;
+      setClose(W.prevClose);
     }
     function stepTweezers(dt) {
       const W = st.tw;
       if (!W) return;
-      const prev = W.tip.clone();
-      W.tip.lerp(W.target, Math.min(1, dt * 10));
-      const sp = prev.distanceTo(W.tip) / Math.max(dt, 0.001);
-      W.wig = lerp(W.wig, Math.min(1, sp / 3), Math.min(1, dt * 6));
-      // ピンセットは手前の上から差しこむ向きに
-      const dir = new T.Vector3().subVectors(camera.position, W.tip).setY(0).normalize().multiplyScalar(0.55).add(new T.Vector3(0, 1, 0)).normalize();
-      W.grp.position.copy(W.tip);
-      W.grp.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), dir);
-      if (W.food && W.food.held) {
-        W.food.obj.position.set(W.tip.x, W.tip.y - 0.06, W.tip.z);
-        W.food.obj.rotation.set(Math.sin(st.t * 14) * 0.5 * W.wig, Math.atan2(dir.x, dir.z) + Math.PI / 2, Math.sin(st.t * 11) * 0.3 * (0.3 + W.wig));
-      } else if (performance.now() - (W.doneAt || 0) > 1200) {
-        endTweezers(false);
-        return;
+      const S = 0.95 * st.size;
+      const H = st.hunt;
+      // エサの基準の位置：レオパの口の少し前。いちど決めたら動かさない（離れすぎたときだけ置きなおす）
+      const mp = mouthWorld();
+      if (W.food && W.food.held && (!W.anchor || (Math.hypot(W.anchor.x - mp.x, W.anchor.z - mp.z) > 3.6 && !(H && (H.ph === 'stalk' || H.ph === 'strike'))))) {
+        const fx = Math.sin(st.yaw), fz = Math.cos(st.yaw);
+        W.anchor = new T.Vector3(mp.x + fx * (1.0 * S + 0.55), 0.42 + 0.15 * S, mp.z + fz * (1.0 * S + 0.55));
       }
-      // しばらく食べなかったら、ごはんを床に置いて終わり
-      if (W.food && W.food.held && performance.now() - W.born > 45000) endTweezers(true);
+      if (performance.now() - W.lastMove > 400) W.off.multiplyScalar(Math.max(0, 1 - dt * 2.5));
+      const prev = W.tip.clone();
+      W.tip.copy(W.anchor).add(W.off);
+      W.tip.x = clamp(W.tip.x, -BOUNDS.x, BOUNDS.x); W.tip.z = clamp(W.tip.z, BOUNDS.zMin, BOUNDS.zMax);
+      const sp = prev.distanceTo(W.tip) / Math.max(dt, 0.001);
+      W.wig = lerp(W.wig, Math.min(1, sp / 2.5), Math.min(1, dt * 6));
+      // ピンセットは画面の右上からさしこむ（レオパやエサにかぶらないように）
+      const d = new T.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).setY(0).normalize().multiplyScalar(-1);
+      W.grp.position.copy(W.tip);
+      W.grp.rotation.set(0, Math.atan2(d.x, d.z), 0);
+      if (W.food && W.food.held) {
+        W.food.obj.position.set(W.tip.x, W.tip.y - 0.05, W.tip.z);
+        W.food.obj.rotation.set(Math.sin(st.t * 14) * 0.5 * W.wig, Math.atan2(d.x, d.z) + Math.PI / 2, Math.sin(st.t * 11) * 0.3 * (0.3 + W.wig));
+        if (performance.now() - W.born > 45000) endTweezers(true);
+      } else {
+        // 食べられたら、ピンセットを上に引いて片づける
+        W.anchor.y += dt * 2.5;
+        if (performance.now() - (W.doneAt || 0) > 1100) endTweezers(false);
+      }
     }
-    const twPlane = new T.Plane(new T.Vector3(0, 1, 0), -0.5);
-    function aimTweezers(e) {
-      const r = el.getBoundingClientRect();
-      ray.setFromCamera({ x: (e.clientX - r.left) / r.width * 2 - 1, y: -(e.clientY - r.top) / r.height * 2 + 1 }, camera);
-      const p = new T.Vector3();
-      if (ray.ray.intersectPlane(twPlane, p)) {
-        st.tw.target.set(clamp(p.x, -BOUNDS.x, BOUNDS.x), 0.5, clamp(p.z, BOUNDS.zMin, BOUNDS.zMax));
-        st.tw.lastMove = performance.now();
+    // 指でこすった分だけ、エサを左右・前後にゆらす
+    function wiggleTweezers(dx, dy) {
+      const W = st.tw;
+      const r = new T.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).setY(0).normalize();
+      const f = new T.Vector3().setFromMatrixColumn(camera.matrixWorld, 2).setY(0).normalize();
+      W.off.addScaledVector(r, dx * 0.012).addScaledVector(f, dy * 0.012);
+      const L = W.off.length();
+      if (L > 0.9) W.off.multiplyScalar(0.9 / L);
+      W.lastMove = performance.now();
+    }
+
+    // ---- ふれあい：手のひらを差し出すと乗ってくる。持ちあげたり、なでたり、手から手へ歩かせたり
+    let handProf = null; // 手のひらの高さ（指先方向の位置ごと）
+    function buildHand(len) {
+      const g = new T.Group();
+      if (kitHas('Hand')) {
+        const it = KIT.data.items.Hand;
+        const m = buildKit('Hand', len);
+        const k = len / Math.max(it.size[0], it.size[2]);
+        // もとは手のひらが下向きなので、ひっくり返して上に向ける
+        const flip = new T.Group();
+        flip.rotation.x = Math.PI;
+        flip.position.y = it.size[1] * k;
+        flip.add(m);
+        g.add(flip);
+      } else {
+        const palm = new T.Mesh(new T.BoxGeometry(len, 0.35 * len / 5, len * 0.45), phys('#E9B99B', { roughness: 0.6 }));
+        palm.position.y = 0.175 * len / 5;
+        g.add(palm);
+      }
+      g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      if (!handProf) {
+        // 長さ1あたりの高さを、指先方向に32か所測っておく
+        const t = buildHand.tmp || (buildHand.tmp = true);
+        const probe = g.clone(); probe.scale.setScalar(1 / len); probe.updateMatrixWorld(true);
+        const rc = new T.Raycaster(), down = new T.Vector3(0, -1, 0), prof = [];
+        for (let i = 0; i <= 32; i++) {
+          const x = -0.5 + i / 32;
+          let top = 0;
+          for (const z of [-0.06, 0, 0.06]) { rc.set(new T.Vector3(x, 5, z), down); const h = rc.intersectObject(probe, true)[0]; if (h) top = Math.max(top, h.point.y); }
+          prof.push(top);
+        }
+        handProf = prof;
+      }
+      g.userData.len = len;
+      return g;
+    }
+    // 手の上の高さ（手の外なら -1）
+    function handHeightAt(h, x, z) {
+      if (!h || !handProf) return -1;
+      const len = h.userData.len;
+      const dx = x - h.position.x, dz = z - h.position.z, c = Math.cos(h.rotation.y), s2 = Math.sin(h.rotation.y);
+      const lx = dx * c - dz * s2, lz = dx * s2 + dz * c;
+      if (Math.abs(lz) > len * 0.2 || Math.abs(lx) > len * 0.5) return -1;
+      const f = clamp((lx / len + 0.5) * 32, 0, 32), i = Math.min(31, Math.floor(f));
+      return h.position.y + lerp(handProf[i], handProf[i + 1], f - i) * len * 0.92;
+    }
+    function surfaceAt(x, z) {
+      let y = heightAt(x, z);
+      if (st.hand) for (const h of st.hand.hands) { const v = handHeightAt(h, x, z); if (v > y) y = v; }
+      return y;
+    }
+    const handFwd = () => new T.Vector3(Math.sin(st.yaw), 0, Math.cos(st.yaw));
+    function placeHand(h, cx, cz, yaw, y) { h.position.set(cx, y, cz); h.rotation.y = yaw - Math.PI / 2; }
+    function startHandling(tame) {
+      endHandling(true);
+      if (st.sleeping) wake();
+      const S = 0.95 * st.size, len = 5.4 * S;
+      const h = buildHand(len);
+      scene.add(h);
+      const f = handFwd();
+      // 鼻先の少し前に、手のひらを置く（指先はレオパと同じ向き）
+      let cx = st.x + f.x * (2.0 * S + len * 0.55), cz = st.z + f.z * (2.0 * S + len * 0.55);
+      cx = clamp(cx, -BOUNDS.x + len * 0.3, BOUNDS.x - len * 0.3); cz = clamp(cz, BOUNDS.zMin + len * 0.3, BOUNDS.zMax - len * 0.3);
+      placeHand(h, cx, cz, Math.atan2(cx - st.x, cz - st.z), 0);
+      st.hand = { phase: 'offer', hands: [h], cur: 0, t: 0, tame, shy: tame < 25 && Math.random() < 0.5, onT: 0, prevClose: st.close, stroke: 0 };
+      st.mode = 'idle'; st.wait = 999;
+      setClose(true); st.zoom = 1.35; st.elev = 0.5;
+    }
+    function endHandling(silent) {
+      const H = st.hand;
+      if (!H) return;
+      for (const h of H.hands) { scene.remove(h); disposeTree(h); }
+      st.hand = null;
+      st.mode = 'idle'; st.wait = rand(1, 3);
+      st.x = clamp(st.x, -BOUNDS.x + 1, BOUNDS.x - 1); st.z = clamp(st.z, BOUNDS.zMin + 1, BOUNDS.zMax - 1);
+      setClose(H.prevClose);
+      if (!silent) handlers.onHandling && handlers.onHandling('end');
+    }
+    function handCmd(cmd) {
+      const H = st.hand;
+      if (!H) return;
+      if (cmd === 'down' && H.phase !== 'down') { H.phase = 'down'; H.t = 0; }
+      if (cmd === 'walk' && H.phase === 'lifted') {
+        // つぎの手を、いまの手の指先の先に差し出す（ケースの外に出そうなら内側へ曲げる）
+        const cur = H.hands[H.cur], len = cur.userData.len, yaw = cur.rotation.y + Math.PI / 2;
+        // いまの手の指先に、つぎの手首がつくように置く。ケースの外に出るなら、向きを少しずつ変えて探す
+        const tipX = cur.position.x + Math.sin(yaw) * len * 0.46, tipZ = cur.position.z + Math.cos(yaw) * len * 0.46;
+        let nx = 0, nz = 0, ny = yaw;
+        for (const d of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8, 2.4, -2.4, Math.PI]) {
+          ny = yaw + d;
+          nx = tipX + Math.sin(ny) * len * 0.44; nz = tipZ + Math.cos(ny) * len * 0.44;
+          if (Math.abs(nx) < BOUNDS.x - len * 0.35 && nz > BOUNDS.zMin + len * 0.2 && nz < BOUNDS.zMax - len * 0.2) break;
+        }
+        let h = H.hands[1 - H.cur];
+        if (!h) { h = buildHand(len); scene.add(h); H.hands.push(h); }
+        placeHand(h, nx, nz, ny, cur.position.y - 0.05);
+        H.phase = 'walk'; H.t = 0; H.next = H.hands.indexOf(h);
+      }
+    }
+    function stepHandling(dt) {
+      const H = st.hand;
+      H.t += dt;
+      const S = 0.95 * st.size;
+      const cur = H.hands[H.cur];
+      const len = cur.userData.len;
+      const yawC = cur.rotation.y + Math.PI / 2;
+      const ctr = (h, k) => ({ x: h.position.x + Math.sin(h.rotation.y + Math.PI / 2) * k, z: h.position.z + Math.cos(h.rotation.y + Math.PI / 2) * k });
+      let step = 0;
+      if (H.phase === 'offer') {
+        // においを確かめてから乗る（なれていない子は、そっぽを向くことも）
+        if (H.t < 1.6) { st.yaw += angleTo(st.yaw, Math.atan2(cur.position.x - st.x, cur.position.z - st.z)) * Math.min(1, dt * 3); if (H.t > 0.8 && st.lick <= 0 && !H.licked) { st.lick = 0.9; H.licked = true; } }
+        else if (H.shy) { H.phase = 'shy'; H.t = 0; handlers.onHandling && handlers.onHandling('shy'); }
+        else {
+          const c = ctr(cur, len * 0.02);
+          step = moveToward(c.x, c.z, 0.9, dt);
+          if (Math.hypot(c.x - st.x, c.z - st.z) < 0.2) { H.phase = 'lift'; H.t = 0; handlers.onHandling && handlers.onHandling('on'); }
+        }
+      } else if (H.phase === 'shy') {
+        // くるっと向きを変えて、少し離れる
+        step = moveToward(st.x - Math.sin(yawC) * 2, st.z - Math.cos(yawC) * 2, 0.9, dt);
+        if (H.t > 2.2) endHandling(false);
+      } else if (H.phase === 'lift') {
+        cur.position.y = lerp(0, 1.8, smooth(Math.min(1, H.t / 1.4)));
+        st.yaw += angleTo(st.yaw, yawC) * Math.min(1, dt * 2);
+        if (H.t > 1.4) { H.phase = 'lifted'; H.t = 0; }
+      } else if (H.phase === 'lifted') {
+        H.onT += dt;
+        // 手の上で、ときどき少し歩いて向きを変える
+        H.wT = (H.wT == null ? rand(2, 4) : H.wT) - dt;
+        if (H.wT <= 0) { H.goal = Math.random() < 0.5 ? ctr(cur, rand(-0.15, 0.2) * len) : null; H.wT = rand(3, 6); if (Math.random() < 0.4) st.lick = 0.9; }
+        if (H.goal) { step = moveToward(H.goal.x, H.goal.z, 0.5, dt); if (!step) H.goal = null; }
+        const limit = 28 + H.tame * 0.3;
+        if (H.onT > limit && !H.restless) { H.restless = true; handlers.onHandling && handlers.onHandling('restless'); }
+        if (H.restless) { const e = ctr(cur, len * 0.45); step = moveToward(e.x, e.z, 0.7, dt); }
+        if (H.onT > limit + 14) handCmd('down');
+      } else if (H.phase === 'walk') {
+        // 手から手へ、とことこ歩いてわたる
+        const nx = H.hands[H.next];
+        const c = ctr(nx, len * 0.02);
+        step = moveToward(c.x, c.z, 0.9, dt);
+        nx.position.y = lerp(nx.position.y, cur.position.y, Math.min(1, dt * 3));
+        if (Math.hypot(c.x - st.x, c.z - st.z) < 0.2) {
+          const old = H.cur; H.cur = H.next; H.next = null; H.phase = 'lifted'; H.t = 0;
+          H.hands[old].position.y = -50; // 前の手は見えないところへ
+          handlers.onHandling && handlers.onHandling('walked');
+        }
+      } else if (H.phase === 'down') {
+        cur.position.y = Math.max(0, cur.position.y - dt * 1.6);
+        if (cur.position.y <= 0.001) {
+          // 床におりたら、手から前へおりて終わり
+          const e = ctr(cur, len * 0.95);
+          step = moveToward(e.x, e.z, 0.9, dt);
+          if (Math.hypot(e.x - st.x, e.z - st.z) < 0.3 || H.t > 6) endHandling(false);
+        }
+      }
+      // 手の上にいるあいだは、手からはみ出さないように
+      if (st.hand && st.hand.phase !== 'offer' && st.hand.phase !== 'shy' && (st.hand.phase !== 'down' || cur.position.y > 0.01)) {
+        const hs = [H.hands[H.cur]].concat(H.next != null ? [H.hands[H.next]] : []);
+        if (!hs.some(h => handHeightAt(h, st.x, st.z) > -0.5)) {
+          const c = ctr(cur, 0);
+          st.x = lerp(st.x, c.x, 0.2); st.z = lerp(st.z, c.z, 0.2);
+        }
+      }
+      return step;
+    }
+    // なでる：手の上のレオパの背中を指でなぞる
+    function strokeGecko(dist) {
+      const H = st.hand;
+      if (!H || (H.phase !== 'lifted' && H.phase !== 'walk')) return;
+      H.stroke += dist;
+      if (H.stroke > 140) {
+        H.stroke = 0; st.happy = 1.4; st.content = 1.6;
+        hearts(2);
+        handlers.onHandling && handlers.onHandling('stroke');
       }
     }
 
@@ -3025,7 +3240,10 @@
       const S = 0.95 * st.size;
 
       st.eatLook = 0; st.eatPitch = 0;
-      if (st.meal) {
+      if (st.hand) {
+        step = stepHandling(dt) || 0;
+        st.stalk = 0; st.hunt = null;
+      } else if (st.meal) {
         stepMeal(dt, S);
       } else if (food) {
         if (st.sleeping) wake();
@@ -3147,7 +3365,8 @@
       // まばたき
       st.blinkT -= dt;
       if (st.blinkT <= 0) st.blinkT = rand(2.5, 6);
-      const closing = st.sleeping || st.blinkT < 0.13;
+      if (st.content > 0) st.content -= dt;
+      const closing = st.sleeping || st.blinkT < 0.13 || (st.content > 0 && Math.sin(st.t * 2.2) > 0.2);
       st.blinkV = lerp(st.blinkV, closing ? 1 : 0, Math.min(1, dt * (closing ? 28 : 16)));
 
       // こっちを見る・えさを見る
@@ -3203,8 +3422,8 @@
       // 岩や石の上では、足もとの高さに合わせて体を持ちあげ、坂なら体をかたむける
       {
         const sy = Math.sin(st.yaw), cy = Math.cos(st.yaw);
-        const hf = heightAt(st.x + sy * 1.3 * S, st.z + cy * 1.3 * S), hm = heightAt(st.x, st.z), hb = heightAt(st.x - sy * 1.1 * S, st.z - cy * 1.1 * S);
-        st.y = lerp(st.y || 0, Math.max(hm, (hf + hb) / 2), Math.min(1, dt * 8));
+        const hf = surfaceAt(st.x + sy * 1.3 * S, st.z + cy * 1.3 * S), hm = surfaceAt(st.x, st.z), hb = surfaceAt(st.x - sy * 1.1 * S, st.z - cy * 1.1 * S);
+        st.y = lerp(st.y || 0, Math.max(hm, (hf + hb) / 2), Math.min(1, dt * (st.hand ? 14 : 8)));
         st.slope = lerp(st.slope || 0, clamp(Math.atan2(hf - hb, 2.4 * S), -0.8, 0.8), Math.min(1, dt * 6));
         // しっぽの途中と先が、足もとの床や岩より下にならない高さを計算して、しっぽを持ちあげる
         const cs = Math.cos(st.slope), sn = Math.sin(st.slope);
@@ -3214,7 +3433,7 @@
           const zl = -1.55 - k * 2.93;
           const wx = st.x + sy * zl * S * cs, wz = st.z + cy * zl * S * cs;
           const wy = st.y + S * ((yb - dropM) * cs + zl * sn);
-          const need = (heightAt(wx, wz) + 0.02 - wy) / S / k;
+          const need = (surfaceAt(wx, wz) + 0.02 - wy) / S / k;
           if (need > lift) lift = need;
         }
         st.tailLift = lerp(st.tailLift || 0, Math.min(lift, 3), Math.min(1, dt * 10));
@@ -3304,6 +3523,7 @@
       setShed(p) { st.shedP = p; },
       setFat(f) { st.fat = f; },
       startTweezers, tweezersActive: () => !!st.tw,
+      startHandling, endHandling: () => endHandling(true), handCmd, handling: () => st.hand ? st.hand.phase : null,
       _st: st, _cam: camera, _hide: () => HIDE, refreshDecor, setCage, setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
       pendingFoods: () => st.foods.map(f => f.kind),
       lick() { st.lick = 0.9; },

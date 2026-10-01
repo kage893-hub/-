@@ -422,11 +422,12 @@
       onTapPoop() { ACTIONS.poop(); },
       onFloorTap: (x, z) => floorTap(x, z),
       onDecorTap: i => decorTap(i),
+      onHandling: type => onHandling(type),
     });
   }
   function sceneMount() {
     const g = selected();
-    if (tankGid && (!g || tankGid !== g.id)) flushFoods();
+    if (tankGid && (!g || tankGid !== g.id)) { flushFoods(); showHandBar(false); }
     tankGid = g ? g.id : null;
     $('#tankEmpty').hidden = !!g;
     if (!tank) return;
@@ -481,6 +482,41 @@
     g.tame = clamp(g.tame + 2);
     memo(g, '脱皮が完了。脱いだ皮はぱくっと食べた');
     if (g.id === S.selected) toast(`${g.name}の脱皮が終わりました。つやつや！`);
+  }
+  // ---- ふれあい（手に乗せる）のごほうび
+  let handSession = null;
+  function handleReward(g) {
+    const now = Date.now();
+    if (g.handledAt && now - g.handledAt < 15 * MIN) return false; // 続けてふれあっても、なれ度は少し休んでから
+    g.handledAt = now;
+    mile(g, 'hand', 'はじめて手の上に乗ってくれた', true, `${g.name}が手の上に乗ってくれました`);
+    const wasTame = g.tame;
+    g.tame = clamp(g.tame + 6);
+    if (wasTame < 100 && g.tame >= 100) memo(g, 'なれ度が100に！手の上ですっかりくつろぐように', true);
+    S.coins += 1;
+    daily('handled');
+    save();
+    return true;
+  }
+  function showHandBar(on) {
+    let bar = $('#handBar');
+    if (!on) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'handBar'; bar.className = 'hand-bar';
+      bar.innerHTML = '<button class="act" data-action="handWalk">手から手へ</button><button class="act primary" data-action="handDown">おろす</button><p class="hand-hint">背中を指でなでてみよう</p>';
+      $('#tank').appendChild(bar);
+    }
+  }
+  function onHandling(type) {
+    const g = S.geckos.find(x => x.id === tankGid);
+    if (!g) return;
+    if (type === 'on') { const got = handleReward(g); toast(g.tame >= 60 ? `${g.name}は手の上でリラックスしている` : `${g.name}が手の上に乗ってくれた`); if (!got) toast('なれ度は少し休んでから上がります'); renderView(); }
+    else if (type === 'shy') toast(`${g.name}はまだ少しこわいみたい。また手を差し出してみよう`);
+    else if (type === 'restless') toast('そわそわしてきた。そろそろおろしてあげよう');
+    else if (type === 'stroke') { if (handSession && handSession.strokes < 3) { handSession.strokes++; g.tame = clamp(g.tame + 1); save(); } }
+    else if (type === 'walked') { /* 手から手へ */ }
+    else if (type === 'end') { showHandBar(false); handSession = null; renderView(); }
   }
   function applyEat(g, kind) {
     mile(g, 'eat', `はじめての${FOODS[kind].name}をぱくっと食べた`, true);
@@ -599,6 +635,7 @@
     feedMenu() {
       const g = selected();
       if (!g) return;
+      if (tank && tank.handling && tank.handling()) { toast('手からおろしてから、ごはんにしよう'); return; }
       const full = g.hunger + pendingHunger() >= 90;
       const tw = S.feedMode === 'tw';
       openSheet(`<h3 class="sheet-title">ごはんをあげる</h3>
@@ -625,7 +662,7 @@
       closeSheet();
       if (tank && S.feedMode === 'tw') {
         tank.startTweezers(k);
-        if (!S.twHint) { S.twHint = true; toast('ケースの中を指でなぞって、ピンセットをゆらしてみよう'); }
+        if (!S.twHint) { S.twHint = true; toast('画面を指でこすると、ピンセットのエサがゆれます。ゆらして気づかせよう'); }
       } else if (tank) tank.spawnFood(k);
       else applyEat(g, k);
       save();
@@ -657,21 +694,26 @@
     handle() {
       const g = selected();
       if (!g) return;
-      const now = Date.now();
-      const wait = g.handledAt + 15 * MIN - now;
-      if (wait > 0) { toast(`少し休ませてあげよう（あと${fmtLeft(wait)}）`); return; }
-      g.handledAt = now;
-      mile(g, 'hand', 'はじめて手の上に乗ってくれた', true, `${g.name}が手の上に乗ってくれました`);
-      const wasTame = g.tame;
-      g.tame = clamp(g.tame + 6);
-      if (wasTame < 100 && g.tame >= 100) memo(g, 'なれ度が100に！手の上ですっかりくつろぐように', true);
-      S.coins += 1;
-      daily('handled');
-      if (tank) { tank.happy(); tank.hearts(3); }
-      toast(g.tame >= 60 ? `${g.name}は手の上でリラックスしている` : `${g.name}を手に乗せてみた`);
-      renderView();
-      save();
+      if (!tank || !tank.startHandling) { handleReward(g); return; }
+      if (tank.handling()) { tank.handCmd('down'); return; }
+      tank.startHandling(g.tame);
+      showHandBar(true);
+      handSession = { id: g.id, strokes: 0 };
     },
+    credits() {
+      openSheet(`<h3 class="sheet-title">素材のクレジット</h3>
+        <ul class="credits">
+          <li>手のモデル："Hand Topology (CC0)" by <a href="https://sketchfab.com/nanoglyph" target="_blank" rel="noopener">Nanoglyph</a>（<a href="https://sketchfab.com/3d-models/hand-topology-cc0-acdc0137ee6246ffbdebb88b69c6fff7" target="_blank" rel="noopener">Sketchfab</a>）／ <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>。軽くするために形を簡単にしています</li>
+          <li>家具・植物：Quaternius「Stylized Nature MegaKit」（CC0）</li>
+          <li>恐竜フィギュア：Quaternius「Animated Dinosaur Pack」（CC0）</li>
+          <li>おかしの飾り：Kenney「Food Kit」（CC0）</li>
+          <li>レオパ・ウェットシェルター・水入れ・ピンセット：Meshy AI で作成</li>
+          <li>3D表示：three.js（MIT License）</li>
+        </ul>
+        <button class="act" data-action="closeSheet">とじる</button>`);
+    },
+    handWalk() { if (tank) tank.handCmd('walk'); },
+    handDown() { if (tank) tank.handCmd('down'); },
     mist() {
       const g = selected();
       if (!g || !g.shedUntil) return;
@@ -1380,7 +1422,7 @@
         </button>
       </div>
       <h3 class="h3">せってい</h3>
-      <div class="danger-zone">${isStandalone() || inFrame ? '' : '<button class="act ghost sm" data-action="installMenu">ホーム画面に追加</button>'}<button class="act ghost sm" data-action="giftMenu">ギフトコード</button><button class="act ghost sm" data-action="notifyMenu">おしらせ通知</button><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`,
+      <div class="danger-zone">${isStandalone() || inFrame ? '' : '<button class="act ghost sm" data-action="installMenu">ホーム画面に追加</button>'}<button class="act ghost sm" data-action="giftMenu">ギフトコード</button><button class="act ghost sm" data-action="credits">素材のクレジット</button><button class="act ghost sm" data-action="notifyMenu">おしらせ通知</button><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`,
     };
     setHTML($('#view-shop'), `<h2 class="h2">ショップ</h2>${tabs}${(sec[tab] || sec.leopa)()}`);
     if (tab === 'interior') fillThumbs();

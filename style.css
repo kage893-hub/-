@@ -592,3 +592,11 @@ body.full-view .sheet-wrap { z-index: 55; }
 .hv { text-align: right; }
 .hv.good { color: var(--good); } .hv.warn { color: var(--warn); } .hv.info { color: var(--info); } .hv.muted { color: var(--muted); }
 .seg.two { grid-template-columns: 1fr 1fr; }
+
+/* ふれあい（手に乗せる） */
+.hand-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 9; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(transparent, rgba(30, 24, 14, .4)); }
+.hand-bar .act { flex: 0 1 140px; padding-block: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, .18); }
+.hand-hint { width: 100%; margin: 0; text-align: center; font-size: 11.5px; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+.tank:has(.hand-bar) .cam-btn, .tank:has(.hand-bar) .thermo { opacity: 0; pointer-events: none; }
+.credits { margin: 0; padding-left: 1.2em; display: grid; gap: 8px; font-size: 13px; line-height: 1.6; }
+.credits a { color: var(--info); }
