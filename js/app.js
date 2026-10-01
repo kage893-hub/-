@@ -977,6 +977,7 @@
       </div>
       ${tutCoach()}
       ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮を手伝う</button>' : ''}
+      ${installCard()}
       ${dailyCard()}
       <div class="card gecko-card">
         <div class="gc-head">
@@ -1112,7 +1113,7 @@
       ${specialCard()}
       ${offers ? `<div class="offers">${offers}</div>` : '<p class="muted">売り切れです。次の入荷をお待ちください。</p>'}
       <p class="muted small">コインは、お世話・ふ化・里親に出すことでもらえます。</p>
-      <div class="danger-zone"><button class="act ghost sm" data-action="notifyMenu">おしらせ通知</button><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`);
+      <div class="danger-zone">${isStandalone() || inFrame ? '' : '<button class="act ghost sm" data-action="installMenu">ホーム画面に追加</button>'}<button class="act ghost sm" data-action="notifyMenu">おしらせ通知</button><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`);
   }
 
   function welcome() {
@@ -2043,6 +2044,46 @@
     heatDown() { const g = selected(); if (g && heatOf(g) > HEAT_MIN) { g.heat = heatOf(g) - 1; save(); renderView(); heaterSheet(); } },
   });
 
+  // ---------- ホーム画面に追加する案内
+  let installEvt = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (S) renderView(); });
+  window.addEventListener('appinstalled', () => { installEvt = null; toast('ホーム画面に追加しました！'); if (S) { S.installHide = Infinity; save(); renderView(); } });
+  const inFrame = (() => { try { return window.top !== window.self; } catch (e) { return true; } })();
+  const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  const UA = navigator.userAgent;
+  const isIOS = /iP(hone|ad|od)/.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1);
+  function installCard() {
+    if (inFrame || isStandalone() || !S.welcomed || tutStep() >= 0 || (S.installHide || 0) > Date.now()) return '';
+    return `<div class="card install">
+      <img src="icons/icon-192.png" alt="" width="48" height="48">
+      <div><b>ホーム画面に追加しよう</b><small>アプリのように全画面で遊べて、通知も使えるようになります</small></div>
+      <div class="install-btns"><button class="act primary sm" data-action="installMenu">追加する</button><button class="act ghost sm" data-action="installLater">あとで</button></div>
+    </div>`;
+  }
+  function installSheet() {
+    const step = (n, html) => `<li><span class="step-n">${n}</span><span>${html}</span></li>`;
+    const share = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5v10h14V11h-1"/></svg>';
+    const how = isIOS
+      ? `<ol class="steps">${step(1, '<b>Safari</b> でこのページを開きます（ほかのアプリの中で開いているときは、Safari で開き直してね）')}${step(2, `画面の下（または上）にある <b>共有ボタン</b> ${share} をタップ`)}${step(3, 'メニューを下にスクロールして <b>「ホーム画面に追加」</b> をタップ')}${step(4, '右上の <b>「追加」</b> をタップしたら完成！')}</ol>`
+      : `<ol class="steps">${step(1, '<b>Chrome</b> などのブラウザでこのページを開きます')}${step(2, '右上の <b>︙（メニュー）</b> をタップ')}${step(3, '<b>「ホーム画面に追加」</b> または <b>「アプリをインストール」</b> をタップ')}${step(4, '<b>「追加」</b>（インストール）をタップしたら完成！')}</ol>`;
+    openSheet(`<h3 class="sheet-title">ホーム画面に追加する</h3>
+      <p class="small">ホーム画面のアイコンから、アプリのように全画面で遊べます。電波がないところでも遊べて、通知も使えるようになります。</p>
+      ${installEvt ? '<button class="act primary" data-action="installNow">いますぐ追加する</button><p class="muted small">うまくいかないときは、下の手順でも追加できます。</p>' : ''}
+      ${how}
+      <p class="muted small">セーブデータはそのまま引きつがれます（同じブラウザで開いたとき）。ブラウザを変えるときは「セーブデータの控え」で移してね。</p>
+      <button class="act" data-action="closeSheet">とじる</button>`);
+  }
+  Object.assign(ACTIONS, {
+    installMenu: installSheet,
+    installNow() {
+      if (!installEvt) { installSheet(); return; }
+      const e = installEvt; installEvt = null;
+      e.prompt();
+      (e.userChoice || Promise.resolve()).then(() => { closeSheet(); renderView(); });
+    },
+    installLater() { S.installHide = Date.now() + 3 * DAYMS; save(); renderView(); },
+  });
+
   // ---------- おしらせ（通知）と、留守のあいだのまとめ
   const canNotify = () => 'Notification' in window;
   function notify(tag, title, body) {
@@ -2081,6 +2122,7 @@
       <p class="muted small">ブラウザのしくみ上、アプリを閉じてしばらくたつと通知が届かないことがあります（特に iPhone は、ホーム画面に追加したアプリでのみ使えます）。届かなかったぶんは、次に開いたときに「おかえりなさい」でまとめてお知らせします。</p>
       ${!ok ? '<p class="notice">この端末・ブラウザでは通知が使えません</p>'
         : perm === 'denied' ? '<p class="notice">通知がブロックされています。端末の設定から許可してください</p>'
+        : isIOS && !isStandalone() ? '<p class="notice">iPhone では、先にホーム画面に追加すると通知が使えるようになります</p><button class="act primary" data-action="installMenu">ホーム画面に追加する方法</button>'
         : `<button class="act ${S.notify ? '' : 'primary'}" data-action="notifyToggle">${S.notify ? '通知をオフにする' : '通知をオンにする'}</button>`}
       <button class="act" data-action="closeSheet">とじる</button>`);
   }

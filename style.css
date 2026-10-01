@@ -466,3 +466,14 @@ button { font: inherit; color: inherit; }
 .fam-node.me { grid-column: 1; grid-row: 1 / 5; background: var(--accent-soft); }
 .fam-node.p1 { grid-column: 2; grid-row: 1 / 3; } .fam-node.p2 { grid-column: 2; grid-row: 3 / 5; }
 .fam-node.g1 { grid-column: 3; grid-row: 1; } .fam-node.g2 { grid-column: 3; grid-row: 2; } .fam-node.g3 { grid-column: 3; grid-row: 3; } .fam-node.g4 { grid-column: 3; grid-row: 4; }
+
+.card.install { display: grid; grid-template-columns: 48px 1fr; gap: 6px 12px; align-items: center; background: var(--accent-soft); border-color: var(--accent); }
+.card.install img { border-radius: 12px; }
+.card.install b { display: block; font-size: 14.5px; }
+.card.install small { display: block; font-size: 12px; color: var(--muted); }
+.install-btns { grid-column: 1 / -1; display: flex; gap: 8px; }
+.install-btns .act { flex: 1; }
+.steps { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 10px; }
+.steps li { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.5; }
+.step-n { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.ico { width: 18px; height: 18px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
