@@ -676,18 +676,31 @@
       renderView();
       save();
     },
+    // お別れの確認（里親・ブリーダー依頼 共通）
+    farewell(g, to, reward, btnAttrs) {
+      const days = Math.max(0, Math.floor((Date.now() - (g.adopted || g.born)) / DAYMS));
+      const memories = (S.albums && S.albums[g.id] ? S.albums[g.id].entries.length : 0);
+      openSheet(`<div class="farewell">
+        <p class="eyebrow">おわかれの前に</p>
+        <div class="reveal-art">${portrait(g, stageOf(g), nameOf(g))}</div>
+        <h3 class="morph big">${esc(g.name)} ${sexMark(g)}</h3>
+        <p class="muted">${esc(nameOf(g))} ・ ${STAGE_LABEL[stageOf(g)]} ・ ${weightOf(g)}g</p>
+        <div class="farewell-days"><span>いっしょに過ごした日々</span><b>${days ? days + '日' : 'きょう1日'}</b><small>アルバムの思い出 ${memories}件</small></div>
+        <p>${esc(g.name)}は <b>${esc(to)}</b> のもとへ旅立ちます。お礼に <b>${reward} コイン</b> もらえます。</p>
+        <p class="notice">一度送り出すと、${esc(g.name)}はもう戻ってきません。本当におわかれしますか？</p>
+        <p class="muted small">図鑑の記録とアルバムは残ります。</p>
+        <div class="actions"><button class="act primary" data-action="closeSheet">やっぱりやめる</button><button class="act ghost" ${btnAttrs}>おわかれする</button></div>
+      </div>`);
+    },
     rehomeMenu() {
       const g = selected();
       if (!g) return;
       if (S.geckos.length <= 1) { toast('さいごの1匹は手放せません'); return; }
       if (g.gravid) { toast('抱卵中は里親に出せません'); return; }
-      const reward = Math.round(valueOf(g) * 0.8);
-      openSheet(`<h3 class="sheet-title">${esc(g.name)}を里親に出す</h3>
-        <p>やさしい飼い主さんのもとへ旅立ちます。お礼に <b>${reward} コイン</b> もらえます。図鑑の記録は残ります。</p>
-        <div class="actions"><button class="act" data-action="closeSheet">やめる</button><button class="act primary" data-action="rehome">送り出す</button></div>`);
+      ACTIONS.farewell(g, 'やさしい飼い主さん', Math.round(valueOf(g) * 0.8), `data-action="rehome" data-id="${g.id}"`);
     },
-    rehome() {
-      const g = selected();
+    rehome(t) {
+      const g = S.geckos.find(x => x.id === t.dataset.id) || selected();
       if (!g || S.geckos.length <= 1 || g.gravid) return;
       const reward = Math.round(valueOf(g) * 0.8);
       memo(g, 'やさしい飼い主さんのもとへ旅立った。元気でね');
@@ -1126,7 +1139,6 @@
     }).join('');
     setHTML($('#view-shop'), `
       <h2 class="h2">ショップ</h2>
-      ${ordersSection(now)}
       <h3 class="h3">ごはん</h3>
       <div class="list">${Object.entries(FOODS).map(([k, F]) => `
         <button class="row" data-action="buyFood" data-kind="${k}" ${S.coins < F.price ? 'disabled' : ''}>
@@ -1147,6 +1159,7 @@
       ${specialCard()}
       ${offers ? `<div class="offers">${offers}</div>` : '<p class="muted">売り切れです。次の入荷をお待ちください。</p>'}
       <p class="muted small">コインは、お世話・ふ化・里親に出すことでもらえます。</p>
+      ${ordersSection(now)}
       <div class="danger-zone">${isStandalone() || inFrame ? '' : '<button class="act ghost sm" data-action="installMenu">ホーム画面に追加</button>'}<button class="act ghost sm" data-action="giftMenu">ギフトコード</button><button class="act ghost sm" data-action="notifyMenu">おしらせ通知</button><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`);
   }
 
@@ -1396,11 +1409,16 @@
       const list = S.geckos.filter(g => fits(o, g));
       openSheet(`<h3 class="sheet-title">${esc(o.buyer)}の依頼</h3>
         <p>${esc(orderText(o))}をさがしています。ゆずると <b>${o.reward} コイン</b>。</p>
-        <div class="list">${list.map(g => `<button class="row" data-action="deliver" data-i="${t.dataset.i}" data-id="${g.id}" ${S.geckos.length <= 1 ? 'disabled' : ''}>
+        <div class="list">${list.map(g => `<button class="row" data-action="deliverMenu" data-i="${t.dataset.i}" data-id="${g.id}" ${S.geckos.length <= 1 ? 'disabled' : ''}>
           <span class="row-art">${A.swatch(g)}</span>
           <span class="row-main"><b>${esc(g.name)} ${sexMark(g)}</b><small>${esc(nameOf(g))} ・ ${STAGE_LABEL[stageOf(g)]}</small></span>
           <span class="row-side">ゆずる</span></button>`).join('')}</div>
         ${S.geckos.length <= 1 ? '<p class="muted small">さいごの1匹はゆずれません。</p>' : ''}`);
+    },
+    deliverMenu(t) {
+      const o = S.orders[Number(t.dataset.i)], g = S.geckos.find(x => x.id === t.dataset.id);
+      if (!o || !g || !fits(o, g) || S.geckos.length <= 1) return;
+      ACTIONS.farewell(g, o.buyer, o.reward, `data-action="deliver" data-i="${t.dataset.i}" data-id="${g.id}"`);
     },
     deliver(t) {
       const i = Number(t.dataset.i), o = S.orders[i];
