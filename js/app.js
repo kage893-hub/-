@@ -371,7 +371,7 @@
   }
   const offerAt = i => i === 'sp' ? (S.special && !S.special.sold ? S.special.offer : null)
     : i[0] === 'x' ? (S.expo && S.expo.stock[Number(i.slice(1))] && !stockGone(S.expo.stock[Number(i.slice(1))]) ? S.expo.stock[Number(i.slice(1))] : null) : S.offers[Number(i)];
-  const stockGone = o => o.sold || o.other || (o.goneAt && Date.now() >= o.goneAt);
+  const stockGone = o => o.sold || o.other;
   function takeOffer(i) { if (i === 'sp') S.special.sold = true; else if (i[0] === 'x') S.expo.stock[Number(i.slice(1))].sold = true; else S.offers.splice(Number(i), 1); }
   function refreshOffers(now) {
     refreshSpecial(now);
@@ -2930,6 +2930,9 @@
           <button role="radio" aria-checked="${k}" class="${k ? 'on' : ''}" data-action="setKids" data-v="1"><b data-raw>ひらがな</b><small data-raw>ちいさな こむけ</small></button>
         </div>
         <p class="muted small">ひらがなモードでは、すべての文字をひらがなにして、むずかしい言葉をやさしい言葉に言いかえます。</p>
+        <p class="set-label">販売ライセンス</p>
+        <p class="small">${S.license ? '取得ずみ。里親・ブリーダー依頼・ショーのブースが使えます。' : 'まだ持っていません。里親・ブリーダー依頼・ショーのブースに必要です。'}飼い方クイズ ${LQ_N}問中${LQ_PASS}問以上で合格。何度でも挑戦できます。</p>
+        <button class="act" data-action="licenseStart">${S.license ? 'クイズで腕だめし' : 'ライセンスのクイズに挑戦'}</button>
         <button class="act ghost" data-action="closeSheet">とじる</button>`);
     },
     setKids(t) {
@@ -3115,11 +3118,11 @@
   // ======================================================
   const EXPO_OPEN = 10, EXPO_CLOSE = 22, EXPO_TICKET = 5, BOOTH_MAX = 5;
   const ymd = d => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-  // いまの週のショーの情報（土・日だけ。ほかの曜日は null）
+  // いまの週のショーの情報（金・土・日だけ。ほかの曜日は null）
   function expoInfo(now) {
     const d = new Date(now), dow = d.getDay(), h = d.getHours();
-    if (dow !== 0 && dow !== 6) return null;
-    const sun = new Date(d); sun.setDate(d.getDate() + (dow === 0 ? 0 : 1)); sun.setHours(0, 0, 0, 0);
+    if (dow !== 0 && dow !== 5 && dow !== 6) return null;
+    const sun = new Date(d); sun.setDate(d.getDate() + (dow === 0 ? 0 : 7 - dow)); sun.setHours(0, 0, 0, 0);
     const open = dow === 0 && h >= EXPO_OPEN && h < EXPO_CLOSE;
     return { key: ymd(sun), open, over: dow === 0 && h >= EXPO_CLOSE, sunday: dow === 0, dow, h, t0: sun.getTime() + EXPO_OPEN * HOUR, t1: sun.getTime() + EXPO_CLOSE * HOUR };
   }
@@ -3143,16 +3146,30 @@
         o.growth = 60 + Math.round(r() * 60);
         o.price = Math.round(valueOf(o) * 1.25);
         o.booth = RIVALS[(i * 3 + Math.floor(r() * 10)) % RIVALS.length];
-        // ほかのお客さんにおむかえされる時刻：朝はそろっていて、夜になるほど売れていく（売れ残る子もいる）
-        const f = 0.1 + Math.pow(r(), 0.7) * 1.05;
-        o.goneAt = f >= 1 ? 0 : info.t0 + f * (info.t1 - info.t0);
         return o;
       });
       // 用品：家具10種類がいつもの半額
       const ids = Object.keys(L3.DECOR).sort((a, b) => strHash(info.key + a) - strHash(info.key + b)).slice(0, 10);
-      S.expo = { day: info.key, ticket: false, stock, decor: ids, theme: EXPO_THEMES[strHash(info.key) % EXPO_THEMES.length], booth: [], sold: [], champ: false, seminar: false, noticed: false, done: false };
+      // ほかのお客さんがおむかえしていく順番
+      const order = [0, 1, 2, 3, 4, 5].sort((a, b) => strHash(info.key + 'o' + a) - strHash(info.key + 'o' + b));
+      S.expo = { day: info.key, ticket: false, stock, order, others: 0, decor: ids, theme: EXPO_THEMES[strHash(info.key) % EXPO_THEMES.length], booth: [], sold: [], champ: false, seminar: false, noticed: false, done: false };
     }
+    otherBuyers(S.expo, info, now);
     return S.expo;
+  }
+  // 即売の残り：10時 6匹 → 12時 5匹 → 15時 4匹 → 18時 3匹 → 20時 2匹（プレイヤーが買った子はのぞく）
+  const OTHER_HOURS = [12, 15, 18, 20];
+  function otherBuyers(E, info, now) {
+    if (!info.sunday) return;
+    const day0 = info.t0 - EXPO_OPEN * HOUR;
+    const due = OTHER_HOURS.filter(h => now >= day0 + h * HOUR).length;
+    if (!E.order) { E.order = [0, 1, 2, 3, 4, 5]; E.others = 0; }
+    while ((E.others || 0) < due) {
+      const i = E.order.find(k => E.stock[k] && !E.stock[k].sold && !E.stock[k].other);
+      if (i == null) break;
+      E.stock[i].other = true;
+      E.others = (E.others || 0) + 1;
+    }
   }
   // ブースの販売：開催中に少しずつ売れていく。閉場後にまとめて結果
   function expoTick(now) {
@@ -3241,14 +3258,19 @@
     ['体調がわるそうなときは？', ['爬虫類をみられる動物病院へ', 'ようすを見ずに薬をあげる', '人の病院へ']],
     ['本物で、動物を販売するのに必要なのは？', ['第一種動物取扱業の登録', 'とくに何もいらない', '車の運転免許']],
     ['おむかえしたばかりの子には？', ['1週間ほどはそっと見守る', 'すぐに毎日手に乗せる', 'ごはんをぬく']],
+    ['ベビーにあげるコオロギの大きさは？', ['Sサイズ', 'Lサイズ', '大きいほどいい']],
+    ['水入れの水は？', ['毎日とりかえる', '1か月に1回かえる', 'よごれるまでそのまま']],
+    ['脱皮の前に、体の色はどうなる？', ['白っぽくなる', '真っ赤になる', '変わらない']],
+    ['練り餌を食べてくれないときは？', ['ピンセットで目の前にゆらしてみる', 'ほかのえさを一切あげない', 'ケースから出して置いておく']],
   ];
+  const LQ_N = 15, LQ_PASS = 13;
   let quiz = null;
   const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   function needLicense(then) {
     if (S.license) return then();
     openSheet(`<p class="eyebrow">販売ライセンス</p><h3 class="sheet-title">レオパをゆずるには、資格が必要です</h3>
       <p>本物でも、動物を販売するには「第一種動物取扱業」の登録と、動物の飼い方をよく知っている「動物取扱責任者」が必要です。</p>
-      <p>このゲームでは、レオパの飼い方クイズ <b>8問中7問以上</b> 正解で、ライセンスがもらえます。一度とれば、ずっと使えます。</p>
+      <p>このゲームでは、レオパの飼い方クイズ <b>${LQ_N}問中${LQ_PASS}問以上</b> 正解で、ライセンスがもらえます。一度とれば、ずっと使えます。</p>
       <p class="muted small">里親に出す・ブリーダー依頼・ショーのブースで、ライセンスが必要です。</p>
       <div class="actions"><button class="act" data-action="closeSheet">あとで</button><button class="act primary" data-action="licenseStart">クイズに挑戦する</button></div>`);
   }
@@ -3376,7 +3398,7 @@
     expoTab(t) { S.expoTab = t.dataset.tab; renderView(); window.scrollTo(0, 0); },
     expoBooth() {
       const now = Date.now(), info = expoInfo(now), E = expoState(now);
-      if (!info || info.over || !E) { toast('ブースを決められるのは、土曜日から日曜日のショーが終わるまでです'); return; }
+      if (!info || info.over || !E) { toast('ブースを決められるのは、金曜日から日曜日のショーが終わるまでです'); return; }
       needLicense(() => {
         const on = new Set(E.booth.filter(b => !b.result).map(b => b.id));
         openSheet(`<p class="eyebrow">わたしのブース（${on.size} / ${BOOTH_MAX}匹）</p><h3 class="sheet-title">ショーに出す子をえらぶ</h3>
@@ -3409,7 +3431,7 @@
       if (!E.booth.some(b => b.id === t.dataset.id && !b.result)) E.booth.push({ id: t.dataset.id });
       save(); toast('ブースに出しました'); ACTIONS.expoBooth();
     },
-    licenseStart() { startQuiz('license', 8); },
+    licenseStart() { startQuiz('license', LQ_N); },
     seminarStart() {
       const E = expoState(Date.now());
       if (!E || E.seminar) return;
@@ -3425,11 +3447,11 @@
       if (quiz.i < quiz.qs.length) { quizSheet(); return; }
       const Q = quiz; quiz = null;
       if (Q.kind === 'license') {
-        if (Q.ok >= 7) {
+        if (Q.ok >= LQ_PASS) {
           S.license = Date.now();
           openSheet(`<p class="eyebrow">販売ライセンス</p><h3 class="sheet-title">合格！ ライセンスをもらいました</h3><p>${Q.ok} / ${Q.qs.length} 問正解。これで、里親に出す・ブリーダー依頼・ショーのブースが使えます。</p><button class="act primary" data-action="closeSheet">とじる</button>`);
           sfx('hatch');
-        } else openSheet(`<p class="eyebrow">販売ライセンス</p><h3 class="sheet-title">${Q.ok} / ${Q.qs.length} 問正解。あと少し！</h3><p>7問以上の正解で合格です。図鑑の「実績」にある「おぼえた飼育のポイント」を読んで、また挑戦しよう。</p><div class="actions"><button class="act" data-action="closeSheet">とじる</button><button class="act primary" data-action="licenseStart">もう一度挑戦</button></div>`);
+        } else openSheet(`<p class="eyebrow">販売ライセンス</p><h3 class="sheet-title">${Q.ok} / ${Q.qs.length} 問正解。あと少し！</h3><p>${LQ_PASS}問以上の正解で合格です。${S.license ? '（ライセンスはもう持っているので、練習としていつでも挑戦できます）' : ''}図鑑の「実績」にある「おぼえた飼育のポイント」を読んで、また挑戦しよう。</p><div class="actions"><button class="act" data-action="closeSheet">とじる</button><button class="act primary" data-action="licenseStart">もう一度挑戦</button></div>`);
       } else {
         const E = expoState(Date.now()); if (E) E.seminar = true;
         const coins = Q.ok * 5; S.coins += coins;
