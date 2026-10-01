@@ -1275,7 +1275,6 @@
         <p>${stageText}</p>
         <p class="muted small">${e.temp}℃ ・ ふ化まで あと${fmtLeft(Math.max(0, e.hatchAt - Date.now()))}</p>
         <button class="act primary" data-action="closeSheet">とじる</button>`);
-      bonusDone('candle');
     },
     setSpeed(t) {
       const v = SPEEDS.find(x => x.x === Number(t.dataset.x));
@@ -1352,7 +1351,6 @@
         <div class="sheet-actions"><button class="act" data-action="closeSheet">とじる</button></div></div>`);
       const el = $('#offerViewer');
       if (L3.supported && el) viewer = L3.createViewer(el, { genes: G.normGenes(g.genes), tang: g.tang, poly: g.poly, seed: g.seed || 1, stage: st, gravid: !!g.gravid });
-      bonusDone('view');
     },
     viewAngle(t) { if (viewer) viewer.view(t.dataset.v); },
     buyGecko(t) {
@@ -1574,7 +1572,6 @@
       ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮をうながす</button>' : ''}
       ${g.stuckShed ? '<button class="act wide mist" data-action="soak">ぬるま湯ケアで、のこった皮をとる</button>' : ''}
       ${installCard()}
-      ${dailyCard()}
       <div class="card gecko-card">
         <div class="gc-head">
           <div class="gc-title">
@@ -1604,6 +1601,7 @@
         ${datesCard(g)}
         <p class="muted small">${st === 'adult' ? (g.growth >= GROWTH.max ? 'りっぱなおとなです' : 'おとなになりました。ペアリングできます') : `${STAGE_LABEL[st === 'baby' ? 'young' : 'adult']}まで あと${fmtLeft((next - g.growth) / (GROWTH.perHour * speedX() * heatInfo(heatOf(g)).growth) * HOUR)}ほど（ごはんを食べていれば）`}${g.hunger <= 30 ? ' ・ おなかが空いていると成長が止まります' : ''}</p>
       </div>
+      ${dailyCard()}
 
       <div class="actions sub">
         <button class="act ghost" data-action="viewGecko" data-id="${g.id}">${ic('look')}くわしく見る</button>
@@ -1931,26 +1929,11 @@
     { key: 'cleaned', label: 'おそうじ（フンひろいも）', need: 1 },
     { key: 'handled', label: 'ふれあう', need: 2 },
   ];
-  const BONUS = [
-    { key: 'photo', label: 'カメラで1枚撮る' },
-    { key: 'view', label: '「くわしく見る」でじっくり観察する' },
-    { key: 'album', label: 'アルバムをふりかえる' },
-    { key: 'candle', label: '卵をライトで照らして見る', eggs: true },
-  ];
-  function bonusDone(key) {
-    const d = dailyState();
-    if (d.bonus !== key || d.bonusDone) return;
-    d.bonusDone = true; S.coins += 15;
-    setTimeout(() => toast('今日のおねがい達成！ 15コイン'), 300);
-    save();
-  }
   function dailyState() {
     if (!S.daily || S.daily.day !== todayKey()) {
       const streak = S.daily && S.daily.claimed && S.daily.day === yesterdayKey() ? (S.daily.streak || 0) : 0;
       const day = todayKey();
-      const pool = BONUS.filter(b => !b.eggs || S.eggs.length);
-      let h = 0; for (const c of day) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-      S.daily = { day, fed: 0, cleaned: 0, handled: 0, claimed: false, streak, bonus: pool[h % pool.length].key, bonusDone: false };
+      S.daily = { day, fed: 0, cleaned: 0, handled: 0, claimed: false, streak };
     }
     return S.daily;
   }
@@ -1992,7 +1975,6 @@
     return `<div class="card daily">
       <div class="daily-head"><b>今日のおせわ</b>${d.streak ? `<span class="pill good">${d.streak}日連続</span>` : ''}</div>
       <div class="daily-list">${DAILY.map(t => `<span class="daily-item${d[t.key] >= t.need ? ' done' : ''}">${t.label} <b>${Math.min(d[t.key], t.need)}/${t.need}</b></span>`).join('')}</div>
-      ${d.bonus ? (b => b ? `<div class="daily-bonus${d.bonusDone ? ' done' : ''}"><span>今日のおねがい</span><b>${b.label}</b><small>${d.bonusDone ? '達成！' : '15コイン'}</small></div>` : '')(BONUS.find(x => x.key === d.bonus)) : ''}
       ${d.claimed ? '<p class="muted small">今日のごほうびは受け取りずみ。また明日！</p>'
         : `<button class="act ${done ? 'primary' : ''} sm" data-action="claimDaily" ${done ? '' : 'disabled'}>ごほうび ${dailyReward(d)}コイン＋コオロギ5匹</button>`}
     </div>`;
@@ -2398,11 +2380,10 @@
       <div class="decor-inv">${all.map(([id, a]) => `<button class="chip" data-action="album" data-id="${id}">${esc(a.name)} <span class="sex ${a.sex}">${a.sex === 'M' ? '♂' : '♀'}</span>${S.geckos.some(g => g.id === id) ? '' : ' <small class="muted">旅立ち</small>'}</button>`).join('')}</div>`;
   }
   Object.assign(ACTIONS, {
-    album(t) { openAlbum(t.dataset.id || S.selected); bonusDone('album'); },
+    album(t) { openAlbum(t.dataset.id || S.selected); },
     snapPhoto(t) {
       const g = S.geckos.find(x => x.id === t.dataset.id);
       if (!g || !tank) return;
-      bonusDone('photo');
       const a = albumOf(g);
       if (a.entries.filter(e => e.img || e.pid).length >= MAX_PHOTOS) return;
       closeSheet();

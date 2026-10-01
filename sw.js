@@ -1,6 +1,6 @@
 /* オフラインでも遊べるように、アプリ本体をキャッシュする。
  * ファイルを変えたら VERSION を上げること。 */
-const VERSION = 'leopa-v69';
+const VERSION = 'leopa-v70';
 const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
   'js/vendor/three.min.js', 'js/genetics.js', 'js/art.js', 'js/scene3d.js', 'js/music.js', 'js/kids.js', 'js/app.js',
