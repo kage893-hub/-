@@ -74,7 +74,10 @@
   }
   function setHTML(el, html) { if (el && el._html !== html) { el.innerHTML = html; el._html = html; } }
   const stageOf = g => g.growth >= GROWTH.adult ? 'adult' : g.growth >= GROWTH.young ? 'young' : 'baby';
-  const sizeOf = g => 0.5 + 0.5 * Math.min(1, g.growth / GROWTH.max);
+  // ジャイアントは大きく育つ（見た目の大きさ）
+  const GIANT_SIZE = [1, 1.1, 1.2], GIANT_WEIGHT = [1, 1.3, 1.7];
+  const giantOf = g => (g.genes && g.genes.giant) || 0;
+  const sizeOf = g => (0.5 + 0.5 * Math.min(1, g.growth / GROWTH.max)) * GIANT_SIZE[giantOf(g)];
   const sexMark = g => g.sex === 'M' ? '♂' : '♀';
   const selected = () => S.geckos.find(g => g.id === S.selected) || null;
   const isNight = () => { const h = new Date().getHours(); return h >= 18 || h < 6; };
@@ -109,6 +112,8 @@
     if (!s.tut) s.tut = { step: 99 }; // 前から遊んでいる人にはガイドを出さない
     s.decorInv = s.decorInv || {};
     if (s.calc == null) { s.calc = 10; s.dust = true; }
+    // ベルアルビノ・ジャイアントの遺伝子が増えたので、そろえておく
+    for (const x of [...s.geckos, ...s.eggs, ...(s.offers || []), ...(s.layBox || []), ...(s.special && s.special.offer ? [s.special.offer] : [])]) if (x.genes) x.genes = G.normGenes(x.genes);
     s.layBox = s.layBox || [];
     if (s.food && s.food.cricketS == null) { s.food.cricketS = 10; s.food.paste = 3; }
     // 「黒さ」が増えたので、前からいる子には少しだけの値を入れる
@@ -314,7 +319,8 @@
   function randomOffer() {
     const r = () => { const x = Math.random(); return x < 0.6 ? 0 : x < 0.9 ? 1 : 2; };
     const x = Math.random();
-    const genes = { snow: x < 0.7 ? 0 : x < 0.95 ? 1 : 2, alb: r(), ecl: r(), bliz: r() };
+    const r2 = () => { const y = Math.random(); return y < 0.8 ? 0 : y < 0.95 ? 1 : 2; };
+    const genes = { snow: x < 0.7 ? 0 : x < 0.95 ? 1 : 2, alb: r(), ecl: r(), bliz: r(), bell: r2(), giant: r2() };
     const adult = Math.random() < 0.25;
     const poly = G.randomPoly();
     let tang = Math.round(rand(0, 65));
@@ -339,6 +345,8 @@
     { genes: {}, tang: 30, poly: { lav: 85, spots: 20 }, note: 'ラベンダーがとても濃い血統' },
     { genes: { ecl: 1, bliz: 1 }, poly: { aberrant: 85 }, note: '模様が大きく乱れた一点もの（het つき）' },
     { genes: {}, tang: 8, poly: { mel: 80, spots: 70 }, note: '黒さがとても強い血統。ブラックナイトまであと少し' },
+    { genes: { bell: 2, ecl: 1 }, note: 'ベルアルビノ het エクリプス。レーダーへの近道' },
+    { genes: { giant: 2 }, note: 'スーパージャイアント。とても大きく育つ血統' },
   ];
   function refreshSpecial(now) {
     const wk = weekKey(now);
@@ -382,8 +390,9 @@
   function valueOf(o) {
     const gs = o.genes;
     let v = 25 + [0, 25, 60][gs.snow];
-    for (const k of ['alb', 'ecl', 'bliz']) v += [0, 10, 45][gs[k]];
-    const visual = (gs.snow > 0) + (gs.alb === 2) + (gs.ecl === 2) + (gs.bliz === 2);
+    for (const k of ['alb', 'ecl', 'bliz', 'bell']) v += [0, 10, 45][gs[k] || 0];
+    v += [0, 20, 55][gs.giant || 0];
+    const visual = (gs.snow > 0) + (gs.alb === 2) + (gs.ecl === 2) + (gs.bliz === 2) + (gs.bell === 2) + ((gs.giant || 0) > 0);
     if (visual >= 2) v *= 1.3;
     if (visual >= 3) v *= 1.3;
     v += o.tang * 0.5;
@@ -1686,7 +1695,7 @@
     { id: 'pattern', name: 'パターン部門', point: '模様の乱れと、斑点の迫力', score: x => P0(x).aberrant * 0.6 + P0(x).blotch * 0.4 },
     { id: 'lav', name: 'ラベンダー部門', point: 'ラベンダー色の濃さ（黄色はひかえめに）', score: x => P0(x).lav * 0.8 + (100 - x.tang) * 0.2 },
     { id: 'mono', name: 'モノトーン部門', point: 'マックスノーなどの白と黒のコントラスト', score: x => Math.min(100, (x.genes.snow ? 45 : 0) + (x.genes.snow === 2 ? 15 : 0) + (x.genes.ecl === 2 ? 10 : 0) + (100 - x.tang) * 0.3 + (x.genes.bliz === 2 ? 10 : 0)) },
-    { id: 'rare', name: '総合部門', point: '珍しいモルフかどうかと、全体のバランス', score: x => Math.min(100, 30 + ['alb', 'ecl', 'bliz'].reduce((n, k) => n + (x.genes[k] === 2 ? 16 : 0), 0) + x.genes.snow * 9 + Math.max(x.tang, P0(x).carrot, 100 - P0(x).spots, P0(x).aberrant, P0(x).lav) * 0.3) },
+    { id: 'rare', name: '総合部門', point: '珍しいモルフかどうかと、全体のバランス', score: x => Math.min(100, 30 + ['alb', 'ecl', 'bliz', 'bell'].reduce((n, k) => n + (x.genes[k] === 2 ? 16 : 0), 0) + x.genes.snow * 9 + (x.genes.giant || 0) * 6 + Math.max(x.tang, P0(x).carrot, 100 - P0(x).spots, P0(x).aberrant, P0(x).lav) * 0.3) },
   ];
   const RIVALS = ['ヤモリ堂', '荒野レプタイルズ', 'ひだまりブリーダーズ', 'しっぽ工房', 'みかん畑ファーム', 'ガラス屋さん', 'ナイトゲッコー', 'さばくのおうち', 'こもれびレプ', 'ぷにぷに舎'];
   const RNAMES = ['コハク', 'ネロ', 'ルビー', 'ソラ', 'マシュ', 'カカオ', 'ユキ', 'ヒノキ', 'モモ', 'ジン', 'アオ', 'キナ', 'レモ', 'ハク'];
@@ -1760,6 +1769,12 @@
     'レッドアイアルビノ': { type: '組み合わせ', cond: 'トレンパーアルビノ（2つ）＋ エクリプス（2つ）。', how: ['アルビノ × エクリプス で、両方の het を持つ子を作ります。', 'その子同士を掛けあわせると、子の 1/16（約6%）。', 'アルビノ het エクリプス同士なら 25% に上がります。'], tip: '目がルビーのような赤になります。' },
     'ラプター': { type: '組み合わせ', cond: 'レッドアイアルビノで、タンジェリン度70以上。', how: ['レッドアイアルビノを作ります。', 'オレンジの濃い子と掛けあわせて、タンジェリン度を上げていきます。'], tip: '単一遺伝子と見た目の遺伝の両方が必要です。' },
     'ブレイジングブリザード': { type: '組み合わせ', cond: 'トレンパーアルビノ（2つ）＋ ブリザード（2つ）。', how: ['アルビノ × ブリザード で、両方の het を持つ子を作ります。', 'その子同士を掛けあわせると、子の 1/16（約6%）。'], tip: '模様のない、黄色っぽい白い体になります。' },
+    'ジャイアント': { type: '共優性', cond: 'ジャイアントの遺伝子を1つ持つ。体の大きさの遺伝子で、色や模様は変わりません。', how: ['ジャイアント × ノーマル で、子の 50% がジャイアントです。', 'お店にときどき入荷します。'], tip: 'おとなになると、ふつうの子よりひとまわり大きく、体重も重くなります。' },
+    'スーパージャイアント': { type: '共優性', cond: 'ジャイアントの遺伝子を2つ持つ。', how: ['ジャイアント × ジャイアント で、子の 25%。', 'スーパージャイアント × ジャイアント なら 50% です。'], tip: '今週の特別入荷に来ることがあります。とても大きく育ちます。' },
+    'ベルアルビノ': { type: '劣性', cond: 'ベルアルビノの遺伝子を2つ持つ。', how: ['het ベルアルビノ同士で 25%、ベルアルビノ同士なら 100%。', 'トレンパーアルビノとは別の遺伝子です。トレンパー × ベルの子はアルビノになりません（両方の het になります）。'], tip: 'トレンパーより明るく、ピンクがかった体と目になります。' },
+    'レーダー': { type: '組み合わせ', cond: 'ベルアルビノ（2つ）＋ エクリプス（2つ）。', how: ['ベルアルビノ × エクリプス で、両方の het を持つ子を作ります。', 'その子同士を掛けあわせると、子の 1/16（約6%）。', 'ベルアルビノ het エクリプス同士なら 25% です。'], tip: '今週の特別入荷やショーの即売に、近道になる子が来ることがあります。目が赤くなります。' },
+    'サングロー': { type: '組み合わせ', cond: 'トレンパーアルビノ（2つ）＋ スーパーハイポ（斑点の量8未満）＋ タンジェリン（タンジェリン度70以上）。', how: ['アルビノの子と、斑点が少なくオレンジの濃い子を掛けあわせます。', '生まれた het アルビノの子の中から、斑点が少なくオレンジの濃い子を選びます。', 'その子同士を掛けあわせ、アルビノで条件をそろえた子を探します。'], tip: '斑点のない、あざやかなオレンジ一色のレオパ。キャロットテールもそろうと、さらに豪華です。' },
+    'ギャラクシー': { type: '組み合わせ', cond: 'マックスノー（1つ）＋ エクリプス（2つ）＋ 模様の乱れが70以上。', how: ['マックスノー エクリプスを作ります（作り方は「マックスノー エクリプス」を見てね）。', '模様の乱れが大きい子と掛けあわせて、模様の乱れを選別していきます。'], tip: '白と黒の模様がまだらに散って、星空のように見えます。（ギャラクシーの呼び方はブリーダーによって少しちがうので、このゲームではこの条件にしています）' },
     'ディアブロブランコ': { type: '組み合わせ', cond: 'トレンパーアルビノ・エクリプス・ブリザードの3つとも2つずつ。', how: ['レッドアイアルビノとブレイジングブリザードをそれぞれ作ります。', '掛けあわせて、3つ全部の遺伝子を持つ子を作り、さらに掛けあわせます。'], tip: '図鑑でいちばんむずかしいモルフ。何代もかかります。' },
   };
   const GUIDE_TYPE = { '基本': 'muted', 'ライン': 'good', '劣性': 'info', '共優性': 'pink', '組み合わせ': 'warn' };
@@ -2001,6 +2016,7 @@
     ['ハイイエロー', 0.1], ['マックスノー', 0.2], ['トレンパーアルビノ', 0.35], ['マックスノー トレンパーアルビノ', 0.5],
     ['エクリプス', 0.45], ['スーパーマックスノー', 0.55], ['ハイポ', 0.55], ['キャロットテール', 0.5],
     ['タンジェリン', 0.6], ['ジャングル', 0.6], ['ラベンダー', 0.55], ['スーパーハイポ', 0.85], ['ストライプ', 0.85],
+    ['ジャイアント', 0.35], ['ベルアルビノ', 0.4],
   ];
   const ORDER_TRAITS = [
     { key: 'tang', vals: [45, 55, 65, 75], label: v => `タンジェリン度${v}以上`, test: (g, v) => g.tang >= v, diff: v => (v - 35) / 45 },
@@ -2608,7 +2624,7 @@
     const curve = t < 0.19 ? 3 + (t / 0.19) * 7 : t < 0.54 ? 10 + ((t - 0.19) / 0.35) * 20 : 30 + Math.pow((t - 0.54) / 0.46, 0.8) * 26;
     const sexMul = g.sex === 'M' ? 1.12 : 0.94;
     const seedMul = 0.92 + (Math.abs(g.seed || 0) % 1000) / 1000 * 0.16; // 個体差 ±8%
-    return curve * sexMul * seedMul;
+    return curve * sexMul * seedMul * GIANT_WEIGHT[giantOf(g)];
   }
   function weightOf(g) {
     let w = bodyBase(g);
@@ -2685,7 +2701,7 @@
     const prev = log.length > 1 ? log[log.length - 2].w : null;
     const diff = prev != null ? Math.round((cur - prev) * 10) / 10 : null;
     const st = stageOf(g);
-    const guide = st === 'adult' ? (g.sex === 'M' ? '60〜80g' : '45〜65g') : st === 'young' ? '10〜30g' : '3〜10g';
+    const guide = (st === 'adult' ? (g.sex === 'M' ? '60〜80g' : '45〜65g') : st === 'young' ? '10〜30g' : '3〜10g') + (giantOf(g) ? `（${giantOf(g) === 2 ? 'スーパージャイアント' : 'ジャイアント'}はもっと大きく育ちます）` : '');
     return `<div class="wbox"><div class="wmain"><small class="muted">体重</small><b>${cur}<small>g</small></b>
         ${diff != null && diff !== 0 ? `<span class="pill ${diff > 0 ? 'good' : 'warn'}">きのうより ${diff > 0 ? '＋' : ''}${diff}g</span>` : '<span class="pill">ふつう</span>'}</div>
       ${weightChart(g)}
@@ -3142,7 +3158,8 @@
         else if (pick < 0.6) o.poly.mel = 70 + Math.round(r() * 25);
         else if (pick < 0.75) o.poly.lav = 72 + Math.round(r() * 25);
         else if (pick < 0.9) { o.genes.alb = 2; o.genes.ecl = 1 + (r() < 0.5 ? 1 : 0); }
-        else { o.genes.snow = 1; o.genes.bliz = 1; o.poly.aberrant = 70 + Math.round(r() * 25); }
+        else if (pick < 0.95) { o.genes.snow = 1; o.genes.ecl = 2; o.poly.aberrant = 70 + Math.round(r() * 25); }
+        else { o.genes.bell = 2; o.genes.ecl = 1 + (r() < 0.5 ? 1 : 0); }
         o.growth = 60 + Math.round(r() * 60);
         o.price = Math.round(valueOf(o) * 1.25);
         o.booth = RIVALS[(i * 3 + Math.floor(r() * 10)) % RIVALS.length];
@@ -3215,7 +3232,7 @@
     for (const [name, d] of ORDER_MORPHS) { const e = G.DEX.find(x => x.name === name); if (e && dex.includes(e.id)) diff = Math.max(diff, d); }
     for (const t of ORDER_TRAITS) for (const v of t.vals) if (t.test(g, v)) diff = Math.max(diff, t.diff(v));
     // 依頼に出てこない、もっとめずらしいモルフ
-    const rare = { SHTCTB: 1.3, 'ブラックナイト': 1.1, 'ディアブロブランコ': 1.4, 'ラプター': 1.1, 'トータルエクリプス': 0.95, 'レッドアイアルビノ': 0.9, 'ブレイジングブリザード': 0.9, 'ブリザード': 0.6, 'スーパーマックスノー トレンパーアルビノ': 0.8, 'マックスノー エクリプス': 0.75 };
+    const rare = { SHTCTB: 1.3, 'ブラックナイト': 1.1, 'ディアブロブランコ': 1.4, 'ラプター': 1.1, 'トータルエクリプス': 0.95, 'レッドアイアルビノ': 0.9, 'ブレイジングブリザード': 0.9, 'ブリザード': 0.6, 'スーパーマックスノー トレンパーアルビノ': 0.8, 'マックスノー エクリプス': 0.75, 'レーダー': 0.9, 'サングロー': 1.05, 'ギャラクシー': 1.0, 'スーパージャイアント': 0.8 };
     for (const id of dex) if (rare[id]) diff = Math.max(diff, rare[id]);
     return Math.round((50 + diff * 220) * (stageOf(g) === 'adult' ? 1.5 : 1) * 1.2);
   }

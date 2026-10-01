@@ -379,7 +379,10 @@
         ctx.fill();
       }
     };
-    const jungle = poly.aberrant >= 60, stripe = poly.aberrant >= 82;
+    // ギャラクシー（マックスノー エクリプスで模様が大きく乱れた子）は、すじにならず、まだらに広がって白い点が散る
+    const gg = look.genes || {};
+    const galaxy = gg.snow === 1 && gg.ecl === 2 && gg.alb !== 2 && poly.aberrant >= 70;
+    const jungle = poly.aberrant >= 60, stripe = poly.aberrant >= 82 && !galaxy;
     if (pal.pattern) {
       const bandA = st === 'baby' ? 0.95 : st === 'young' ? 0.42 : 0;
       if (bandA > 0) {
@@ -467,7 +470,14 @@
           const z = 1.25 - r() * (1.25 - Z_TAILBASE + 1.6);
           let u = 0.5 + (r() + r() - 1) * 0.36;
           if (stripe) u = (r() < 0.5 ? 0.42 : 0.58) + (r() - 0.5) * 0.05;
-          blob(u, z, (0.03 + r() * 0.04) * sizeMul, pal.spot, alpha, (r() - 0.5) * 0.6, stripe ? 1.4 : 2.2 + r() * 1.6);
+          blob(u, z, (0.03 + r() * 0.04) * sizeMul * (galaxy ? 1.35 : 1), pal.spot, alpha, (r() - 0.5) * 0.6, stripe ? 1.4 : galaxy ? 1.2 + r() * 1.4 : 2.2 + r() * 1.6);
+        }
+        if (galaxy) {
+          // 星のような白い点
+          for (let i = 0; i < 260; i++) {
+            const z = 1.25 - r() * (1.25 - Z_TAILBASE + 1.8), u = 0.5 + (r() + r() - 1) * 0.4;
+            blob(u, z, 0.006 + r() * 0.012, '#FFFFFF', 0.7 + r() * 0.3);
+          }
         }
       } else {
         // 胴：背中を中心に
@@ -1029,7 +1039,7 @@
   }
   function lookKey(look) {
     const p = look.poly || {};
-    return [MODEL.geo ? 'm' : 'p', look.genes.snow, look.genes.alb, look.genes.ecl, look.genes.bliz, look.tang, p.spots, p.blotch, p.head, p.carrot, p.lav, p.aberrant, p.mel, look.seed, look.stage, !!look.gravid, !!look.shed].join('|');
+    return [MODEL.geo ? 'm' : 'p', look.genes.snow, look.genes.alb, look.genes.ecl, look.genes.bliz, look.genes.bell, look.genes.giant, look.tang, p.spots, p.blotch, p.head, p.carrot, p.lav, p.aberrant, p.mel, look.seed, look.stage, !!look.gravid, !!look.shed].join('|');
   }
 
   // ======================================================

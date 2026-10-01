@@ -6,6 +6,8 @@
  *      alb  : トレンパーアルビノ（劣性）
  *      ecl  : エクリプス（劣性）
  *      bliz : ブリザード（劣性）
+ *      bell : ベルアルビノ（劣性。トレンパーアルビノとは別の遺伝子なので、かけあわせてもアルビノにならない）
+ *      giant: ジャイアント（共優性。1コピーで大きく、2コピーでスーパージャイアント）
  *
  * 2) 見た目の遺伝（ライン遺伝・多因子）
  *    0〜100 の値で持ち、子は「両親の平均＋ゆらぎ」になる。たまに大きくぶれる。
@@ -27,6 +29,8 @@
     { key: 'alb', name: 'トレンパーアルビノ', short: 'アルビノ', type: 'rec' },
     { key: 'ecl', name: 'エクリプス', short: 'エクリプス', type: 'rec' },
     { key: 'bliz', name: 'ブリザード', short: 'ブリザード', type: 'rec' },
+    { key: 'bell', name: 'ベルアルビノ', short: 'ベルアルビノ', type: 'rec' },
+    { key: 'giant', name: 'ジャイアント', type: 'codom' },
   ];
   const POLY = [
     { key: 'spots', name: '斑点の量', lo: '少ない', hi: '多い' },
@@ -40,7 +44,7 @@
   const TANG_HIGH = 70;
   const TANG_MID = 40;
   const T = {
-    hypo: 22, superHypo: 8, baldy: 10, carrot: 50, jungle: 60, stripe: 82, lav: 70, night: 85,
+    hypo: 22, superHypo: 8, baldy: 10, carrot: 50, jungle: 60, stripe: 82, lav: 70, night: 85, galaxy: 70,
   };
 
   const c100 = v => Math.max(0, Math.min(100, Math.round(v)));
@@ -52,7 +56,7 @@
 
   function normGenes(g) {
     g = g || {};
-    return { snow: g.snow || 0, alb: g.alb || 0, ecl: g.ecl || 0, bliz: g.bliz || 0 };
+    return { snow: g.snow || 0, alb: g.alb || 0, ecl: g.ecl || 0, bliz: g.bliz || 0, bell: g.bell || 0, giant: g.giant || 0 };
   }
   // ペットショップやワイルドにいそうな、ふつうの個体の値
   function randomPoly(rng) {
@@ -78,9 +82,11 @@
   // ---------- 名前
   function mendelTokens(genes, tang) {
     const g = normGenes(genes);
-    const a = g.alb === 2, e = g.ecl === 2, b = g.bliz === 2;
+    const a = g.alb === 2, e = g.ecl === 2, b = g.bliz === 2, bl = g.bell === 2;
     let tangUsed = false;
     const tokens = [];
+    if (g.giant === 1) tokens.push('ジャイアント');
+    if (g.giant === 2) tokens.push('スーパージャイアント');
     if (g.snow === 1) tokens.push('マックスノー');
     if (g.snow === 2 && e && !a && !b) {
       tokens.push('トータルエクリプス');
@@ -90,9 +96,11 @@
       else if (a && e) {
         if (tang >= TANG_HIGH) { tokens.push('ラプター'); tangUsed = true; } else tokens.push('レッドアイアルビノ');
       } else if (a && b) tokens.push('ブレイジングブリザード');
+      else if (bl && e && !a) tokens.push('レーダー');
       else {
         if (b) tokens.push('ブリザード');
         if (a) tokens.push('トレンパーアルビノ');
+        if (bl) tokens.push('ベルアルビノ');
         if (e) tokens.push('エクリプス');
       }
     }
@@ -127,10 +135,22 @@
     const m = mendelTokens(genes, tang);
     let line = lineTokens(genes, tang, poly);
     if (m.tangUsed) line = line.filter(x => x !== 'タンジェリン');
+    // 組み合わせの呼び名：サングロー（アルビノ＋スーパーハイポ＋タンジェリン）、ギャラクシー（マックスノー エクリプスで模様が大きく乱れた子）
+    const sw = (drop, name, at) => { m.tokens = m.tokens.filter(x => !drop.includes(x)); line = line.filter(x => !drop.includes(x)); m.tokens.splice(Math.min(at, m.tokens.length), 0, name); };
+    if (isSunglow(genes, tang, poly)) sw(['トレンパーアルビノ', 'スーパーハイポ', 'タンジェリン'], 'サングロー', 9);
+    if (isGalaxy(genes, poly)) { sw(['マックスノー', 'エクリプス', 'ジャングル', 'ストライプ'], 'ギャラクシー', 9); }
     if (!m.tokens.length && !line.length) return tang >= TANG_MID ? 'ハイイエロー' : 'ノーマル';
     return m.tokens.concat(line).join(' ');
   }
 
+  function isSunglow(genes, tang, poly) {
+    const g = normGenes(genes);
+    return !!poly && g.alb === 2 && g.ecl !== 2 && g.bliz !== 2 && poly.spots < T.superHypo && tang >= TANG_HIGH;
+  }
+  function isGalaxy(genes, poly) {
+    const g = normGenes(genes);
+    return !!poly && g.snow === 1 && g.ecl === 2 && g.alb !== 2 && poly.aberrant >= T.galaxy;
+  }
   // 見た目に出ていない劣性遺伝子（ヘテロ）
   function hets(genes) {
     const g = normGenes(genes);
@@ -189,12 +209,13 @@
   }
 
   // ---------- 図鑑
-  const noVisual = g => { g = normGenes(g); return !g.snow && g.alb !== 2 && g.ecl !== 2 && g.bliz !== 2; };
+  const noVisual = g => { g = normGenes(g); return !g.snow && g.alb !== 2 && g.ecl !== 2 && g.bliz !== 2 && g.bell !== 2 && !g.giant; };
   const hasPattern = g => normGenes(g).bliz !== 2;
   const P = (o) => Object.assign({ spots: 60, blotch: 45, head: 60, carrot: 5, lav: 20, aberrant: 18, mel: 8 }, o);
   const mendelEntry = (name, genes, hint, tang) => ({
     id: name, name, hint, rep: { genes, tang: tang || 15, poly: P({}) },
-    test: (g, t) => mendelName(g, t) === name,
+    // ジャイアントは大きさだけの遺伝子なので、色や模様のモルフの判定ではのぞく
+    test: (g, t) => mendelName(Object.assign({}, g, { giant: 0 }), t) === name,
   });
   const DEX = [
     { id: 'ノーマル', name: 'ノーマル', hint: 'いちばん基本の色。野生のレオパに近い姿', rep: { genes: {}, tang: 15, poly: P({}) }, test: g => noVisual(g) },
@@ -221,6 +242,12 @@
     mendelEntry('ラプター', { alb: 2, ecl: 2 }, 'レッドアイアルビノで、タンジェリン度70以上', 85),
     mendelEntry('ブレイジングブリザード', { alb: 2, bliz: 2 }, 'アルビノ＋ブリザード'),
     mendelEntry('ディアブロブランコ', { alb: 2, ecl: 2, bliz: 2 }, 'アルビノ＋エクリプス＋ブリザード。最難関'),
+    { id: 'ジャイアント', name: 'ジャイアント', hint: '共優性。体が大きく育つ。ジャイアント×ノーマルで50%', rep: { genes: { giant: 1 }, tang: 20, poly: P({}) }, test: g => g.giant >= 1 },
+    { id: 'スーパージャイアント', name: 'スーパージャイアント', hint: 'ジャイアント同士で25%。とても大きくなる', rep: { genes: { giant: 2 }, tang: 20, poly: P({}) }, test: g => g.giant === 2 },
+    { id: 'ベルアルビノ', name: 'ベルアルビノ', hint: '劣性。トレンパーとは別のアルビノで、ピンクがかった色', rep: { genes: { bell: 2 }, tang: 20, poly: P({}) }, test: g => g.bell === 2 },
+    { id: 'レーダー', name: 'レーダー', hint: 'ベルアルビノ＋エクリプス。目が赤くなる', rep: { genes: { bell: 2, ecl: 2 }, tang: 25, poly: P({}) }, test: g => g.bell === 2 && g.ecl === 2 && g.alb !== 2 },
+    { id: 'サングロー', name: 'サングロー', hint: 'トレンパーアルビノ＋スーパーハイポ＋タンジェリン。斑点のないオレンジ', rep: { genes: { alb: 2 }, tang: 88, poly: P({ spots: 3, head: 20, carrot: 70 }) }, test: (g, t, p) => isSunglow(g, t, p) },
+    { id: 'ギャラクシー', name: 'ギャラクシー', hint: 'マックスノー エクリプスで、模様が大きく乱れた子。星空のような姿', rep: { genes: { snow: 1, ecl: 2 }, tang: 10, poly: P({ aberrant: 85, blotch: 70 }) }, test: (g, t, p) => isGalaxy(g, p) },
   ];
   // その個体が当てはまる図鑑の項目
   function dexMatches(genes, tang, poly) {

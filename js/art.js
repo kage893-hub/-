@@ -30,6 +30,9 @@
     let eye = '#77705F', pupil = '#16130F', solid = false;
 
     if (a) { spot = '#A0704A'; base = mix(base, '#F5E6BE', 0.25); tail = mix(tail, '#F5E6BE', 0.25); }
+    // ベルアルビノ：トレンパーより明るく、ピンクがかった色
+    const bl = genes.bell === 2 && !a;
+    if (bl) { spot = '#B98068'; base = mix(base, '#F7DCCB', 0.35); tail = mix(tail, '#F4DDD6', 0.35); }
     if (s === 1) { base = mix(base, '#F3F0E6', 0.62); tail = mix(tail, '#F2F0EC', 0.6); }
     if (s === 2) { base = '#F2F1EC'; tail = '#EDEDE9'; }
     if (b) { base = s ? mix(base, '#F4F2EC', 0.5) : mix(base, '#EFE7CF', 0.55); tail = mix(base, '#F2EEE6', 0.3); }
@@ -41,9 +44,10 @@
       const k = Math.min(1, (mel - 30) / 55), m = k * k * (3 - 2 * k) * 0.97;
       base = mix(base, '#141210', m); tail = mix(tail, '#1C1917', m * 0.95); spot = mix(spot, '#050404', m);
     }
-    if (e) { solid = true; eye = a ? '#8E2231' : '#151515'; }
+    if (e) { solid = true; eye = a || bl ? (bl ? '#A3283A' : '#8E2231') : '#151515'; }
     else if (s === 2) { solid = true; eye = '#161616'; }
     else if (a) { eye = '#E2C1BC'; pupil = '#B4535A'; }
+    else if (bl) { eye = '#E5B3B3'; pupil = '#C0505E'; }
     else if (b) { eye = '#4A4540'; }
 
     return { base, tail, spot, eye, pupil, solid, pattern: !b, outline: mix(base, '#3A2E22', 0.38) };
