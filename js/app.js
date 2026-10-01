@@ -1181,8 +1181,8 @@
   // ======================================================
   const SHOW_LEVELS = [
     { id: 'local', name: '町の品評会', mark: '初級', mean: 46, reward: 30, note: 'はじめての出場にぴったり' },
-    { id: 'region', name: '地方大会', mark: '中級', mean: 62, reward: 80, note: '血統のいい子がそろう' },
-    { id: 'nation', name: '全国大会', mark: '上級', mean: 77, reward: 200, note: 'トップブリーダーの子が集まる' },
+    { id: 'region', name: '地方大会', mark: '中級', mean: 62, reward: 60, note: '血統のいい子がそろう' },
+    { id: 'nation', name: '全国大会', mark: '上級', mean: 77, reward: 100, note: 'トップブリーダーの子が集まる' },
   ];
   const P0 = x => (x.poly || {});
   const SHOW_THEMES = [
