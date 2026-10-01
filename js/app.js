@@ -164,6 +164,18 @@
     return list.map(o => Object.assign(o, { genes: G.normGenes(o.genes), growth: 55, seed: Math.floor(Math.random() * 1e9) }));
   }
   const nameOf = x => G.morphName(x.genes, x.tang, x.poly);
+  // 家系図用：親の情報を写しておく（里親に出したあとでもたどれるように）。祖父母までで止める
+  function snap(g, depth) {
+    if (!g) return null;
+    return {
+      name: g.name, sex: g.sex, genes: Object.assign({}, g.genes), tang: g.tang, poly: Object.assign({}, g.poly), seed: g.seed, gen: g.gen,
+      parents: depth > 0 && g.parents ? { mom: trimSnap(g.parents.mom, depth - 1), dad: trimSnap(g.parents.dad, depth - 1) } : null,
+    };
+  }
+  function trimSnap(x, depth) {
+    if (!x) return null;
+    return Object.assign({}, x, { parents: depth > 0 && x.parents ? { mom: trimSnap(x.parents.mom, depth - 1), dad: trimSnap(x.parents.dad, depth - 1) } : null });
+  }
   // 図鑑に登録して、新しく載った項目の名前を返す
   function register(g) {
     const fresh = G.dexMatches(g.genes, g.tang, g.poly).filter(id => !S.dex[id]);
@@ -190,7 +202,11 @@
         if (fedH > 0) grow(g, fedH * GROWTH.perHour * speedX() * heatInfo(heatOf(g)).growth, now);
       }
       S.lastTick = now;
-      for (const g of S.geckos) { recordWeight(g, now); checkMilestones(g); }
+      for (const g of S.geckos) {
+        recordWeight(g, now); checkMilestones(g);
+        if (!g.weekAt) g.weekAt = now;
+        else if (now - g.weekAt >= 7 * DAYMS) { g.weekAt = now; memo(g, `1週間の記録：体重 ${weightOf(g)}g ・ ${STAGE_LABEL[stageOf(g)]}`, true); }
+      }
     }
     for (const g of S.geckos) {
       if (g.poopAt && now >= g.poopAt) { g.poop = Math.min(3, g.poop + 1); g.clean = clamp(g.clean - 10); g.poopAt = 0; mile(g, 'poop', 'はじめてのフンをした（元気なしるし！）', false); }
@@ -219,7 +235,7 @@
       S.eggs.push({
         id: 'e' + (S.nextId++), genes: child.genes, tang: child.tang, poly: child.poly,
         sex: Math.random() < temp.pMale ? 'M' : 'F', temp: temp.t,
-        laidAt: now, hatchAt: now + realDays(temp.days), mom: g.name, dad: dad.name,
+        laidAt: now, hatchAt: now + realDays(temp.days), mom: g.name, dad: dad.name, pmom: snap(g, 1), pdad: trimSnap(Object.assign({ sex: 'M' }, dad), 1),
         gen: Math.max(g.gen, dad.gen || 1) + 1,
       });
     }
@@ -251,7 +267,49 @@
     o.price = Math.round(valueOf(o) * 1.3);
     return o;
   }
+  // 今週の特別入荷：1週間に1匹だけ、ふだんは並ばない組み合わせの子が来る
+  const weekKey = now => Math.floor((now + 3 * DAYMS) / (7 * DAYMS));
+  const SPECIALS = [
+    { genes: { snow: 1, alb: 2, ecl: 2 }, note: 'マックスノー×アルビノ×エクリプスの豪華な組み合わせ' },
+    { genes: { bliz: 2, alb: 1 }, note: '模様のないブリザード' },
+    { genes: { snow: 2, ecl: 2 }, note: '真っ黒な目のスーパーマックスノー エクリプス' },
+    { genes: { alb: 2 }, tang: 82, poly: { carrot: 65, spots: 10 }, note: '選び抜かれたオレンジの血統' },
+    { genes: {}, tang: 30, poly: { lav: 85, spots: 20 }, note: 'ラベンダーがとても濃い血統' },
+    { genes: { ecl: 1, bliz: 1 }, poly: { aberrant: 85 }, note: '模様が大きく乱れた一点もの（het つき）' },
+  ];
+  function refreshSpecial(now) {
+    const wk = weekKey(now);
+    if (S.special && S.special.week === wk) return;
+    const sp = SPECIALS[wk % SPECIALS.length];
+    const o = randomOffer();
+    o.genes = G.normGenes(sp.genes);
+    if (sp.tang != null) o.tang = sp.tang;
+    Object.assign(o.poly, sp.poly || {});
+    o.growth = 60;
+    o.price = Math.round(valueOf(o) * 1.15);
+    S.special = { week: wk, offer: o, note: sp.note, sold: false };
+  }
+  function specialCard() {
+    const sp = S.special;
+    if (!sp) return '';
+    const left = (weekKey(Date.now()) + 1) * 7 * DAYMS - 3 * DAYMS - Date.now();
+    if (sp.sold) return `<div class="card special sold"><b>今週の特別入荷</b><p class="muted small">今週の子はおむかえ済みです。次の特別入荷まで あと${fmtLeft(left)}</p></div>`;
+    const o = sp.offer, morph = nameOf(o);
+    return `<div class="offer special">
+        <div class="offer-art" data-action="viewOffer" data-i="sp">${portrait(o, stageOf(o), morph)}</div>
+        <div class="offer-main">
+          <span class="pill new">今週の特別入荷 ・ あと${fmtLeft(left)}</span>
+          <b>${esc(morph)}</b>
+          <small class="muted">${o.sex === 'M' ? '♂ オス' : '♀ メス'} ・ ${STAGE_LABEL[stageOf(o)]} ・ ${esc(sp.note)}</small>
+          ${traitTable(o, true)}
+          <button class="act sm" data-action="viewOffer" data-i="sp">じっくり見る</button>
+          <button class="act primary sm" data-action="buyGecko" data-i="sp" ${S.coins < o.price || S.geckos.length >= S.cases ? 'disabled' : ''}>${o.price} コインでおむかえ</button>
+        </div></div>`;
+  }
+  const offerAt = i => i === 'sp' ? (S.special && !S.special.sold ? S.special.offer : null) : S.offers[Number(i)];
+  function takeOffer(i) { if (i === 'sp') S.special.sold = true; else S.offers.splice(Number(i), 1); }
   function refreshOffers(now) {
+    refreshSpecial(now);
     if (now < S.offersAt) return;
     S.offers = [randomOffer(), randomOffer(), randomOffer()];
     S.offersAt = now + 3 * HOUR;
@@ -444,6 +502,7 @@
     }
     S.eggs = S.eggs.filter(x => x !== e);
     const g = newGecko({ name: unusedName(), sex: e.sex, genes: e.genes, tang: e.tang, poly: e.poly, growth: 0, hunger: 60, gen: e.gen, hatched: true });
+    g.parents = e.pmom ? { mom: e.pmom, dad: e.pdad } : { mom: { name: e.mom, sex: 'F' }, dad: { name: e.dad, sex: 'M' } };
     S.geckos.push(g);
     S.stats.hatched++;
     S.coins += 5;
@@ -610,7 +669,7 @@
       const mom = g.sex === 'F' ? g : p, dad = g.sex === 'F' ? p : g;
       memo(mom, `${dad.name}とペアリングした`);
       memo(dad, `${mom.name}とペアリングした`);
-      mom.gravid = { layAt: now + realDays(28), dad: { name: dad.name, genes: Object.assign({}, dad.genes), tang: dad.tang, poly: Object.assign({}, dad.poly), gen: dad.gen } };
+      mom.gravid = { layAt: now + realDays(28), dad: snap(dad, 1) };
       dad.restUntil = now + realDays(3);
       closeSheet();
       toast(`ペアリング成功！${mom.name}は約${fmtLeft(realDays(28))}後に卵を産みます`);
@@ -644,6 +703,40 @@
     },
     temp(t) { S.incTemp = Number(t.dataset.t); renderView(); save(); },
     hatch(t) { hatch(t.dataset.id); },
+    candle(t) {
+      const e = S.eggs.find(x => x.id === t.dataset.id);
+      if (!e) return;
+      const p = clamp((Date.now() - e.laidAt) / (e.hatchAt - e.laidAt), 0, 1);
+      const sc = 0.25 + p * 0.85, veins = Math.min(1, p * 3);
+      const c = A.colors(e.genes, e.tang, 'adult');
+      const stageText = p < 0.12 ? '赤い血管がうっすら見えはじめました。中で命が育っています'
+        : p < 0.4 ? '小さな影が見えます。ときどき、ぴくっと動きました'
+        : p < 0.7 ? 'からだの形がわかるくらいに育ちました。しっぽを丸めています'
+        : p < 0.95 ? `大きくなって、卵いっぱいに。模様がうっすら……「${esc(G.morphName(e.genes, e.tang, e.poly))}」っぽい？`
+        : 'もうすぐ出てきそう！ 殻の内側でもぞもぞしています';
+      openSheet(`<p class="eyebrow">${esc(e.mom)} × ${esc(e.dad)} の卵</p>
+        <h3 class="sheet-title">ライトで照らしてみた</h3>
+        <svg class="candle" viewBox="0 0 160 170" role="img" aria-label="ライトで照らした卵">
+          <defs><radialGradient id="cgl" cx="50%" cy="55%" r="60%"><stop offset="0" stop-color="#FFF4C8"/><stop offset=".65" stop-color="#F6BF63"/><stop offset="1" stop-color="#B9702A"/></radialGradient>
+          <radialGradient id="chalo" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="rgba(255,200,110,.55)"/><stop offset="1" stop-color="rgba(255,200,110,0)"/></radialGradient></defs>
+          <rect width="160" height="170" rx="18" fill="#1D1914"/>
+          <circle cx="80" cy="88" r="78" fill="url(#chalo)"/>
+          <ellipse cx="80" cy="88" rx="44" ry="58" fill="url(#cgl)"/>
+          <g stroke="#B5462E" stroke-width="1.3" fill="none" opacity="${(veins * 0.7).toFixed(2)}">
+            <path d="M80 92 C 66 80 58 66 54 52"/><path d="M80 92 C 96 84 104 70 110 60"/><path d="M80 92 C 70 104 64 118 60 128"/><path d="M80 92 C 92 106 100 116 106 124"/><path d="M62 70 C 54 74 48 82 44 88"/><path d="M98 76 C 106 80 112 88 116 96"/>
+          </g>
+          ${p >= 0.12 ? `<g transform="translate(80 92) scale(${sc.toFixed(2)})" opacity="${Math.min(0.85, 0.3 + p).toFixed(2)}">
+            <path d="M-6 -4 C 22 -10 26 20 4 24 C -14 27 -22 12 -12 6" stroke="${p > 0.7 ? c.spot : '#6B3A18'}" stroke-opacity=".6" stroke-width="12" fill="none" stroke-linecap="round"/>
+            <ellipse cx="-12" cy="-12" rx="12" ry="10" fill="#6B3A18" fill-opacity=".6"/>
+            ${p > 0.4 ? '<circle cx="-15" cy="-14" r="3.2" fill="#2A1508" fill-opacity=".8"/>' : ''}
+          </g>` : ''}
+        </svg>
+        <div class="bars">${bar('育ち具合', p * 100, 'var(--accent)', Math.round(p * 100) + '%')}</div>
+        <p>${stageText}</p>
+        <p class="muted small">${e.temp}℃ ・ ふ化まで あと${fmtLeft(Math.max(0, e.hatchAt - Date.now()))}</p>
+        <button class="act primary" data-action="closeSheet">とじる</button>`);
+      bonusDone('candle');
+    },
     setSpeed(t) {
       const v = SPEEDS.find(x => x.x === Number(t.dataset.x));
       if (!v) return;
@@ -673,7 +766,7 @@
       renderView(); save();
     },
     viewOffer(t) {
-      const i = Number(t.dataset.i), o = S.offers[i];
+      const i = t.dataset.i, o = offerAt(i);
       if (!o) return;
       const morph = nameOf(o), hets = G.hets(o.genes), st = stageOf(o);
       const w = weightOf(Object.assign({}, o, { hunger: 70 }));
@@ -708,19 +801,22 @@
         <p class="muted">${STAGE_LABEL[st]} ・ ${ageDays(g)}日目 ・ 体重 ${weightOf(g)}g ・ 第${g.gen}世代</p>
         ${hets.length ? `<p class="het-line">${hets.map(h => 'het ' + h).join(' / ')}</p>` : ''}
         ${traitTable(g)}
+        <h4 class="h4">家系図</h4>
+        ${familyTree(g)}
         <div class="sheet-actions"><button class="act" data-action="closeSheet">とじる</button></div></div>`);
       const el = $('#offerViewer');
       if (L3.supported && el) viewer = L3.createViewer(el, { genes: G.normGenes(g.genes), tang: g.tang, poly: g.poly, seed: g.seed || 1, stage: st, gravid: !!g.gravid });
+      bonusDone('view');
     },
     viewAngle(t) { if (viewer) viewer.view(t.dataset.v); },
     buyGecko(t) {
-      const i = Number(t.dataset.i);
-      const o = S.offers[i];
+      const i = t.dataset.i;
+      const o = offerAt(i);
       if (!o) return;
       if (S.geckos.length >= S.cases) { toast('空いているケースがありません'); return; }
       if (S.coins < o.price) { toast('コインが足りません'); return; }
       S.coins -= o.price;
-      S.offers.splice(i, 1);
+      takeOffer(i);
       const g = newGecko({ name: unusedName(), sex: o.sex, genes: o.genes, tang: o.tang, poly: o.poly, growth: o.growth, hunger: 70 });
       g.seed = o.seed;
       S.geckos.push(g);
@@ -936,7 +1032,7 @@
           <b>${esc(e.mom)} × ${esc(e.dad)}</b>
           <small class="muted">${e.temp}℃ ・ 第${e.gen}世代</small>
           ${ready ? `<button class="act primary sm" data-action="hatch" data-id="${e.id}">ふ化させる</button>`
-            : `<span class="meter"><i style="--v:${p.toFixed(1)}%;--c:var(--accent)"></i></span><small class="muted">あと${fmtLeft(e.hatchAt - now)}</small>`}
+            : `<span class="meter"><i style="--v:${p.toFixed(1)}%;--c:var(--accent)"></i></span><small class="muted">あと${fmtLeft(e.hatchAt - now)}</small><button class="act ghost sm" data-action="candle" data-id="${e.id}">ライトで見る</button>`}
         </div></div>`;
     }).join('');
     setHTML($('#view-eggs'), `
@@ -1013,9 +1109,10 @@
         </button>
       </div>
       <h3 class="h3">おむかえ <small class="muted">次の入荷まで ${fmtLeft(S.offersAt - now)}</small></h3>
+      ${specialCard()}
       ${offers ? `<div class="offers">${offers}</div>` : '<p class="muted">売り切れです。次の入荷をお待ちください。</p>'}
       <p class="muted small">コインは、お世話・ふ化・里親に出すことでもらえます。</p>
-      <div class="danger-zone"><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`);
+      <div class="danger-zone"><button class="act ghost sm" data-action="notifyMenu">おしらせ通知</button><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`);
   }
 
   function welcome() {
@@ -1093,10 +1190,26 @@
     { key: 'cleaned', label: 'おそうじ（フンひろいも）', need: 1 },
     { key: 'handled', label: 'ふれあう', need: 2 },
   ];
+  const BONUS = [
+    { key: 'photo', label: 'カメラで1枚撮る' },
+    { key: 'view', label: '「くわしく見る」でじっくり観察する' },
+    { key: 'album', label: 'アルバムをふりかえる' },
+    { key: 'candle', label: '卵をライトで照らして見る', eggs: true },
+  ];
+  function bonusDone(key) {
+    const d = dailyState();
+    if (d.bonus !== key || d.bonusDone) return;
+    d.bonusDone = true; S.coins += 15;
+    setTimeout(() => toast('今日のおねがい達成！ 15コイン'), 300);
+    save();
+  }
   function dailyState() {
     if (!S.daily || S.daily.day !== todayKey()) {
       const streak = S.daily && S.daily.claimed && S.daily.day === yesterdayKey() ? (S.daily.streak || 0) : 0;
-      S.daily = { day: todayKey(), fed: 0, cleaned: 0, handled: 0, claimed: false, streak };
+      const day = todayKey();
+      const pool = BONUS.filter(b => !b.eggs || S.eggs.length);
+      let h = 0; for (const c of day) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+      S.daily = { day, fed: 0, cleaned: 0, handled: 0, claimed: false, streak, bonus: pool[h % pool.length].key, bonusDone: false };
     }
     return S.daily;
   }
@@ -1138,6 +1251,7 @@
     return `<div class="card daily">
       <div class="daily-head"><b>今日のおせわ</b>${d.streak ? `<span class="pill good">${d.streak}日連続</span>` : ''}</div>
       <div class="daily-list">${DAILY.map(t => `<span class="daily-item${d[t.key] >= t.need ? ' done' : ''}">${t.label} <b>${Math.min(d[t.key], t.need)}/${t.need}</b></span>`).join('')}</div>
+      ${d.bonus ? (b => b ? `<div class="daily-bonus${d.bonusDone ? ' done' : ''}"><span>今日のおねがい</span><b>${b.label}</b><small>${d.bonusDone ? '達成！' : '15コイン'}</small></div>` : '')(BONUS.find(x => x.key === d.bonus)) : ''}
       ${d.claimed ? '<p class="muted small">今日のごほうびは受け取りずみ。また明日！</p>'
         : `<button class="act ${done ? 'primary' : ''} sm" data-action="claimDaily" ${done ? '' : 'disabled'}>ごほうび ${dailyReward(d)}コイン＋コオロギ5匹</button>`}
     </div>`;
@@ -1344,6 +1458,20 @@
       <button class="act primary wide" data-action="editDone">もようがえをおわる</button>
     </div>`;
   }
+  function famNode(x, role, cls) {
+    if (!x) return `<div class="fam-node unknown ${cls}"><small>${role}</small><b>？</b><small>わからない</small></div>`;
+    const known = x.genes;
+    return `<div class="fam-node ${cls}"><small>${role}</small><b>${known ? A.swatch(x) : ''}${esc(x.name)}</b><small>${known ? esc(nameOf(x)) : ''}</small></div>`;
+  }
+  function familyTree(g) {
+    if (!g.parents) return `<p class="muted small">${g.hatched ? '親の記録がありません（記録を始める前に生まれた子です）' : 'ショップからおむかえした子なので、親はわかりません。この子から新しい家系が始まります'}</p>`;
+    const { mom, dad } = g.parents, gp = p => (p && p.parents) || {};
+    return `<div class="family">
+      ${famNode(g, 'この子', 'me')}
+      ${famNode(dad, '父 ♂', 'p1')}${famNode(mom, '母 ♀', 'p2')}
+      ${famNode(gp(dad).dad, '父方の祖父', 'g1')}${famNode(gp(dad).mom, '父方の祖母', 'g2')}${famNode(gp(mom).dad, '母方の祖父', 'g3')}${famNode(gp(mom).mom, '母方の祖母', 'g4')}
+    </div>`;
+  }
   function speedShop() {
     return `<h3 class="h3">せいちょうの速さ <small class="muted">ごはん・抱卵・ふ化の進み方もかわります</small></h3>
       <div class="list">${SPEEDS.map(v => {
@@ -1439,10 +1567,11 @@
       <div class="decor-inv">${all.map(([id, a]) => `<button class="chip" data-action="album" data-id="${id}">${esc(a.name)} <span class="sex ${a.sex}">${a.sex === 'M' ? '♂' : '♀'}</span>${S.geckos.some(g => g.id === id) ? '' : ' <small class="muted">旅立ち</small>'}</button>`).join('')}</div>`;
   }
   Object.assign(ACTIONS, {
-    album(t) { openAlbum(t.dataset.id || S.selected); },
+    album(t) { openAlbum(t.dataset.id || S.selected); bonusDone('album'); },
     snapPhoto(t) {
       const g = S.geckos.find(x => x.id === t.dataset.id);
       if (!g || !tank) return;
+      bonusDone('photo');
       const a = albumOf(g);
       if (a.entries.filter(e => e.img || e.pid).length >= MAX_PHOTOS) return;
       closeSheet();
@@ -1914,10 +2043,63 @@
     heatDown() { const g = selected(); if (g && heatOf(g) > HEAT_MIN) { g.heat = heatOf(g) - 1; save(); renderView(); heaterSheet(); } },
   });
 
+  // ---------- おしらせ（通知）と、留守のあいだのまとめ
+  const canNotify = () => 'Notification' in window;
+  function notify(tag, title, body) {
+    if (!S.notify || !canNotify() || Notification.permission !== 'granted' || !document.hidden) return;
+    const opt = { body, tag, icon: 'icons/icon-192.png', badge: 'icons/favicon-64.png' };
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.ready.then(r => r.showNotification(title, opt)).catch(() => {});
+    else try { new Notification(title, opt); } catch (e) { /* noop */ }
+  }
+  function checkNotify(now) {
+    S.nsent = S.nsent || {};
+    for (const e of S.eggs) if (now >= e.hatchAt && !S.nsent[e.id]) { S.nsent[e.id] = 1; notify('egg', '卵がふ化しそう！', `${e.mom} × ${e.dad} の卵が、ふ化を待っています`); }
+    for (const g of S.geckos) {
+      const k = 'h' + g.id;
+      if (g.hunger < 25) { if (!S.nsent[k]) { S.nsent[k] = 1; notify(k, `${g.name}がおなかぺこぺこ`, 'ごはんをあげに来てね'); } }
+      else delete S.nsent[k];
+    }
+    for (const k of Object.keys(S.nsent)) if (k[0] === 'e' && !S.eggs.some(e => e.id === k)) delete S.nsent[k];
+  }
+  function awaySummary(since, now) {
+    if (now - since < 20 * MIN || !S.welcomed) return;
+    const out = [];
+    const laid = S.eggs.filter(e => e.laidAt > since).length;
+    if (laid) out.push(`卵が${laid}個産まれた`);
+    const ready = S.eggs.filter(e => now >= e.hatchAt).length;
+    if (ready) out.push(`${ready}個の卵がふ化を待っている`);
+    const hungry = S.geckos.filter(g => g.hunger < 25).map(g => g.name);
+    if (hungry.length) out.push(`${hungry.slice(0, 2).join('・')}${hungry.length > 2 ? 'たち' : ''}がおなかぺこぺこ`);
+    const shed = S.geckos.filter(g => g.shedUntil).map(g => g.name);
+    if (shed.length) out.push(`${shed[0]}${shed.length > 1 ? 'たち' : ''}が脱皮中`);
+    if (out.length) setTimeout(() => toast('おかえりなさい！ ' + out.join('、')), 900);
+  }
+  function notifySheet() {
+    const ok = canNotify(), perm = ok ? Notification.permission : 'unsupported';
+    openSheet(`<h3 class="sheet-title">おしらせ通知</h3>
+      <p class="small">卵がふ化しそうなときや、レオパのおなかが空いたときにお知らせします。</p>
+      <p class="muted small">ブラウザのしくみ上、アプリを閉じてしばらくたつと通知が届かないことがあります（特に iPhone は、ホーム画面に追加したアプリでのみ使えます）。届かなかったぶんは、次に開いたときに「おかえりなさい」でまとめてお知らせします。</p>
+      ${!ok ? '<p class="notice">この端末・ブラウザでは通知が使えません</p>'
+        : perm === 'denied' ? '<p class="notice">通知がブロックされています。端末の設定から許可してください</p>'
+        : `<button class="act ${S.notify ? '' : 'primary'}" data-action="notifyToggle">${S.notify ? '通知をオフにする' : '通知をオンにする'}</button>`}
+      <button class="act" data-action="closeSheet">とじる</button>`);
+  }
+  Object.assign(ACTIONS, {
+    notifyMenu: notifySheet,
+    notifyToggle() {
+      if (S.notify) { S.notify = false; save(); notifySheet(); toast('通知をオフにしました'); return; }
+      Notification.requestPermission().then(p => {
+        S.notify = p === 'granted'; save(); notifySheet();
+        toast(S.notify ? '通知をオンにしました' : '通知が許可されませんでした');
+      });
+    },
+  });
+
   // ---------- 起動
   function tick() {
     const now = Date.now();
     simulate(now);
+    checkNotify(now);
     refreshOffers(now);
     refreshOrders(now);
     if (window.LeopaMusic) LeopaMusic.setSong(songKey());
@@ -1929,16 +2111,19 @@
   S = load();
   window.__leopaState = () => S; // 動作確認用
   if (!S) freshState();
+  const awayFrom = S.lastTick;
   initTank();
   // 3D モデルが読みこめたら、レオパを差しかえる
   const hideLoading = () => { const el = $('#tankLoading'); if (el) el.classList.add('done'); };
   if (L3.supported && L3.loadModel) L3.loadModel('assets/gecko.glb').then(ok => { hideLoading(); if (ok) { dexHTML = ''; renderView(); } });
   else hideLoading();
   tick();
+  awaySummary(awayFrom, Date.now());
   setTimeout(() => { if (!S.welcomed || !S.geckos.length) return; const list = checkCelebrations(); if (list.length) celebrate(list); }, 2500);
   switchView('case');
   setInterval(tick, 5000);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); else tick(); });
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { hiddenAt = Date.now(); saveNow(); } else { tick(); if (hiddenAt) awaySummary(hiddenAt, Date.now()); } });
   if (!S.welcomed) { if (!S.geckos.length && !(S.starters && S.starters.length)) S.starters = makeStarters(); if (S.geckos.length && S.starters && S.starters.length) starterList(); else welcome(); }
 
   if ('serviceWorker' in navigator && /^(https:|http:\/\/localhost)/.test(location.href)) {
