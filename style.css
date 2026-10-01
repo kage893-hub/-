@@ -647,3 +647,14 @@ html.kids .pill { white-space: normal; }
 .learn p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.7; }
 .learn.on { background: rgba(76, 140, 80, .1); border-color: rgba(76, 140, 80, .35); color: var(--ink); }
 .learn.on b { color: var(--good); }
+
+/* モルフの条件と作り方 */
+.mguide-list { display: grid; gap: 6px; margin-bottom: 14px; }
+.mguide { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+.mguide summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; font-weight: 700; list-style: none; }
+.mguide summary::-webkit-details-marker { display: none; }
+.mguide summary::after { content: '＋'; color: var(--muted); margin-left: 4px; }
+.mguide[open] summary::after { content: '－'; }
+.mguide .mg-name { flex: 1; }
+.mguide p { margin: 8px 0 0; font-size: 13.5px; line-height: 1.7; }
+.mguide ol { margin: 4px 0 0; padding-left: 1.4em; font-size: 13.5px; line-height: 1.7; }
