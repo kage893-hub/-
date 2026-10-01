@@ -109,6 +109,8 @@
     if (s.calc == null) { s.calc = 10; s.dust = true; }
     s.layBox = s.layBox || [];
     s.learned = s.learned || {};
+    // 最初にお店からおむかえした2匹（アルバムに「ヤモリ堂」の記録がある子）にしるしをつける
+    if (!s.starterFlag) { s.starterFlag = true; for (const g of s.geckos) if (((s.albums || {})[g.id] || { entries: [] }).entries.some(e => (e.text || '').includes('「ヤモリ堂」からおむかえした'))) g.starter = true; }
     return s;
   }
   // 保存は操作が落ちついてからまとめて1回（アプリを閉じるときはすぐ保存）
@@ -181,7 +183,7 @@
       v: 2, coins: 60, cases: 4, incTemp: 29.5, food: { cricket: 20, dubia: 3, worm: 3 },
       tut: { step: 0 }, geckos: [], eggs: [], dex: {}, names: {}, decorInv: { grass: 1 }, decorV3: true, selected: null, offers: [], offersAt: 0,
       lastTick: Date.now(), nextId: 1, welcomed: false, stats: { hatched: 0, rehomed: 0 },
-      calc: 10, dust: true, layBox: [], learned: {},
+      calc: 10, dust: true, layBox: [], learned: {}, starterFlag: true,
     };
     // はじめはショップでレオパを選ぶところから
     S.starters = makeStarters();
@@ -561,7 +563,7 @@
     const now = Date.now();
     if (tutStep() >= 0) return then();
     if (g.shedUntil) return careWarn(g, 'shed', then);
-    if (now - (g.adopted || 0) < realDays(7) && !g.newOk) return careWarn(g, 'newcomer', then);
+    if (now - (g.adopted || 0) < realDays(7) && !g.newOk && !g.starter) return careWarn(g, 'newcomer', then);
     if (g.fedAt && now - g.fedAt < realDays(1)) return careWarn(g, 'meal', then);
     if (tank && tank._st && tank._st.sleeping && !isNight()) return careWarn(g, 'nap', () => { tank.wake(); then(); });
     then();
@@ -1819,6 +1821,7 @@
       S.starters.splice(Number(t.dataset.i), 1);
       const g = newGecko({ name: unusedName(), sex: o.sex, genes: o.genes, tang: o.tang, poly: o.poly, growth: o.growth, hunger: 65 });
       g.seed = o.seed;
+      g.starter = true; // 最初の2匹は「おむかえ直後はそっと」の対象外
       S.geckos.push(g);
       S.selected = g.id;
       register(g);
