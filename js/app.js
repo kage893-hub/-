@@ -933,7 +933,7 @@
       <h3 class="h3">おむかえ <small class="muted">次の入荷まで ${fmtLeft(S.offersAt - now)}</small></h3>
       ${offers ? `<div class="offers">${offers}</div>` : '<p class="muted">売り切れです。次の入荷をお待ちください。</p>'}
       <p class="muted small">コインは、お世話・ふ化・里親に出すことでもらえます。</p>
-      <div class="danger-zone"><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`);
+      <div class="danger-zone"><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`);
   }
 
   function welcome() {
@@ -1378,6 +1378,137 @@
     },
   });
 
+  // ======================================================
+  // セーブデータの書き出し・読み込み（控え）
+  // 形式: "LEOPA1:" + 圧縮した JSON（base64）+ ":" + 検査用の数字
+  // ======================================================
+  const BK_MAGIC = 'LEOPA1:';
+  function checksum(str) { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
+  async function gzipB64(text) {
+    const bytes = new TextEncoder().encode(text);
+    let out = bytes;
+    if (window.CompressionStream) {
+      const cs = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
+      out = new Uint8Array(await new Response(cs).arrayBuffer());
+    }
+    let bin = ''; for (let i = 0; i < out.length; i += 8192) bin += String.fromCharCode.apply(null, out.subarray(i, i + 8192));
+    return { b64: btoa(bin), gz: !!window.CompressionStream };
+  }
+  async function ungzipB64(b64, gz) {
+    const bin = atob(b64), bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+    if (!gz) return new TextDecoder().decode(bytes);
+    const ds = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return new TextDecoder().decode(await new Response(ds).arrayBuffer());
+  }
+  async function exportSave() {
+    saveNow();
+    const photos = {};
+    for (const a of Object.values(S.albums || {})) for (const e of a.entries) if (e.pid) { const d = getPhoto(e); if (d) photos[e.pid] = d; }
+    const json = JSON.stringify({ app: 'leopa', at: Date.now(), save: S, photos });
+    const { b64, gz } = await gzipB64(json);
+    return BK_MAGIC + (gz ? 'g' : 'p') + ':' + b64 + ':' + checksum(b64);
+  }
+  // 読みこんで中身をたしかめる（まだ上書きしない）
+  async function parseBackup(text) {
+    text = String(text || '').replace(/\s+/g, '');
+    if (!text.startsWith(BK_MAGIC)) throw new Error('「レオパといっしょ」の控えではないようです');
+    const parts = text.slice(BK_MAGIC.length).split(':');
+    if (parts.length !== 3) throw new Error('文字が途中で切れているようです。最後までコピーできているか確かめてください');
+    const [kind, b64, sum] = parts;
+    if (checksum(b64) !== sum) throw new Error('文字が一部こわれています。もう一度コピーしてみてください');
+    let obj;
+    try { obj = JSON.parse(await ungzipB64(b64, kind === 'g')); } catch (e) { throw new Error('控えをひらけませんでした'); }
+    if (!obj || obj.app !== 'leopa' || !obj.save || !Array.isArray(obj.save.geckos) || !(obj.save.v === 1 || obj.save.v === 2)) throw new Error('この控えは読みこめません');
+    return obj;
+  }
+  let pendingBackup = null;
+  function backupSheet(msg) {
+    openSheet(`<p class="eyebrow">セーブデータ</p>
+      <h3 class="sheet-title">控えをとる・もどす</h3>
+      <p class="muted small">レオパ・卵・図鑑・家具・アルバムの写真まで、ぜんぶ1つの文字にして控えをとれます。アイコンを入れ直すときや、機種変更のときに、そのまま復元できます。</p>
+      ${msg ? `<p class="notice">${esc(msg)}</p>` : ''}
+      <button class="act primary" data-action="bkExport">控えをつくる</button>
+      <div id="bkOut"></div>
+      <div class="label" style="margin-top:6px">控えからもどす</div>
+      <textarea id="bkIn" class="bk-text" rows="3" placeholder="コピーした控えの文字をここに貼りつけ" spellcheck="false" autocomplete="off"></textarea>
+      <div class="actions"><button class="act" data-action="bkCheck">この文字を確かめる</button><button class="act" data-action="bkFile">ファイルをえらぶ</button></div>
+      <input type="file" id="bkFile" accept=".txt,.leopa,text/plain" hidden>
+      <div id="bkPreview"></div>
+      <button class="act ghost" data-action="closeSheet">とじる</button>`);
+    const f = $('#bkFile');
+    if (f) f.addEventListener('change', async () => { const file = f.files[0]; if (file) { $('#bkIn').value = (await file.text()).trim(); ACTIONS.bkCheck(); } });
+  }
+  function bkPreview(obj) {
+    const sv = obj.save, n = Object.keys(obj.photos || {}).length;
+    const at = obj.at ? new Date(obj.at) : null;
+    return `<div class="card bk-card"><b>この控えの中身</b>
+      <div class="bk-rows"><span>レオパ</span><b>${sv.geckos.length}匹</b><span>コイン</span><b>${sv.coins || 0}</b><span>図鑑</span><b>${G.DEX.filter(d => (sv.dex || {})[d.id]).length} / ${G.DEX.length}</b><span>アルバムの写真</span><b>${n}枚</b>${at ? `<span>控えをとった日</span><b>${at.getMonth() + 1}月${at.getDate()}日 ${at.getHours()}:${String(at.getMinutes()).padStart(2, '0')}</b>` : ''}</div>
+      <p class="notice">もどすと、<b>いまのデータはこの控えで置きかわります</b>。いまのデータを残したいときは、先に「控えをつくる」でとっておいてください。</p>
+      <button class="act danger" data-action="bkRestore">この控えでもどす</button></div>`;
+  }
+  Object.assign(ACTIONS, {
+    backup() { backupSheet(); },
+    async bkExport() {
+      const out = $('#bkOut');
+      out.innerHTML = '<p class="muted small">作っています…</p>';
+      let text;
+      try { text = await exportSave(); } catch (e) { out.innerHTML = '<p class="notice">控えをつくれませんでした</p>'; return; }
+      const kb = Math.round(text.length / 1024);
+      out.innerHTML = `<textarea id="bkOutText" class="bk-text" rows="3" readonly spellcheck="false">${text}</textarea>
+        <p class="muted small">${kb >= 1024 ? (kb / 1024).toFixed(1) + 'MB' : kb + 'KB'}・レオパ ${S.geckos.length}匹ぶん。長い文字なので、メモ帳やメッセージアプリに貼って、とっておいてね。</p>
+        <div class="actions"><button class="act" data-action="bkCopy">コピーする</button><button class="act" data-action="bkSave">ファイルにする</button></div>`;
+      window._bkText = text;
+    },
+    async bkCopy() {
+      const text = window._bkText;
+      if (!text) return;
+      try { await navigator.clipboard.writeText(text); toast('コピーしました'); return; } catch (e) { /* 下で選択にきりかえ */ }
+      const ta = $('#bkOutText');
+      if (ta) { ta.focus(); ta.select(); try { document.execCommand('copy'); toast('コピーしました'); return; } catch (e) { /* noop */ } }
+      toast('文字を長押しして、コピーしてください');
+    },
+    bkSave() {
+      const text = window._bkText;
+      if (!text) return;
+      try {
+        const d = new Date();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+        a.download = `leopa-save-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.txt`;
+        document.body.appendChild(a); a.click(); a.remove();
+        toast('ファイルを保存しました（ダウンロードの中）');
+      } catch (e) { toast('ファイルにできませんでした。コピーを使ってください'); }
+    },
+    bkFile() { const f = $('#bkFile'); if (f) f.click(); },
+    async bkCheck() {
+      const box = $('#bkPreview');
+      try { pendingBackup = await parseBackup($('#bkIn').value); box.innerHTML = bkPreview(pendingBackup); }
+      catch (e) { pendingBackup = null; box.innerHTML = `<p class="notice">${esc(e.message)}</p>`; }
+    },
+    async bkRestore() {
+      const obj = pendingBackup;
+      if (!obj) return;
+      try {
+        // 写真を先に戻してから、本体を置きかえる（途中で失敗したら、いまのデータは変えない）
+        const old = Object.keys(localStorage).filter(k => k.startsWith('leopa-photo-'));
+        const keep = {};
+        for (const k of old) keep[k] = localStorage.getItem(k);
+        try {
+          old.forEach(k => localStorage.removeItem(k));
+          for (const [pid, data] of Object.entries(obj.photos || {})) localStorage.setItem(PHOTO_KEY(pid), data);
+          localStorage.setItem(SAVE_KEY, JSON.stringify(obj.save));
+        } catch (e) {
+          Object.keys(localStorage).filter(k => k.startsWith('leopa-photo-')).forEach(k => localStorage.removeItem(k));
+          for (const [k, v] of Object.entries(keep)) { try { localStorage.setItem(k, v); } catch (err) { /* noop */ } }
+          throw e;
+        }
+        location.reload();
+      } catch (e) {
+        toast('もどせませんでした（保存できる量をこえたかもしれません）。いまのデータはそのままです');
+      }
+    },
+  });
+
   // ---------- 効果音（その場で合成するので音声ファイルはいらない）
   let actx = null;
   function sfx(kind) {
@@ -1458,6 +1589,7 @@
   }
 
   S = load();
+  window.__leopaState = () => S; // 動作確認用
   if (!S) freshState();
   initTank();
   // 3D モデルが読みこめたら、レオパを差しかえる

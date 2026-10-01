@@ -404,3 +404,10 @@ button { font: inherit; color: inherit; }
 /* 下の段のボタン（ペアリング・アルバム・もようがえ・里親に出す）は 2×2 に並べて折り返さない */
 .actions.sub { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .actions.sub .act { white-space: nowrap; min-height: 42px; padding-inline: 6px; }
+
+/* ---------- セーブデータの控え */
+.danger-zone { gap: 8px; flex-wrap: wrap; }
+.bk-text { width: 100%; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; padding: 10px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); resize: vertical; word-break: break-all; }
+.bk-card { display: grid; gap: 8px; border-color: var(--accent); }
+.bk-rows { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 14px; }
+.bk-rows b { text-align: right; font-variant-numeric: tabular-nums; }
