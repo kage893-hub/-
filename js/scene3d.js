@@ -1313,11 +1313,13 @@
     gk.mouth.position.copy(deformPoint(MODEL.mouth, U));
     const tg = P.tongue;
     if (tg > 0.01) {
-      const fwd = new T.Vector3(0, -0.25, 1).applyQuaternion(headQ).normalize();
-      gk.tongue.position.copy(gk.mouth.position).addScaledVector(fwd, 0.06 + 0.14 * tg);
+      // 舌の根もとは口の中に残したまま、先だけを前へ出す（口から離れて浮かないように）
+      const fwd = new T.Vector3(0, -0.12 - 0.15 * tg, 1).applyQuaternion(headQ).normalize();
+      const hz = 0.05 + 0.075 * tg;
+      gk.tongue.position.copy(gk.mouth.position).addScaledVector(fwd, hz - 0.07);
       gk.tongue.quaternion.copy(headQ);
-      gk.tongue.rotateX(0.35 - 0.6 * tg);
-      gk.tongue.scale.set(0.065, 0.026, 0.05 + 0.1 * tg);
+      gk.tongue.rotateX(0.12 + 0.15 * tg);
+      gk.tongue.scale.set(0.06, 0.024, hz);
     } else gk.tongue.scale.setScalar(0.001);
     gk.bones.tail.position.copy(deformPoint(MODEL.tailTip, U));
   }
