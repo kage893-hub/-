@@ -169,31 +169,60 @@
     if (song.arpVol && pos % 2 === 1) LEADS.marimba(ctx, out, t, midi(ch.notes[(pos >> 1) % 4]), song.arpVol);
   }
 
-  // ---------- 再生（曲が変わるときは、前の曲をフェードアウトしながら次の曲をフェードイン）
-  let ctx = null, cur = null, timer = null, vol = 0.45, wantKey = 'day';
-  function makePlayer(key) {
-    const song = SONGS[key];
-    const bus = makeBus(ctx, ctx.destination, 0);
-    bus.master.gain.setValueAtTime(0, ctx.currentTime);
-    bus.master.gain.linearRampToValueAtTime(vol * 0.85, ctx.currentTime + 2.5);
-    return { key, song, bus, step: 0, nextT: ctx.currentTime + 0.15 };
+  // ---------- 再生
+  // 曲は一度「音声データ」としてまるごと作っておき、あとはブラウザの音専用の仕組みでくり返し再生する。
+  // こうすると、画面の描画が忙しいときでも、音は途切れたりバリバリ鳴ったりしない。
+  const SR = 24000; // 作る音の細かさ（BGMには十分で、作る時間も短い）
+  const buffers = {}; // 作った曲
+  const building = {};
+  async function buildSong(key) {
+    if (buffers[key]) return buffers[key];
+    if (building[key]) return building[key];
+    building[key] = (async () => {
+      const song = SONGS[key];
+      const stepSec = 60 / song.bpm / 2;
+      const loopSec = song.melody.length * BAR * stepSec;
+      const Off = root.OfflineAudioContext || root.webkitOfflineAudioContext;
+      // 曲の終わりの響きを、先頭にかぶせて、つなぎ目のない輪にする
+      const tail = 3;
+      const off = new Off(1, Math.ceil(SR * (loopSec + tail)), SR);
+      const b = makeBus(off, off.destination, 0.85);
+      for (let i = 0, t = 0.02; t < loopSec + tail; i++, t += stepSec) playStep(off, b.input, song, i, t);
+      const rendered = await off.startRendering();
+      const loopLen = Math.round(loopSec * SR);
+      const out = new Float32Array(loopLen);
+      const src = rendered.getChannelData(0);
+      for (let i = 0; i < loopLen; i++) out[i] = src[i] + (i < src.length - loopLen ? src[loopLen + i] : 0);
+      buffers[key] = { data: out, loopSec };
+      delete building[key];
+      return buffers[key];
+    })();
+    return building[key];
+  }
+  let ctx = null, cur = null, playingFlag = false, vol = 0.45, wantKey = 'day', gen = 0;
+  async function playKey(key) {
+    const my = ++gen;
+    const made = await buildSong(key);
+    if (my !== gen || !playingFlag) return; // その間に別の曲・停止になった
+    const buf = ctx.createBuffer(1, made.data.length, SR);
+    buf.copyToChannel(made.data, 0);
+    const src = ctx.createBufferSource();
+    src.buffer = buf; src.loop = true;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.linearRampToValueAtTime(vol, ctx.currentTime + 2.5);
+    src.connect(g).connect(ctx.destination);
+    src.start();
+    const next = { key, src, g };
+    if (cur) fadeOut(cur);
+    cur = next;
   }
   function fadeOut(p) {
-    const g = p.bus.master.gain;
-    g.cancelScheduledValues(ctx.currentTime);
-    g.setValueAtTime(g.value, ctx.currentTime);
-    g.linearRampToValueAtTime(0, ctx.currentTime + 2.5);
-    setTimeout(() => { try { p.bus.master.disconnect(); p.bus.nodes.forEach(n => n.disconnect()); } catch (e) { /* noop */ } }, 6500);
-  }
-  function pump() {
-    if (!cur) return;
-    const stepSec = 60 / cur.song.bpm / 2;
-    // 画面が忙しくて作業が遅れても、音が途切れないように 1.2 秒先まで並べておく
-    if (cur.nextT < ctx.currentTime) cur.nextT = ctx.currentTime + 0.05;
-    while (cur.nextT < ctx.currentTime + 1.2) {
-      playStep(ctx, cur.bus.input, cur.song, cur.step++, cur.nextT);
-      cur.nextT += stepSec;
-    }
+    const t = ctx.currentTime;
+    p.g.gain.cancelScheduledValues(t);
+    p.g.gain.setValueAtTime(p.g.gain.value, t);
+    p.g.gain.linearRampToValueAtTime(0.0001, t + 2.5);
+    setTimeout(() => { try { p.src.stop(); p.src.disconnect(); p.g.disconnect(); } catch (e) { /* noop */ } }, 2800);
   }
   function start(volume, key) {
     if (volume != null) vol = volume;
@@ -201,22 +230,24 @@
     try { ctx = ctx || new (root.AudioContext || root.webkitAudioContext)(); } catch (e) { return false; }
     if (ctx.state === 'suspended') ctx.resume();
     api.ctxUsed = true;
-    if (timer && cur && cur.key === wantKey) return true;
-    if (cur) fadeOut(cur);
-    cur = makePlayer(wantKey);
-    if (!timer) timer = setInterval(pump, 250);
+    if (playingFlag && cur && cur.key === wantKey) return true;
+    playingFlag = true;
+    playKey(wantKey);
     return true;
   }
   function setSong(key) {
     if (!SONGS[key] || key === wantKey) return;
     wantKey = key;
-    if (timer) start();
+    if (playingFlag) playKey(key);
   }
   function stop() {
-    if (timer) { clearInterval(timer); timer = null; }
+    playingFlag = false;
+    gen++;
     if (cur) { fadeOut(cur); cur = null; }
   }
-  const playing = () => !!timer;
+  const playing = () => playingFlag;
+  // 次に流れそうな曲を先に作っておく（切り替え時に待たないように）
+  function preload(key) { buildSong(key).catch(() => {}); }
 
   // 試験用：朝の曲から夜の曲へ入れ替わる様子を、実際の再生と同じ作りで書き出す
   async function renderSwitch(seconds, sampleRate, from, to, at) {
@@ -247,6 +278,6 @@
     return off.startRendering();
   }
 
-  const api = { start, stop, setSong, playing, render, renderSwitch, songs: SONGS, get title() { return SONGS[wantKey].title; }, ctxUsed: false };
+  const api = { start, stop, setSong, playing, preload, render, renderSwitch, songs: SONGS, get title() { return SONGS[wantKey].title; }, ctxUsed: false };
   root.LeopaMusic = api;
 })(typeof window !== 'undefined' ? window : globalThis);

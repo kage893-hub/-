@@ -1433,6 +1433,8 @@
   // 時間帯ごとの曲：朝 5〜8時、昼 8〜16時、夕方 16〜19時、夜はそれ以外
   const songKey = () => { const h = clockNow(); return h >= 5 && h < 8 ? 'morning' : h >= 8 && h < 16 ? 'day' : h >= 16 && h < 19 ? 'evening' : 'night'; };
   function musicOn() { if (window.LeopaMusic && S && !S.musicOff && !document.hidden) LeopaMusic.start(MUSIC_VOL, songKey()); }
+  // 画面が落ちついたころに、今の時間帯の曲をあらかじめ作っておく（最初のタップで待たないように）
+  setTimeout(() => { if (window.LeopaMusic && !S.musicOff) LeopaMusic.preload(songKey()); }, 4000);
   document.addEventListener('pointerdown', musicOn, { passive: true });
   document.addEventListener('visibilitychange', () => { if (!window.LeopaMusic) return; if (document.hidden) LeopaMusic.stop(); else if (LeopaMusic.ctxUsed) musicOn(); });
 
