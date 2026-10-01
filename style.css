@@ -508,3 +508,28 @@ button { font: inherit; color: inherit; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 .item-img.none { background: var(--sand-1); animation: none; }
 .item-preview .item-img.big { border-radius: 16px; margin-bottom: 4px; }
+
+.shop-tabs.two { grid-template-columns: repeat(2, 1fr); }
+.show-card { display: grid; gap: 4px; margin-bottom: 10px; }
+.show-card.lv0 { border-left: 4px solid var(--good); } .show-card.lv1 { border-left: 4px solid var(--info); } .show-card.lv2 { border-left: 4px solid var(--female); }
+.show-head { display: flex; align-items: center; gap: 8px; }
+.show-head .row-side { margin-left: auto; }
+.show-theme { font-size: 14px; margin: 2px 0; }
+.show-card .act { justify-self: start; margin-top: 4px; }
+.show-rec { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+.show-rec > div { display: grid; text-align: center; padding: 10px 4px; border-radius: 14px; background: var(--surface-2); }
+.show-rec b { font-size: 22px; } .show-rec small { font-size: 11px; color: var(--muted); }
+.row.static { cursor: default; }
+.show-stars { color: #E3A82B; letter-spacing: 1px; font-size: 13px; }
+.show-judge { text-align: center; padding: 30px 0; }
+.judge-spin { font-size: 44px; animation: judge 1.6s ease-in-out infinite; }
+@keyframes judge { 0%, 100% { transform: translate(-30px, 0) rotate(-10deg); } 50% { transform: translate(30px, -6px) rotate(10deg); } }
+.show-result { text-align: center; }
+.show-result .reveal-art { width: 150px; margin: 4px auto; }
+.show-rank { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; text-align: left; }
+.show-rank li { display: grid; grid-template-columns: 42px 1fr auto; gap: 8px; align-items: center; padding: 7px 12px; border-radius: 12px; background: var(--surface-2); font-size: 13.5px; }
+.show-rank li.me { background: var(--accent-soft); outline: 2px solid var(--accent); }
+.show-rank small { color: var(--muted); }
+.show-break { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin: 6px 0; }
+.show-break b { color: var(--ink, inherit); }
+.spinner.big { display: inline-block; width: 40px; height: 40px; border-width: 4px; margin-bottom: 8px; }

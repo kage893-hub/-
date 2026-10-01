@@ -717,6 +717,62 @@
     },
     temp(t) { S.incTemp = Number(t.dataset.t); renderView(); save(); },
     hatch(t) { hatch(t.dataset.id); },
+    dexTab(t) { S.dexTab = t.dataset.tab; renderView(); window.scrollTo(0, 0); },
+    showMenu(t) {
+      const lv = SHOW_LEVELS[Number(t.dataset.lv)], day = todayKey(), th = themeOf(lv, day);
+      if (!lv) return;
+      const list = S.geckos.map(g => {
+        const why = showBlock(g, day), sc = showScore(g, th, day);
+        return `<button class="row" data-action="showEnter" data-lv="${t.dataset.lv}" data-id="${g.id}" ${why ? 'disabled' : ''}>
+          <span class="row-art">${A.swatch(g)}</span>
+          <span class="row-main"><b>${esc(g.name)} ${sexMark(g)}</b><small>${esc(nameOf(g))} ・ ${STAGE_LABEL[stageOf(g)]}${why ? ' ・ ' + why : ''}</small></span>
+          <span class="row-side show-stars" aria-label="部門の評価">${why ? '' : stars(sc.base)}</span></button>`;
+      }).join('');
+      openSheet(`<p class="eyebrow">${lv.mark} ・ ${lv.name}</p>
+        <h3 class="sheet-title">${th.name}にエントリー</h3>
+        <p class="muted small">審査のポイント：${th.point}。★はこの部門での見た目の評価です。</p>
+        <div class="list">${list}</div>
+        <button class="act" data-action="closeSheet">やめる</button>`);
+    },
+    showEnter(t) {
+      const lvI = Number(t.dataset.lv), lv = SHOW_LEVELS[lvI], day = todayKey(), th = themeOf(lv, day);
+      const g = S.geckos.find(x => x.id === t.dataset.id);
+      if (!g || !lv || showBlock(g, day)) return;
+      g.showDay = day;
+      const me = showScore(g, th, day);
+      // ライバルは、大会の格に合わせた点数
+      const r = prngApp(strHash(day + lv.id + g.id + 'rivals'));
+      const rivals = [0, 1, 2, 3].map(() => {
+        const z = (r() + r() + r() - 1.5) * 2;
+        return { name: `${RIVALS[Math.floor(r() * RIVALS.length)]}の「${RNAMES[Math.floor(r() * RNAMES.length)]}」`, total: Math.round(lv.mean + z * 6) };
+      });
+      const all = rivals.concat([{ name: g.name, total: me.total, me: true }]).sort((a, b) => b.total - a.total || (a.me ? -1 : 1));
+      const rank = all.findIndex(x => x.me) + 1;
+      const coins = rank === 1 ? lv.reward : rank === 2 ? Math.round(lv.reward * 0.3) : rank === 3 ? 5 : 0;
+      S.coins += coins;
+      if (rank === 1) { S.showRec = S.showRec || {}; S.showRec[lv.id] = (S.showRec[lv.id] || 0) + 1; memo(g, `${lv.name}の${th.name}で優勝した！`, true); }
+      else if (rank <= 3) memo(g, `${lv.name}の${th.name}で${rank}位になった`);
+      const d = new Date();
+      S.shows = (S.shows || []).concat([{ name: g.name, rank, score: me.total, lv: lv.name, theme: th.name, coins, date: `${d.getMonth() + 1}/${d.getDate()}` }]).slice(-30);
+      save();
+      const comment = me.base >= 80 ? 'この部門の特徴がとてもよく出ています' : me.base >= 60 ? '部門の特徴がしっかり出ています' : me.base >= 40 ? '特徴はひかえめ。血統を重ねるともっと伸びそう' : 'この部門とは少し相性がよくないかも';
+      const cond = me.cond >= 15 ? 'コンディションは最高です' : me.cond >= 9 ? 'コンディションも良好' : 'お世話をしてから出ると、もっと点が伸びます';
+      openSheet(`<div class="show-judge"><p class="eyebrow">${lv.name} ・ ${th.name}</p><span class="spinner big" aria-hidden="true"></span><p class="muted">審査員がじっくり見ています……</p></div>`);
+      setTimeout(() => {
+        sfx(rank === 1 ? 'hatch' : 'coin');
+        openSheet(`<div class="show-result">
+          <p class="eyebrow">${lv.name} ・ ${th.name}</p>
+          <h3 class="morph big">${rank === 1 ? '優勝！' : `${rank}位`}</h3>
+          <div class="reveal-art">${portrait(g, stageOf(g), nameOf(g))}</div>
+          <ol class="show-rank">${all.map((x, i) => `<li class="${x.me ? 'me' : ''}"><span>${i + 1}位</span><b>${esc(x.name)}</b><small>${x.total}点</small></li>`).join('')}</ol>
+          <div class="show-break"><span>見た目 <b>${Math.round(me.base * 0.85)}</b></span><span>お世話 <b>${me.cond >= 0 ? '+' : ''}${me.cond}</b></span><span>当日の調子 <b>${me.luck >= 0 ? '+' : ''}${me.luck}</b></span></div>
+          <p class="small">審査員より：「${comment}。${cond}」</p>
+          ${coins ? `<p><b>${coins} コイン</b>もらいました！</p>` : '<p class="muted small">今回は入賞ならず。また明日チャレンジしよう</p>'}
+          <button class="act primary" data-action="closeSheet">とじる</button>
+        </div>`);
+        renderView();
+      }, 1700);
+    },
     buyCage(t) {
       const kind = t.dataset.kind, id = t.dataset.id;
       const v = (kind === 'size' ? L3.CAGE_SIZES : L3.CAGE_THEMES)[id];
@@ -1118,6 +1174,68 @@
   }
 
   let dexHTML = '';
+  // ======================================================
+  // 品評会：その日の部門で審査。1匹につき1日1回まで
+  // ======================================================
+  const SHOW_LEVELS = [
+    { id: 'local', name: '町の品評会', mark: '初級', mean: 46, reward: 30, note: 'はじめての出場にぴったり' },
+    { id: 'region', name: '地方大会', mark: '中級', mean: 62, reward: 80, note: '血統のいい子がそろう' },
+    { id: 'nation', name: '全国大会', mark: '上級', mean: 77, reward: 200, note: 'トップブリーダーの子が集まる' },
+  ];
+  const P0 = x => (x.poly || {});
+  const SHOW_THEMES = [
+    { id: 'orange', name: 'オレンジ部門', point: 'タンジェリン度の高さと、しっぽのオレンジ', score: x => x.tang * 0.65 + P0(x).carrot * 0.35 },
+    { id: 'hypo', name: 'すっきり部門', point: '体と頭の斑点が少なく、すっきりしていること', score: x => (100 - P0(x).spots) * 0.6 + (100 - P0(x).head) * 0.4 },
+    { id: 'pattern', name: 'パターン部門', point: '模様の乱れと、斑点の迫力', score: x => P0(x).aberrant * 0.6 + P0(x).blotch * 0.4 },
+    { id: 'lav', name: 'ラベンダー部門', point: 'ラベンダー色の濃さ（黄色はひかえめに）', score: x => P0(x).lav * 0.8 + (100 - x.tang) * 0.2 },
+    { id: 'mono', name: 'モノトーン部門', point: 'マックスノーなどの白と黒のコントラスト', score: x => Math.min(100, (x.genes.snow ? 45 : 0) + (x.genes.snow === 2 ? 15 : 0) + (x.genes.ecl === 2 ? 10 : 0) + (100 - x.tang) * 0.3 + (x.genes.bliz === 2 ? 10 : 0)) },
+    { id: 'rare', name: '総合部門', point: '珍しいモルフかどうかと、全体のバランス', score: x => Math.min(100, 30 + ['alb', 'ecl', 'bliz'].reduce((n, k) => n + (x.genes[k] === 2 ? 16 : 0), 0) + x.genes.snow * 9 + Math.max(x.tang, P0(x).carrot, 100 - P0(x).spots, P0(x).aberrant, P0(x).lav) * 0.3) },
+  ];
+  const RIVALS = ['ヤモリ堂', '荒野レプタイルズ', 'ひだまりブリーダーズ', 'しっぽ工房', 'みかん畑ファーム', 'ガラス屋さん', 'ナイトゲッコー', 'さばくのおうち', 'こもれびレプ', 'ぷにぷに舎'];
+  const RNAMES = ['コハク', 'ネロ', 'ルビー', 'ソラ', 'マシュ', 'カカオ', 'ユキ', 'ヒノキ', 'モモ', 'ジン', 'アオ', 'キナ', 'レモ', 'ハク'];
+  const strHash = str => { let h = 2166136261; for (const c of str) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; } return h; };
+  const themeOf = (lv, day) => SHOW_THEMES[(strHash(day + lv.id) >>> 3) % SHOW_THEMES.length];
+  // コンディション：おなか・きれい・なれ度・体の大きさ
+  function showCond(g) {
+    return (g.hunger >= 60 ? 5 : g.hunger >= 35 ? 2 : 0) + (g.clean >= 60 ? 5 : g.clean >= 35 ? 2 : 0) + Math.min(5, g.tame / 20) + Math.min(5, g.growth / GROWTH.max * 5) + (stageOf(g) === 'young' ? -12 : 0);
+  }
+  function showScore(g, th, day) {
+    const base = clamp(th.score(g), 0, 100);
+    const r = prngApp(strHash(day + g.id + th.id));
+    const luck = (r() - 0.5) * 8;
+    return { base: Math.round(base), cond: Math.round(showCond(g)), luck: Math.round(luck), total: Math.round(base * 0.85 + showCond(g) + luck) };
+  }
+  function prngApp(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  function showBlock(g, day) {
+    if (stageOf(g) === 'baby') return 'ベビーはまだ出られません';
+    if (g.showDay === day) return '今日はもう出場しました';
+    return '';
+  }
+  const stars = v => '★★★★★☆☆☆☆☆'.slice(5 - Math.max(1, Math.min(5, Math.round(v / 20))), 10 - Math.max(1, Math.min(5, Math.round(v / 20))));
+  function showPage() {
+    const day = todayKey();
+    const rec = S.showRec || {};
+    const cards = SHOW_LEVELS.map((lv, i) => {
+      const th = themeOf(lv, day);
+      return `<div class="card show-card lv${i}">
+        <div class="show-head"><span class="pill ${['good', 'info', 'pink'][i]}">${lv.mark}</span><b>${lv.name}</b><span class="row-side price">${lv.reward}</span></div>
+        <p class="show-theme">今日の部門：<b>${th.name}</b></p>
+        <p class="muted small">審査のポイント：${th.point}</p>
+        <p class="muted small">${lv.note} ・ 優勝 ${lv.reward}コイン / 2位 ${Math.round(lv.reward * 0.3)}コイン</p>
+        <button class="act primary sm" data-action="showMenu" data-lv="${i}">エントリーする</button>
+      </div>`;
+    }).join('');
+    const hist = (S.shows || []).slice(-8).reverse();
+    return `<p class="muted small">毎日、大会ごとに審査される部門がかわります。育てた子の「らしさ」と、ふだんのお世話（おなか・きれい・なれ度・体の大きさ）で審査されます。同じ子が出られるのは1日1回まで。</p>
+      ${cards}
+      <h3 class="h3">これまでの成績</h3>
+      <div class="show-rec">${SHOW_LEVELS.map(lv => `<div><small>${lv.name}</small><b>${(rec[lv.id] || 0)}</b><small>回優勝</small></div>`).join('')}</div>
+      ${hist.length ? `<div class="list">${hist.map(h => `<div class="row static"><span class="row-main"><b>${esc(h.name)} ・ ${h.rank}位</b><small>${esc(h.lv)} ${esc(h.theme)} ・ ${h.score}点 ・ ${esc(h.date)}</small></span><span class="row-side">${h.rank === 1 ? '<span class="pill good">優勝</span>' : h.coins ? '+' + h.coins : ''}</span></div>`).join('')}</div>` : '<p class="muted small">まだ出場していません。</p>'}
+      <div class="card guide"><h3 class="h3">品評会のコツ</h3>
+        <p>部門ごとに見られる特徴がちがいます。オレンジ部門ならタンジェリン度としっぽのオレンジが高い子、すっきり部門なら斑点の少ない子が有利です。</p>
+        <p>ふだんのお世話も点数に入ります。ごはんとおそうじをすませて、なれ度の高い子で出場しよう。ヤングも出られますが、アダルトのほうが有利です。</p>
+        <p>上の大会で勝つには、目的の特徴を強めるように何代もブリードして、血統を作っていくのが近道です。</p></div>`;
+  }
   function renderDex() {
     const found = G.DEX.filter(d => S.dex[d.id]).length;
     const extra = Object.keys(S.names).filter(n => !G.DEX.some(d => d.name === n)).sort();
@@ -1126,8 +1244,16 @@
       const art = portrait({ genes: d.rep.genes, tang: d.rep.tang, poly: d.rep.poly, seed: 1000 + i * 7919 }, 'adult', got ? d.name : '');
       return `<div class="dex-card${got ? '' : ' locked'}"><div class="dex-art">${art}</div><b>${esc(d.name)}</b><small class="muted">${esc(d.hint)}</small></div>`;
     }).join('');
+    const dtab = S.dexTab || 'dex';
+    const dtabs = `<div class="shop-tabs two" role="tablist">${[['dex', '図鑑'], ['show', '品評会']].map(([k, n]) => `<button role="tab" aria-selected="${dtab === k}" class="${dtab === k ? 'on' : ''}" data-action="dexTab" data-tab="${k}">${n}</button>`).join('')}</div>`;
+    if (dtab === 'show') {
+      const html = `<h2 class="h2">品評会</h2>${dtabs}${showPage()}`;
+      if (html !== dexHTML) { setHTML($('#view-dex'), html); dexHTML = html; }
+      return;
+    }
     const html = `
       <h2 class="h2">モルフ図鑑 <small class="muted">${found} / ${G.DEX.length}</small></h2>
+      ${dtabs}
       ${albumList()}
       ${achSection()}
       <h3 class="h3">モルフ</h3>
