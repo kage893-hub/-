@@ -427,3 +427,14 @@ button { font: inherit; color: inherit; }
 .tank.camera-on .tank-name, .tank.camera-on .thermo, .tank.camera-on .cam-btn { opacity: 0; pointer-events: none; }
 .shot-view { border-radius: 14px; overflow: hidden; background: var(--sand-1); }
 .shot-view img { display: block; width: 100%; height: auto; }
+
+/* ---------- 誕生日・お迎え日・お祝い */
+.dates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 10px; padding: 10px 12px; border-radius: 14px; background: var(--accent-soft); }
+.dates > div { display: grid; gap: 1px; min-width: 0; }
+.dates b { font-size: 13.5px; }
+.dates span { font-size: 12px; color: var(--muted); }
+.dates p { grid-column: 1 / -1; margin: 0; color: var(--ink); font-weight: 700; }
+.party { position: relative; display: grid; justify-items: center; gap: 6px; text-align: center; overflow: hidden; padding-block: 6px; }
+.confetti { position: absolute; inset: 0; pointer-events: none; }
+.confetti i { position: absolute; top: -12px; left: var(--x); width: 8px; height: 14px; border-radius: 2px; background: var(--c); animation: fall 2.6s ease-in var(--d) infinite; }
+@keyframes fall { to { transform: translateY(360px) rotate(520deg); opacity: .2; } }

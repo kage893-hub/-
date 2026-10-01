@@ -126,7 +126,8 @@
       genes: G.normGenes(o.genes || {}), tang: o.tang === undefined ? 20 : o.tang, poly: G.normPoly(o.poly),
       growth: o.growth || 0, hunger: o.hunger === undefined ? 70 : o.hunger, clean: 100, tame: o.tame || 10,
       poop: 0, poopAt: 0, shedUntil: 0, gravid: null, restUntil: 0, handledAt: 0,
-      seed: Math.floor(Math.random() * 1e9), gen: o.gen || 1, born: Date.now(),
+      seed: Math.floor(Math.random() * 1e9), gen: o.gen || 1, born: Date.now(), adopted: Date.now(), growth0: o.growth || 0,
+      hatched: !!o.hatched, birthday: o.hatched ? Date.now() : Date.now() - estAgeDays(o.growth || 0) * 86400000, birthEst: !o.hatched,
     };
   }
   function freshState() {
@@ -177,10 +178,10 @@
         if (fedH > 0) grow(g, fedH * GROWTH.perHour * heatInfo(heatOf(g)).growth, now);
       }
       S.lastTick = now;
-      for (const g of S.geckos) recordWeight(g, now);
+      for (const g of S.geckos) { recordWeight(g, now); checkMilestones(g); }
     }
     for (const g of S.geckos) {
-      if (g.poopAt && now >= g.poopAt) { g.poop = Math.min(3, g.poop + 1); g.clean = clamp(g.clean - 10); g.poopAt = 0; }
+      if (g.poopAt && now >= g.poopAt) { g.poop = Math.min(3, g.poop + 1); g.clean = clamp(g.clean - 10); g.poopAt = 0; mile(g, 'poop', 'はじめてのフンをした（元気なしるし！）', false); }
       if (g.shedUntil && now >= g.shedUntil) g.shedUntil = 0;
       if (g.gravid && now >= g.gravid.layAt) layEggs(g, now);
     }
@@ -215,6 +216,8 @@
     sfx('lay');
     toast(`${g.name}が卵を2個産みました！インキュベーターに移しました`);
     memo(g, `${dad.name}とのあいだに、卵を2個産んだ`);
+    g.clutches = (g.clutches || 0) + 1;
+    if (g.clutches === 1) mile(g, 'mom', 'はじめて卵を産んで、お母さんになった', true);
   }
 
   // ---------- お店の入荷
@@ -352,6 +355,7 @@
   // お世話
   // ======================================================
   function applyEat(g, kind) {
+    mile(g, 'eat', `はじめての${FOODS[kind].name}をぱくっと食べた`, true);
     const F = FOODS[kind];
     g.hunger = clamp(g.hunger + F.hunger);
     grow(g, F.growth * heatInfo(heatOf(g)).growth, Date.now());
@@ -424,7 +428,7 @@
       return;
     }
     S.eggs = S.eggs.filter(x => x !== e);
-    const g = newGecko({ name: unusedName(), sex: e.sex, genes: e.genes, tang: e.tang, poly: e.poly, growth: 0, hunger: 60, gen: e.gen });
+    const g = newGecko({ name: unusedName(), sex: e.sex, genes: e.genes, tang: e.tang, poly: e.poly, growth: 0, hunger: 60, gen: e.gen, hatched: true });
     S.geckos.push(g);
     S.stats.hatched++;
     S.coins += 5;
@@ -517,6 +521,7 @@
       const wait = g.handledAt + 15 * MIN - now;
       if (wait > 0) { toast(`少し休ませてあげよう（あと${fmtLeft(wait)}）`); return; }
       g.handledAt = now;
+      mile(g, 'hand', 'はじめて手の上に乗ってくれた', true, `${g.name}が手の上に乗ってくれました`);
       const wasTame = g.tame;
       g.tame = clamp(g.tame + 6);
       if (wasTame < 100 && g.tame >= 100) memo(g, 'なれ度が100に！手の上ですっかりくつろぐように', true);
@@ -531,6 +536,8 @@
       const g = selected();
       if (!g || !g.shedUntil) return;
       g.shedUntil = 0;
+      g.sheds = (g.sheds || 0) + 1;
+      if (g.sheds === 1) g.mile = Object.assign(g.mile || {}, { shed1: Date.now() });
       g.tame = clamp(g.tame + 4);
       toast('脱皮完了！脱いだ皮はぱくっと食べちゃいました');
       memo(g, 'しっとりケアで脱皮が完了。皮はぱくっと食べた', true);
@@ -833,6 +840,7 @@
           ${bar('せいちょう', g.growth / GROWTH.max * 100, 'var(--good)', growSide)}
         </div>
         ${weightCard(g)}
+        ${datesCard(g)}
         <p class="muted small">${st === 'adult' ? (g.growth >= GROWTH.max ? 'りっぱなおとなです' : 'おとなになりました。ペアリングできます') : `${STAGE_LABEL[st === 'baby' ? 'young' : 'adult']}まで あと ${Math.ceil(next - g.growth)}`}${g.hunger <= 30 ? ' ・ おなかが空いていると成長が止まります' : ''}</p>
       </div>
 
@@ -1545,8 +1553,8 @@
   function weightChart(g) {
     const log = weightLog(g).slice(-30);
     const cur = weightOf(g);
+    if (log.length < 2) return '';
     const pts = log.concat([{ t: Date.now(), w: cur, now: true }]);
-    if (pts.length < 2) return '';
     const W = 300, H = 90, pad = 8;
     const ws = pts.map(p => p.w), lo = Math.min(...ws) * 0.9, hi = Math.max(...ws) * 1.08 + 0.1;
     const X = i => pad + (W - pad * 2) * (pts.length === 1 ? 0.5 : i / (pts.length - 1));
@@ -1661,6 +1669,103 @@
     },
   });
 
+  // ======================================================
+  // 誕生日・お迎え日・節目の記録
+  // ======================================================
+  const DAY = 86400000;
+  const dkey = t => { const d = new Date(t); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
+  const fmtDay = t => { const d = new Date(t); return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`; };
+  // 成長から、おおよその生後日数を逆算する（ショップの子は、いつ生まれたか分からないため）
+  const estAgeDays = growth => Math.round(3 + growth * 1.2);
+  function ensureDates(g) {
+    if (!g.adopted) g.adopted = g.born || Date.now();
+    if (!g.birthday) {
+      // これまでの子：お迎え日の時点の成長から逆算（卵からかえった子は生後0日）
+      g.birthday = g.hatched ? g.adopted : g.adopted - estAgeDays(g.growth0 != null ? g.growth0 : g.growth) * DAY;
+      if (g.hatched == null && g.gen > 1) g.birthday = g.adopted;
+      g.birthEst = !(g.gen > 1 || g.hatched);
+    }
+  }
+  const yearsOld = g => { const b = new Date(g.birthday), n = new Date(); let y = n.getFullYear() - b.getFullYear(); if (n.getMonth() < b.getMonth() || (n.getMonth() === b.getMonth() && n.getDate() < b.getDate())) y--; return Math.max(0, y); };
+  const livedDays = g => Math.max(0, Math.floor((Date.now() - g.adopted) / DAY));
+  const ageDays = g => Math.max(0, Math.floor((Date.now() - g.birthday) / DAY));
+  function ageLabel(g) {
+    const d = ageDays(g);
+    if (d < 60) return `生後${d}日`;
+    const m = Math.floor(d / 30.4);
+    return m < 12 ? `生後${m}か月` : `${Math.floor(m / 12)}歳${m % 12 ? m % 12 + 'か月' : ''}`;
+  }
+  function datesCard(g) {
+    ensureDates(g);
+    const next = nextAnniv(g);
+    return `<div class="dates">
+      <div><small class="muted">お迎え日</small><b>${fmtDay(g.adopted)}</b><span>いっしょに ${livedDays(g)} 日目</span></div>
+      <div><small class="muted">${g.birthEst ? '誕生日（推定）' : '誕生日'}</small><b>${fmtDay(g.birthday)}</b><span>${ageLabel(g)}</span></div>
+      ${next ? `<p class="muted small">${next}</p>` : ''}</div>`;
+  }
+  function nextAnniv(g) {
+    const b = new Date(g.birthday); const now = new Date();
+    let n = new Date(now.getFullYear(), b.getMonth(), b.getDate());
+    if (n < new Date(now.getFullYear(), now.getMonth(), now.getDate())) n = new Date(now.getFullYear() + 1, b.getMonth(), b.getDate());
+    const left = Math.round((n - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / DAY);
+    return left === 0 ? '今日は誕生日です！' : left <= 30 ? `誕生日まであと ${left} 日` : '';
+  }
+
+  // ---- 節目：いちど記録したら二度と出ない（g.mile に覚える）
+  const WEIGHT_MILES = [10, 20, 30, 50, 70];
+  const DAY_MILES = [7, 30, 100, 365];
+  function mile(g, id, text, withLook, toastText) {
+    g.mile = g.mile || {};
+    if (g.mile[id]) return false;
+    g.mile[id] = Date.now();
+    memo(g, text, withLook);
+    if (toastText) toast(toastText);
+    return true;
+  }
+  function checkMilestones(g) {
+    ensureDates(g);
+    const w = weightOf(g);
+    for (const m of WEIGHT_MILES) if (w >= m) mile(g, 'w' + m, `体重が ${m}g をこえた！`, true, `${g.name}の体重が ${m}g をこえました`);
+    const d = livedDays(g);
+    for (const m of DAY_MILES) if (d >= m) mile(g, 'd' + m, `いっしょに暮らして ${m} 日になった`, true, `${g.name}と暮らして ${m} 日！`);
+  }
+  // 一日のはじめに、誕生日とお迎え記念日をお祝い
+  function checkCelebrations() {
+    const today = dkey(Date.now()), list = [];
+    S.celebrated = S.celebrated || {};
+    for (const g of S.geckos) {
+      ensureDates(g);
+      const b = new Date(g.birthday), n = new Date();
+      if (b.getMonth() === n.getMonth() && b.getDate() === n.getDate() && yearsOld(g) >= 1 && S.celebrated[g.id + 'b' + n.getFullYear()] == null) {
+        S.celebrated[g.id + 'b' + n.getFullYear()] = today;
+        list.push({ g, title: `${g.name}、お誕生日おめでとう！`, sub: `${yearsOld(g)}歳になりました`, coins: 50 + 30 * yearsOld(g), memo: `${yearsOld(g)}歳の誕生日をむかえた` });
+      }
+      const d = livedDays(g);
+      for (const [days, label, coins] of [[100, '100日', 40], [365, '1周年', 120], [730, '2周年', 200]]) {
+        if (d === days && S.celebrated[g.id + 'a' + days] == null) {
+          S.celebrated[g.id + 'a' + days] = today;
+          list.push({ g, title: `${g.name}と暮らして${label}！`, sub: `お迎えしたのは ${fmtDay(g.adopted)}`, coins, memo: `お迎え${label}をお祝いした` });
+        }
+      }
+    }
+    return list;
+  }
+  function celebrate(list) {
+    const c = list.shift();
+    if (!c) return;
+    S.coins += c.coins;
+    memo(c.g, c.memo, true);
+    window._celebQueue = list;
+    sfx('hatch');
+    openSheet(`<div class="party"><div class="confetti" aria-hidden="true">${Array.from({ length: 24 }, (_, i) => `<i style="--x:${(i * 41) % 100}%;--d:${(i % 6) * 0.25}s;--c:${['#E3A82B', '#E68FA8', '#82B4D0', '#82BE84'][i % 4]}"></i>`).join('')}</div>
+      <div class="reveal-art">${portrait(c.g, stageOf(c.g), c.g.name)}</div>
+      <h3 class="morph big">${esc(c.title)}</h3><p class="muted">${esc(c.sub)}</p>
+      <p><b>お祝いに ${c.coins} コイン</b></p>
+      <button class="act primary" data-action="celebNext">${list.length ? 'つぎへ' : 'ありがとう！'}</button></div>`);
+    save();
+  }
+  Object.assign(ACTIONS, { celebNext() { closeSheet(); const q = window._celebQueue || []; if (q.length) setTimeout(() => celebrate(q), 250); } });
+
   // ---------- 効果音（その場で合成するので音声ファイルはいらない）
   let actx = null;
   function sfx(kind) {
@@ -1749,6 +1854,7 @@
   if (L3.supported && L3.loadModel) L3.loadModel('assets/gecko.glb').then(ok => { hideLoading(); if (ok) { dexHTML = ''; renderView(); } });
   else hideLoading();
   tick();
+  setTimeout(() => { if (!S.welcomed || !S.geckos.length) return; const list = checkCelebrations(); if (list.length) celebrate(list); }, 2500);
   switchView('case');
   setInterval(tick, 5000);
   document.addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); else tick(); });
