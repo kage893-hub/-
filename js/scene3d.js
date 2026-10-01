@@ -1834,7 +1834,7 @@
       gk: null, id: null, key: '', size: 1, x: 0.5, z: 0.8, yaw: 0.4,
       mode: 'idle', wait: 1, target: null, sleeping: false, zzz: 0,
       foods: [], poops: [], t: 0, phase: 0, walkW: 0, blinkT: 2, blinkV: 0,
-      lick: 0, happy: 0, chomp: 0, stalk: 0, look: 0, tiltT: 0, active: true, night: false,
+      lick: 0, happy: 0, stalk: 0, meal: null, hunt: null, eatLook: 0, eatPitch: 0, look: 0, tiltT: 0, active: true, night: false,
       drop: 0.04, curl: 0, pitch: 0,
       heatGlow: 1, heatPref: 0,
       close: false, orbit: 0.55, elev: 0.3, zoom: 1,
@@ -1896,6 +1896,7 @@
       if (st.sleeping) wake();
     }
     function takeFoods() {
+      endMealObj(); st.meal = null; st.hunt = null;
       const kinds = st.foods.map(f => f.kind);
       st.foods.forEach(f => { scene.remove(f.obj); disposeTree(f.obj); });
       st.foods = [];
@@ -2105,6 +2106,80 @@
       }
     }
 
+    // ---- ごはんの捕まえ方：飛びつく → くわえて振る → もぐもぐ → ごっくん → 口のまわりをぺろり
+    function hopAway(f) {
+      const p = f.obj.position, a = Math.atan2(p.x - st.x, p.z - st.z) + rand(-0.9, 0.9), d = rand(1.2, 2.2);
+      const x1 = clamp(p.x + Math.sin(a) * d, -BOUNDS.x, BOUNDS.x), z1 = clamp(p.z + Math.cos(a) * d, BOUNDS.zMin, BOUNDS.zMax);
+      f.obj.rotation.y = Math.atan2(x1 - p.x, z1 - p.z);
+      f.hop = { x0: p.x, z0: p.z, x1, z1, k: 0, dur: 0.3 };
+      f.t = rand(0.6, 1.4);
+    }
+    const puffs = [];
+    const puffGeo = new T.SphereGeometry(0.035, 6, 4);
+    function puff(x, z, S) {
+      for (let i = 0; i < 7; i++) {
+        const m = new T.Mesh(puffGeo, new T.MeshBasicMaterial({ color: '#D9C9A3', transparent: true, opacity: 0.85, depthWrite: false }));
+        m.position.set(x + rand(-0.15, 0.15) * S, 0.03, z + rand(-0.15, 0.15) * S);
+        scene.add(m);
+        puffs.push({ m, vx: rand(-0.9, 0.9), vy: rand(0.8, 1.6), vz: rand(-0.9, 0.9), t: 0 });
+      }
+    }
+    function stepPuffs(dt) {
+      for (let i = puffs.length - 1; i >= 0; i--) {
+        const q = puffs[i]; q.t += dt;
+        q.vy -= 5 * dt;
+        q.m.position.x += q.vx * dt; q.m.position.y = Math.max(0.01, q.m.position.y + q.vy * dt); q.m.position.z += q.vz * dt;
+        q.m.material.opacity = Math.max(0, 0.85 * (1 - q.t / 0.55));
+        if (q.t > 0.55) { scene.remove(q.m); q.m.material.dispose(); puffs.splice(i, 1); }
+      }
+    }
+    function catchFood(food, S) {
+      const i = st.foods.indexOf(food);
+      if (i >= 0) st.foods.splice(i, 1);
+      food.hop = null;
+      const chews = food.kind === 'worm' ? 3 : food.kind === 'dubia' ? 5 : 4;
+      st.meal = { obj: food.obj, kind: food.kind, t: 0, ph: 'hold', chews, s0: food.obj.scale.x };
+      st.hunt = null; st.stalk = 0;
+      fx('パクッ', 'eat');
+      handlers.onEat && handlers.onEat(food.kind);
+    }
+    function endMealObj() {
+      const M = st.meal;
+      if (M && M.obj) { scene.remove(M.obj); disposeTree(M.obj); M.obj = null; }
+    }
+    function stepMeal(dt, S) {
+      const M = st.meal;
+      M.t += dt;
+      const hy = st.yaw + st.look * 0.6;
+      if (M.ph === 'hold') {
+        // くわえたまま、首を左右にぶんぶん振って弱らせる（ミルワームは引っぱるだけ）
+        const k = Math.min(1, M.t / 0.7);
+        st.eatLook = M.kind === 'worm' ? 0 : Math.sin(M.t * 28) * 0.32 * (1 - k);
+        st.eatPitch = M.kind === 'worm' ? 0.06 * Math.sin(k * Math.PI) : -0.05;
+        if (M.t > 0.7) { M.ph = 'chew'; M.t = 0; }
+      } else if (M.ph === 'chew') {
+        // もぐもぐ：かむたびに頭が小さく上下して、えさが口の中へ消えていく
+        const per = 0.34, n = M.t / per;
+        st.eatPitch = -Math.abs(Math.sin(n * Math.PI)) * 0.1 + 0.03;
+        if (M.obj) M.obj.scale.setScalar(M.s0 * Math.max(0.15, 1 - 0.85 * Math.min(1, n / M.chews)));
+        if (n >= M.chews) { endMealObj(); M.ph = 'gulp'; M.t = 0; }
+      } else if (M.ph === 'gulp') {
+        // ごっくん：頭をくいっと上げて飲みこむ
+        st.eatPitch = 0.16 * Math.sin(Math.min(1, M.t / 0.45) * Math.PI);
+        if (M.t > 0.5) { M.ph = 'lick'; M.t = 0; st.lick = 0.9; M.licks = 1; }
+      } else if (M.ph === 'lick') {
+        // 口のまわりをぺろり、ぺろり
+        if (M.t > 0.95 && M.licks < 2) { st.lick = 0.9; M.licks++; }
+        if (M.t > 1.9) st.meal = null;
+      }
+      if (M.obj) {
+        const mp = mouthWorld();
+        const sink = M.ph === 'chew' ? Math.min(1, M.t / (0.34 * M.chews)) : 0;
+        const fwd = (0.06 - 0.06 * sink) * S;
+        M.obj.position.set(mp.x + Math.sin(hy) * fwd, Math.max(0.02, mp.y - 0.035), mp.z + Math.cos(hy) * fwd);
+        M.obj.rotation.set(0, hy + Math.PI / 2 + (M.kind === 'worm' ? Math.sin(M.t * 16) * 0.45 : 0), 0);
+      }
+    }
     function stepGecko(dt) {
       const gk = st.gk;
       if (!gk) return;
@@ -2113,31 +2188,50 @@
       const nf = st.night ? 1.35 : 1;
       const S = 0.95 * st.size;
 
-      if (st.chomp > 0) {
-        st.chomp -= dt;
+      st.eatLook = 0; st.eatPitch = 0;
+      if (st.meal) {
+        stepMeal(dt, S);
       } else if (food) {
         if (st.sleeping) wake();
-        const fp = food.obj.position;
-        const mp = mouthWorld();
+        const fp = food.obj.position, mp = mouthWorld();
         const dMouth = Math.hypot(fp.x - mp.x, fp.z - mp.z);
-        if (dMouth < 0.3 * S + 0.12 && !food.hop) {
-          st.foods.shift();
-          scene.remove(food.obj);
-          disposeTree(food.obj);
-          st.chomp = 0.7;
-          st.lick = 0.9;
-          handlers.onEat && handlers.onEat(food.kind);
-        } else if (dMouth < 1.5 * S && st.stalk < 1) {
-          // 狩りの前にしっぽの先をぷるぷる
-          st.stalk += dt;
-          st.yaw += angleTo(st.yaw, Math.atan2(fp.x - st.x, fp.z - st.z)) * Math.min(1, dt * 5);
+        const aim = Math.atan2(fp.x - st.x, fp.z - st.z);
+        const H = st.hunt || (st.hunt = { ph: 'track', t: 0, creep: false });
+        H.t += dt;
+        if (H.ph === 'strike') {
+          // 一瞬で飛びつく
+          st.yaw += angleTo(st.yaw, aim) * Math.min(1, dt * 14);
+          const sp = Math.min(Math.max(0, dMouth - 0.05), H.speed * dt, H.left); H.left -= sp;
+          st.x += Math.sin(st.yaw) * sp; st.z += Math.cos(st.yaw) * sp; step = sp;
+          st.eatPitch = -0.2 * Math.sin(Math.min(1, H.t / 0.16) * Math.PI);
+          if (dMouth < 0.3 * S + 0.16 && !food.hop) catchFood(food, S);
+          else if (H.t > 0.2) { H.ph = 'miss'; H.t = 0; }
+        } else if (H.ph === 'miss') {
+          // 空ぶり。顔を上げてきょとんとして、もう一度ねらう
+          st.eatPitch = 0.08 * Math.sin(Math.min(1, H.t / 0.8) * Math.PI);
+          if (H.t > 0.8) { H.ph = 'track'; H.t = 0; }
+        } else if (dMouth < 1.1 * S + 0.35 && !food.hop) {
+          // ぴたっと止まって、しっぽの先をぷるぷる → ねらいを定めて
+          if (H.ph !== 'stalk') { H.ph = 'stalk'; H.t = 0; H.wait = rand(0.7, 1.8); }
+          st.yaw += angleTo(st.yaw, aim) * Math.min(1, dt * 4);
+          st.eatPitch = -0.1;
+          if (H.t > H.wait && Math.abs(angleTo(st.yaw, aim)) < 0.3) {
+            // コオロギは気配に気づいて跳ねて逃げることがある
+            if (food.kind === 'cricket' && Math.random() < 0.3) hopAway(food);
+            H.ph = 'strike'; H.t = 0; H.speed = (dMouth + 0.3) / 0.15; H.left = dMouth + 0.15;
+            puff(mp.x, mp.z, S);
+          }
         } else {
-          const reach = 2.2 * S;
-          step = moveToward(fp.x - Math.sin(st.yaw) * reach, fp.z - Math.cos(st.yaw) * reach, (st.stalk >= 1 ? 3.4 : 1.6) * nf, dt);
-          if (!step) st.stalk = 0;
+          // 気づいたら首をのばして見つめ、近くなったら体を低くしてそろりそろり
+          if (H.ph === 'stalk') H.ph = 'track';
+          const reach = 2.9 * S;
+          H.creep = dMouth < 3.4 * S;
+          if (H.ph === 'track' && H.t < 0.6) { st.yaw += angleTo(st.yaw, aim) * Math.min(1, dt * 5); st.eatPitch = -0.05; }
+          else step = moveToward(fp.x - Math.sin(aim) * reach, fp.z - Math.cos(aim) * reach, (H.creep ? 0.7 : 1.9) * nf, dt);
         }
+        st.stalk = H.ph === 'stalk' || H.creep ? 1 : 0;
       } else {
-        st.stalk = 0;
+        st.stalk = 0; st.hunt = null;
         if (st.sleeping) {
           st.wait -= dt;
           st.zzz -= dt;
@@ -2216,11 +2310,13 @@
         wantLook = st.peek;
       } else if (!moving && !st.sleeping && !food) {
         wantLook = clamp(angleTo(st.yaw, Math.atan2(camera.position.x - st.x, camera.position.z - st.z)), -0.75, 0.75);
+      } else if (st.meal) {
+        wantLook = 0;
       } else if (food && !st.sleeping) {
         wantLook = clamp(angleTo(st.yaw, Math.atan2(food.obj.position.x - st.x, food.obj.position.z - st.z)), -0.6, 0.6);
       }
       st.look = lerp(st.look, wantLook, Math.min(1, dt * 2.5));
-      st.drop = lerp(st.drop, st.sleeping || st.mode === 'bask' ? 0.13 : moving ? 0 : 0.06, Math.min(1, dt * 2));
+      st.drop = lerp(st.drop, st.sleeping || st.mode === 'bask' ? 0.13 : st.hunt && st.hunt.ph === 'strike' ? -0.02 : st.stalk ? 0.11 : moving ? 0 : 0.06, Math.min(1, dt * 2));
       st.curl = lerp(st.curl, st.sleeping ? 1 : 0, Math.min(1, dt * 1.5));
       st.pitch = lerp(st.pitch, st.sleeping ? 0.22 : (st.stalk > 0 ? -0.08 : 0), Math.min(1, dt * 3));
       if (st.lick > 0) st.lick -= dt;
@@ -2230,9 +2326,9 @@
       P.t = st.t;
       P.phase = st.phase;
       P.walk = st.walkW;
-      P.look = st.look;
+      P.look = st.look + (st.eatLook || 0);
       // 歩くときは一歩ごとに頭が小さく上下する
-      P.pitch = st.pitch + (st.chomp > 0.35 ? -0.15 : 0) + Math.sin(st.phase * 2) * 0.035 * st.walkW;
+      P.pitch = st.pitch + (st.eatPitch || 0) + Math.sin(st.phase * 2) * 0.035 * st.walkW;
       P.tilt = (st.tiltT > 0 ? Math.sin(Math.min(1, st.tiltT) * Math.PI) * 0.22 : 0) + (st.happy > 0 ? Math.sin(st.t * 7) * 0.12 : 0);
       P.curl = st.curl;
       P.stalk = st.stalk > 0 ? 1 : 0;
@@ -2290,7 +2386,7 @@
       if (st.active && raw < 0.5) adapt(raw);
       if (st.active) {
         st.t += dt;
-        stepFoods(dt);
+        stepFoods(dt); stepPuffs(dt);
         stepGecko(dt);
         stepCamera(dt);
         renderer.render(scene, camera);
@@ -2307,7 +2403,7 @@
         st.heatPref = temp <= 30 ? 1 : temp >= 34 ? -1 : 0;
         heat.intensity = 0.8 * st.heatGlow;
       },
-      setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
+      _st: st, setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
       pendingFoods: () => st.foods.map(f => f.kind),
       lick() { st.lick = 0.9; },
       happy() { st.happy = 1.4; if (st.sleeping) wake(); },

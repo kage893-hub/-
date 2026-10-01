@@ -2204,6 +2204,7 @@
 
   S = load();
   window.__leopaState = () => S; // 動作確認用
+  window.__leopaTank = () => tank;
   if (!S) freshState();
   const awayFrom = S.lastTick;
   initTank();
