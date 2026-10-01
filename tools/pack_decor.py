@@ -62,16 +62,16 @@ def glb_mesh(path, cell):
 
 for name in PICK:
     if name.endswith('.glb') or ':' in name:
-        # 「ファイル名:名前:格子の大きさ」
-        path, out_name, cell = name.split(':')
+        # 「ファイル名:名前:格子の大きさ[:材質]」
+        parts = name.split(':'); path, out_name, cell = parts[:3]; mat = parts[3] if len(parts) > 3 else 'Terracotta'
         verts, tris = glb_mesh(path, float(cell))
         lo = [min(v[c] for v in verts) for c in range(3)]; hi = [max(v[c] for v in verts) for c in range(3)]
         cx, cz, y0 = (lo[0] + hi[0]) / 2, (lo[2] + hi[2]) / 2, lo[1]
         P = struct.pack('<%df' % (len(verts) * 3), *[x for v in verts for x in (v[0] - cx, v[1] - y0, v[2] - cz)])
         big = len(verts) > 65535
         I = struct.pack('<%d%s' % (len(tris), 'I' if big else 'H'), *tris)
-        mats.setdefault('Terracotta', {'img': None, 'alpha': False, 'double': True})
-        items[out_name] = {'prims': [{'mat': 'Terracotta', 'pos': put(P), 'nrm': None, 'uv': None, 'idx': put(I), 'i32': big}],
+        mats.setdefault(mat, {'img': None, 'alpha': False, 'double': True})
+        items[out_name] = {'prims': [{'mat': mat, 'pos': put(P), 'nrm': None, 'uv': None, 'idx': put(I), 'i32': big}],
                            'size': [round(hi[0] - lo[0], 3), round(hi[1] - lo[1], 3), round(hi[2] - lo[2], 3)]}
         print(out_name, 'tris', len(tris) // 3)
         continue

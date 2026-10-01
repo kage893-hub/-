@@ -1496,6 +1496,11 @@
       for (let i = 0; i < 120; i++) { ctx.strokeStyle = `rgba(${r() < 0.6 ? '110,90,70' : '235,225,210'},${0.15 + r() * 0.3})`; ctx.lineWidth = 1 + r() * 3; const x = r() * 256; ctx.beginPath(); ctx.moveTo(x, 0); for (let y = 0; y <= 512; y += 32) ctx.lineTo(x + Math.sin(y / 50 + i) * 4, y); ctx.stroke(); }
       map = new T.CanvasTexture(c); map.encoding = T.sRGBEncoding; map.wrapS = map.wrapT = T.RepeatWrapping;
     }
+    if (name === 'Stone') {
+      const mat = phys('#8E887D', { roughness: 0.92, bumpMap: sandTex(), bumpScale: 0.04, side: T.DoubleSide });
+      mat.userData.shared = true;
+      return (KIT.mats[name] = mat);
+    }
     if (name === 'Terracotta') {
       const mat = phys('#B55A33', { roughness: 0.88, bumpMap: sandTex(), bumpScale: 0.025, side: T.DoubleSide });
       mat.userData.shared = true;
@@ -1629,6 +1634,18 @@
   const OLD = OLD_DECOR;
   // 3Dモデル集が読めたらそれを、読めなかったときは手作りの形を使う
   function kitOr(name, fit, opt, fallback) { return kitHas(name) ? buildKit(name, fit, opt) : fallback(); }
+  // 水入れ：石をくりぬいた器に水を張る
+  function stoneBasin() {
+    if (!kitHas('Basin')) return OLD_DECOR.dish.build();
+    const g = new T.Group(), W = 2.0;
+    const body = buildKit('Basin', W);
+    const it = KIT.data.items.Basin, k = W / Math.max(it.size[0], it.size[2]);
+    const water = new T.Mesh(new T.CircleGeometry(it.size[2] * k * 0.42, 40), phys('#6FAECB', { roughness: 0.02, clearcoat: 1, transparent: true, opacity: 0.85 }));
+    water.rotation.x = -Math.PI / 2;
+    water.position.set(-W * 0.06, it.size[1] * k * 0.72, 0);
+    g.add(body, water);
+    return g;
+  }
   // ウェットシェルター：テラコッタのトンネル。両はしの穴から中に入れる。上の受け皿に水をためる
   const WET_FIT = 3.0;
   function wetShelter() {
@@ -1718,7 +1735,11 @@
       desc: '重なりあって生えるきのこ（飾りです）',
       build: () => kitOr('Mushroom_Laetiporus', 1.1, null, () => OLD_DECOR.plant.build()),
     },
-    dish: OLD.dish,
+    dish: {
+      name: '水入れ', price: 10, r: 1.0,
+      desc: '石をくりぬいた水入れ。いつでも新鮮なお水を',
+      build: stoneBasin,
+    },
   };
   const DEFAULT_DECOR = [{ t: 'wet', x: -4.4, z: -2.6, rot: 0 }, { t: 'dish', x: -5.0, z: 3.2, rot: 0 }, { t: 'plant', x: 1.8, z: -3.8, rot: 0 }];
   // ケースの広さ（床の半分の幅・奥行き）
