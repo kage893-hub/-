@@ -2321,6 +2321,7 @@
       const [kind, id] = img.dataset.thumb.split('|');
       let url = '';
       try { url = L3.itemPhoto(kind, id); } catch (e) { /* 撮れなくても続ける */ }
+      if (url === null) { thumbBusy = false; setTimeout(fillThumbs, 400); return; }
       document.querySelectorAll(`img[data-thumb="${kind}|${id}"]`).forEach(el => { if (url) el.src = url; else el.removeAttribute('data-thumb'); });
       thumbBusy = false;
       fillThumbs();
@@ -3071,7 +3072,7 @@
         <p class="muted small">ひらがなモードでは、すべての文字をひらがなにして、むずかしい言葉をやさしい言葉に言いかえます。</p>
         <p class="set-label">販売ライセンス</p>
         <p class="small">${S.license ? '取得ずみ。里親・ブリーダー依頼・ショーのブースが使えます。' : 'まだ持っていません。里親・ブリーダー依頼・ショーのブースに必要です。'}飼い方クイズ ${LQ_N}問中${LQ_PASS}問以上で合格。何度でも挑戦できます。</p>
-        <button class="act" data-action="licenseStart">${S.license ? 'クイズで腕だめし' : 'ライセンスのクイズに挑戦'}</button>
+        ${S.license ? '<button class="act" data-action="licenseView">ライセンス証を見る</button>' : ''}<button class="act" data-action="licenseStart">${S.license ? 'クイズで腕だめし' : 'ライセンスのクイズに挑戦'}</button>
         <button class="act ghost" data-action="closeSheet">とじる</button>`);
     },
     setKids(t) {
@@ -3404,6 +3405,19 @@
     ['練り餌を食べてくれないときは？', ['ピンセットで目の前にゆらしてみる', 'ほかのえさを一切あげない', 'ケースから出して置いておく']],
   ];
   const LQ_N = 15, LQ_PASS = 13;
+  // 販売ライセンス証：賞状の絵に、名前と取得日を重ねて書く
+  function licenseCard() {
+    return `<div class="license-card"><img src="assets/img/license.webp" alt="" width="1200" height="854">
+      <b class="lic-title">レオパ販売ライセンス</b>
+      <span class="lic-owner">${esc(S.owner || 'かいぬしさん')}</span>
+      <span class="lic-text">レオパの正しい飼い方を<br>身につけたことを認めます</span>
+      <span class="lic-date">${fmtDay(S.license || Date.now())}</span></div>`;
+  }
+  function licenseSheet(head) {
+    openSheet(`<p class="eyebrow">販売ライセンス</p>${head}${licenseCard()}
+      <label class="lic-input"><span class="muted small">ライセンス証に書く名前</span><input id="licName" maxlength="12" value="${esc(S.owner || 'かいぬしさん')}"></label>
+      <div class="actions"><button class="act" data-action="licenseName">名前を書く</button><button class="act primary" data-action="closeSheet">とじる</button></div>`);
+  }
   let quiz = null;
   const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   function needLicense(then) {
@@ -3572,6 +3586,13 @@
       save(); toast('ブースに出しました'); ACTIONS.expoBooth();
     },
     licenseStart() { startQuiz('license', LQ_N); },
+    licenseView() { licenseSheet(''); },
+    licenseName() {
+      const v = (document.getElementById('licName') || {}).value;
+      S.owner = String(v || '').trim().slice(0, 12) || 'かいぬしさん';
+      save(); licenseSheet('');
+      toast('ライセンス証に名前を書きました');
+    },
     seminarStart() {
       const E = expoState(Date.now());
       if (!E || E.seminar) return;
@@ -3588,8 +3609,9 @@
       const Q = quiz; quiz = null;
       if (Q.kind === 'license') {
         if (Q.ok >= LQ_PASS) {
-          S.license = Date.now();
-          openSheet(`<p class="eyebrow">販売ライセンス</p><h3 class="sheet-title">合格！ ライセンスをもらいました</h3><p>${Q.ok} / ${Q.qs.length} 問正解。これで、里親に出す・ブリーダー依頼・ショーのブースが使えます。</p><button class="act primary" data-action="closeSheet">とじる</button>`);
+          const first = !S.license;
+          if (first) S.license = Date.now();
+          licenseSheet(`<h3 class="sheet-title">合格！ ${first ? 'ライセンスをもらいました' : 'さすがです'}</h3><p>${Q.ok} / ${Q.qs.length} 問正解。${first ? 'これで、里親に出す・ブリーダー依頼・ショーのブースが使えます。' : ''}</p>`);
           sfx('hatch');
         } else openSheet(`<p class="eyebrow">販売ライセンス</p><h3 class="sheet-title">${Q.ok} / ${Q.qs.length} 問正解。あと少し！</h3><p>${LQ_PASS}問以上の正解で合格です。${S.license ? '（ライセンスはもう持っているので、練習としていつでも挑戦できます）' : ''}図鑑の「実績」にある「おぼえた飼育のポイント」を読んで、また挑戦しよう。</p><div class="actions"><button class="act" data-action="closeSheet">とじる</button><button class="act primary" data-action="licenseStart">もう一度挑戦</button></div>`);
       } else {

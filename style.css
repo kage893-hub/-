@@ -688,3 +688,14 @@ html.kids .pill { white-space: normal; }
 .hatch3d { width: 100%; aspect-ratio: 4 / 3; border-radius: 16px; overflow: hidden; background: radial-gradient(circle at 50% 40%, #FFF3D6, #E9D2A8); }
 .hatch3d canvas { display: block; width: 100%; height: 100%; }
 .hatch-say { text-align: center; font-weight: 700; margin: 8px 0 0; }
+
+/* 販売ライセンス証：賞状の絵の上に文字を重ねる（位置は絵の線に合わせて%指定） */
+.license-card { position: relative; container-type: inline-size; margin: 10px 0 12px; border-radius: 12px; overflow: hidden; box-shadow: 0 6px 18px rgba(120, 80, 20, .18); }
+.license-card img { display: block; width: 100%; height: auto; }
+.license-card > b, .license-card > span { position: absolute; transform: translate(-50%, -100%); white-space: nowrap; color: #7A5418; font-family: "Zen Maru Gothic", "Hiragino Mincho ProN", serif; }
+.lic-title { left: 61%; top: 24%; font-size: 5.2cqw; letter-spacing: .08em; color: #9A6A1C; }
+.lic-owner { left: 50.6%; top: 50.5%; font-size: 6.4cqw; font-weight: 800; color: #4A3214; }
+.license-card > .lic-text { left: 50.6%; top: 62%; font-size: 2.7cqw; white-space: normal; width: 52%; text-align: center; transform: translate(-50%, 0); line-height: 1.5; }
+.lic-date { left: 77%; top: 84.5%; font-size: 3.2cqw; font-weight: 700; }
+.lic-input { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.lic-input input { font: inherit; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--line, #E3D6BF); background: var(--card, #fff); color: inherit; }

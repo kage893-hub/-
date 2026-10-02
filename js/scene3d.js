@@ -1595,6 +1595,18 @@
     g.traverse(o => { if (o.isMesh) o.castShadow = true; });
     return g;
   }
+  // 画像テクスチャ（URL ごとに1回だけ読む。読めたら cb を呼ぶ）
+  const imgTexCache = {};
+  function imgTex(url, cb) {
+    let e = imgTexCache[url];
+    if (!e) {
+      e = imgTexCache[url] = { tex: null, cbs: [], fail: false };
+      new T.TextureLoader().load(url, t => { t.encoding = T.sRGBEncoding; e.tex = t; e.cbs.splice(0).forEach(f => f(t)); }, undefined, () => { e.fail = true; e.cbs.length = 0; });
+    }
+    if (e.tex) cb(e.tex); else if (!e.fail) e.cbs.push(cb);
+    return e;
+  }
+  const imgTexReady = urls => urls.every(u => { const e = imgTexCache[u]; return !u || (e && (e.tex || e.fail)); });
   function gradientCanvasTexture(stops) {
     const c = document.createElement('canvas');
     c.width = c.height = 128;
@@ -2011,8 +2023,8 @@
     dino: { name: '恐竜時代', price: 150, desc: '火山の背景とシダの森、足あとの残る大地。太古の世界へタイムスリップ', floor: 'dinofloor', tint: '#ffffff', frame: '#5B4A3A', back: 'volcano', thick: true, dino: true },
     candy: { name: 'おかしの家', price: 150, desc: 'クッキーの床、チョコの壁、キャンディの柱。あまーいおうち', floor: 'cookie', tint: '#ffffff', frame: '#F7A8C4', back: 'choco', thick: true, candy: true },
     // レプタイルズショーの会場でだけ買える
-    expoGold: { name: 'ショー限定・ゴールド', price: 180, desc: 'チャンピオンの気分。金色のフレームと木の背面パネル（レプタイルズショー限定）', floor: 'sand', tint: '#FFF1D2', frame: '#C9A13B', back: 'wood', thick: true, expo: true },
-    expoNight: { name: 'ショー限定・ミッドナイト', price: 180, desc: '夜空のような紺色のフレーム。月あかりの砂（レプタイルズショー限定）', floor: 'sand', tint: '#C8D2F0', frame: '#1F2C4C', back: 'rock', thick: true, expo: true },
+    expoGold: { name: 'ショー限定・ゴールド', price: 180, desc: 'チャンピオンの気分。金彩の岩壁とアールデコの飾り枠、黄金の砂と水晶のきらめき（レプタイルズショー限定）', floor: 'sand', tint: '#FFF1D2', frame: '#C9A13B', back: 'wood', thick: true, expo: true, backImg: 'assets/img/cage-gold-back.webp', floorImg: 'assets/img/cage-gold-floor.webp' },
+    expoNight: { name: 'ショー限定・ミッドナイト', price: 180, desc: '星降る紫晶の洞窟と、星くずの黒い砂。夜空のような紺色のフレーム（レプタイルズショー限定）', floor: 'sand', tint: '#C8D2F0', frame: '#1F2C4C', back: 'rock', thick: true, expo: true, backImg: 'assets/img/cage-night-back.webp', floorImg: 'assets/img/cage-night-floor.webp' },
   };
   // ケージ用の模様（一度作ったら使い回す）
   const cageTexCache = {};
@@ -2165,8 +2177,24 @@
       const back = new T.Mesh(new T.PlaneGeometry(hw * 2 + 0.2, 2.2), phys('#ffffff', { map: bt, roughness: th.back === 'choco' ? 0.5 : 0.9 }));
       back.position.set(0, 1.1, -hd - 0.17);
       back.receiveShadow = true;
+      back.userData.back = true;
       g.add(back);
     }
+    // 画像のある限定ケース：読めたら床と背面を画像に差しかえる
+    if (th.floorImg) imgTex(th.floorImg, t0 => {
+      const t = t0.clone(); t.needsUpdate = true;
+      t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(hw / 1.7, hd / 1.7); t.anisotropy = 4;
+      floor.material.map = t; floor.material.bumpMap = t; floor.material.bumpScale = 0.02; floor.material.color.set('#ffffff'); floor.material.needsUpdate = true;
+    });
+    if (th.backImg) imgTex(th.backImg, t => {
+      const back = g.children.find(m => m.userData.back);
+      if (!back) return;
+      // 横長のパネルに、絵をゆがめずに並べる（上下は少し切りとる）
+      const A = (hw * 2 + 0.2) / 2.2, n = Math.max(1, Math.round(A / 2.6)), ry = Math.min(1, 2 / (A / n));
+      const bt = t.clone(); bt.needsUpdate = true;
+      bt.wrapS = T.RepeatWrapping; bt.repeat.set(n, ry); bt.offset.set(0, (1 - ry) / 2);
+      back.material.map = bt; back.material.color.set('#ffffff'); back.material.needsUpdate = true;
+    });
     if (th.candy) g.add(candyBits(hw, hd));
     if (th.dino) g.add(dinoBits(hw, hd));
     return { group: g, floor, front };
@@ -2179,6 +2207,9 @@
     const key = kind + '|' + id;
     if (itemCache.has(key)) return itemCache.get(key);
     if (!supported) return '';
+    // 画像を使うケースは、画像が読めてから撮る（まだなら null を返して、あとでもう一度）
+    const th = kind === 'theme' && CAGE_THEMES[id], us = th ? [th.backImg, th.floorImg].filter(Boolean) : [];
+    if (us.length && !imgTexReady(us)) { us.forEach(u => imgTex(u, () => {})); return null; }
     if (!ir) {
       const renderer = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
       renderer.setSize(400, 300);
@@ -2376,7 +2407,7 @@
     rim.position.set(2, 4, -8);
     scene.add(hemi, sun, heat, rim);
     // ケースの外：木のテーブルと部屋の壁
-    let wall = null, windowG = null, windowGlass = null, sunPatch = null;
+    let wall = null, windowG = null, windowGlass = null, sunPatch = null, roomDay = null, roomNight = null;
     const roomProps = {};
     // 夜につける、部屋のスタンドライト
     const lamp = new T.PointLight('#FFC98A', 0, 26, 1.4);
@@ -2427,6 +2458,15 @@
       sunPatch.rotation.x = -Math.PI / 2;
       sunPatch.position.set(-4, 0.005, -6.6);
       scene.add(sunPatch);
+      // 部屋の背景の絵（昼と夜を重ねて、時間で切りかえる）。読めたら、四角い窓と日だまりはしまう
+      const roomPlane = (url, z) => {
+        const m = new T.Mesh(new T.PlaneGeometry(22, 11), new T.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+        m.position.set(0, 5.5, z); m.visible = false; scene.add(m);
+        imgTex(url, t => { m.material.map = t; m.material.needsUpdate = true; m.visible = true; windowG.visible = false; sunPatch.visible = false; clockKey = ''; if (st.clock) setClock(st.clock[0], st.clock[1]); });
+        return m;
+      };
+      roomNight = roomPlane('assets/img/room-night.webp', -8.97);
+      roomDay = roomPlane('assets/img/room-day.webp', -8.96);
       // テーブルの小物：鉢植えと本
       const pot = new T.Group();
       const potM = new T.Mesh(new T.CylinderGeometry(0.8, 0.6, 1.3, 28), phys('#C9825A', { roughness: 0.8 }));
@@ -2787,6 +2827,7 @@
     const SEASON_SKY = { spring: '#FFEFF1', summer: '#FFFBE6', autumn: '#FFE6C4', winter: '#E6EEFF' };
     let clockKey = '';
     function setClock(hour, season) {
+      st.clock = [hour, season];
       const key = hour.toFixed(2) + season;
       if (key === clockKey) return;
       clockKey = key;
@@ -2811,8 +2852,15 @@
       const bg = C('#1B2130').lerp(C('#DCE6DE'), day).lerp(C('#F2C9A0'), dusk * 0.45);
       scene.background = bg;
       if (windowGlass) windowGlass.material.color.copy(C('#1E2640').lerp(C('#CFE6F5'), day).lerp(C('#F7B98A'), dusk * 0.7).lerp(C('#F4C7C0'), dawn * 0.4));
-      if (sunPatch) { sunPatch.visible = day > 0.05; sunPatch.material.opacity = day; sunPatch.position.x = -4 - 3 * dusk + 3 * dawn; }
+      if (sunPatch && !(roomDay && roomDay.visible)) { sunPatch.visible = day > 0.05; sunPatch.material.opacity = day; sunPatch.position.x = -4 - 3 * dusk + 3 * dawn; }
       if (wall) wall.material.color.copy(C('#5A5470').lerp(C('#E9E4D8'), day).lerp(C('#F2B48A'), dusk * 0.65));
+      if (roomDay && roomDay.visible) {
+        // 夜の絵の上に昼の絵を重ね、明るさで切りかえる。夕方は少しオレンジに
+        const tint = C('#ffffff').lerp(C('#F6B98E'), dusk * 0.6).lerp(C('#F7D2C8'), dawn * 0.3);
+        roomDay.material.opacity = day; roomDay.material.color.copy(tint);
+        roomNight.material.opacity = 1; roomNight.material.color.copy(C('#C9C4DA').lerp(C('#ffffff'), night));
+        if (wall) wall.material.color.copy(C('#2E2A36').lerp(C('#D9C29A'), day));
+      }
     }
     function setNight(on) { setClock(on ? 22 : 13, 'summer'); }
     // 今のケースを写真に撮る（アルバム用。小さめの JPEG）
