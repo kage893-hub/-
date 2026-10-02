@@ -720,13 +720,13 @@ html.kids .pill { white-space: normal; }
 .observe-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--surface-2); border-radius: 14px; }
 .observe-switch button { min-width: 0; min-height: 44px; padding: 6px; border: 0; border-radius: 11px; font-size: 14px; font-weight: 700; cursor: pointer; background: transparent; color: var(--muted); }
 .observe-switch button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
-.case-quick-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.case-quick-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
 .case-quick-actions .act { min-width: 0; min-height: 44px; padding: 6px; font-size: 14px; white-space: nowrap; }
 .cam-btn { min-height: 44px; }
 .full-btn { width: 44px; height: 44px; }
 .tank-name { max-width: calc(100% - 74px); }
-.tank.camera-on ~ .case-tools { visibility: hidden; pointer-events: none; }
-body.full-view #caseTools { visibility: hidden; }
+.tank.camera-on ~ .case-tools, .tank.camera-on ~ #caseInfo .case-quick-actions { visibility: hidden; pointer-events: none; }
+body.full-view #caseTools, body.full-view .case-quick-actions { visibility: hidden; }
 .tip b { color: var(--ink); }
 
 .photo-sheet { max-height: 94vh; max-height: 94dvh; gap: 10px; }
@@ -752,9 +752,7 @@ body.sheet-open { overflow: hidden; }
 .dex-detail .viewer3d { aspect-ratio: 5 / 4; }
 .dex-progress { height: 8px; overflow: hidden; border-radius: 99px; background: var(--surface-2); }
 .dex-progress span { display: block; height: 100%; background: var(--good); border-radius: inherit; }
-.dex-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-.dex-search label { grid-column: 1 / -1; font-size: 13px; font-weight: 700; }
-.dex-search input { min-width: 0; width: 100%; min-height: 44px; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 12px; font: inherit; font-size: 16px; background: var(--surface); color: var(--ink); }
+.dex-search { display: flex; justify-content: flex-end; }
 .dex-search .chip { min-height: 44px; font-size: 12px; }
 .dex-search .chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
 .guide summary { min-height: 44px; cursor: pointer; font-weight: 700; }

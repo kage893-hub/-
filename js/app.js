@@ -246,7 +246,7 @@
     if (dtH > 0) {
       for (const g of S.geckos) {
         // ベビーはおなかがすきやすく、おとなはゆっくり（ベビーは毎日、おとなは2〜3日に1回が目安）
-        const rh = RATE.hunger * HUNGER_K[stageOf(g)];
+        const rh = RATE.hunger * HUNGER_K[stageOf(g)] * Math.sqrt(speedX()); // 速いほど、おなかも早くすく（速さの√倍）
         const fedH = Math.max(0, Math.min(dtH, (g.hunger - 30) / rh));
         g.hunger = clamp(g.hunger - rh * dtH);
         g.clean = clamp(g.clean - RATE.clean * dtH);
@@ -1636,6 +1636,11 @@
         <button class="act care${tutGlow('clean')}" data-action="clean">${ic('clean')}おそうじ</button>
         <button class="act care${tutGlow('handle')}" data-action="handle">${ic('hand')}ふれあう</button>
       </div>
+      <div class="case-quick-actions">
+        <button class="act" data-action="camera">写真を撮る</button>
+        <button class="act" data-action="album">アルバム</button>
+        <button class="act" data-action="profileCard">カード</button>
+      </div>
       ${tutCoach()}
       ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮をうながす</button>' : ''}
       ${g.stuckShed ? '<button class="act wide mist" data-action="soak">ぬるま湯ケアで、のこった皮をとる</button>' : ''}
@@ -1820,31 +1825,19 @@
     'ギャラクシー': { type: '組み合わせ', cond: 'マックスノー（1つ）＋ エクリプス（2つ）＋ 模様の乱れが70以上。', how: ['マックスノー エクリプスを作ります（作り方は「マックスノー エクリプス」を見てね）。', '模様の乱れが大きい子と掛けあわせて、模様の乱れを選別していきます。'], tip: '白と黒の模様がまだらに散って、星空のように見えます。（ギャラクシーの呼び方はブリーダーによって少しちがうので、このゲームではこの条件にしています）' },
     'ディアブロブランコ': { type: '組み合わせ', cond: 'トレンパーアルビノ・エクリプス・ブリザードの3つとも2つずつ。', how: ['レッドアイアルビノとブレイジングブリザードをそれぞれ作ります。', '掛けあわせて、3つ全部の遺伝子を持つ子を作り、さらに掛けあわせます。'], tip: '図鑑でいちばんむずかしいモルフ。何代もかかります。' },
   };
-  let dexQuery = '', dexOnlyFound = false;
+  let dexOnlyFound = false;
   const dexSilhouettes = new Map();
-  const dexSearchKey = s => String(s).normalize('NFKC').toLowerCase()
-    .replace(/[\u30a1-\u30f6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60)).replace(/\s+/g, '');
   function filterDex() {
-    const q = dexSearchKey(dexQuery);
     let count = 0;
     for (const card of document.querySelectorAll('.dex-card')) {
-      card.hidden = !card.dataset.search.includes(q) || (dexOnlyFound && card.dataset.found !== 'true');
+      card.hidden = dexOnlyFound && card.dataset.found !== 'true';
       if (!card.hidden) count++;
     }
     const result = $('#dexResult'), text = `${count}種類を表示`;
     if (result && result.textContent !== text) result.textContent = text;
-    const empty = $('#dexNoResults'); if (empty) empty.hidden = count !== 0;
     const toggle = $('#dexFoundFilter'); if (toggle) toggle.setAttribute('aria-pressed', String(dexOnlyFound));
   }
-  document.addEventListener('input', e => {
-    if (e.target.id === 'dexSearch') { dexQuery = e.target.value; filterDex(); }
-  });
   ACTIONS.dexFoundFilter = () => { dexOnlyFound = !dexOnlyFound; filterDex(); };
-  ACTIONS.dexClearFilter = () => {
-    dexQuery = ''; dexOnlyFound = false;
-    const input = $('#dexSearch'); if (input) input.value = '';
-    filterDex();
-  };
   ACTIONS.dexDetail = t => {
     const d = G.DEX.find(x => x.id === t.dataset.id); if (!d) return;
     const got = !!S.dex[d.id], M = MORPH_GUIDE[d.id];
@@ -1868,7 +1861,7 @@
       const look = { ...d.rep, seed: 1000 + i * 7919 };
       if (!got && !dexSilhouettes.has(d.id)) dexSilhouettes.set(d.id, A.gecko(look, { stage: 'adult' }));
       const art = got ? portrait(look, 'adult', d.name) : dexSilhouettes.get(d.id);
-      return `<button type="button" class="dex-card${got ? '' : ' locked'}" data-action="dexDetail" data-id="${esc(d.id)}" data-search="${esc(dexSearchKey(d.name))}" data-found="${got}" aria-label="${esc(d.name)}・${got ? '登録済み' : '未登録'}の詳細"><span class="dex-art">${art}</span><b>${esc(d.name)}</b><span class="dex-state">${got ? '✓ 登録済み' : '未登録 · 作り方を見る'}</span></button>`;
+      return `<button type="button" class="dex-card${got ? '' : ' locked'}" data-action="dexDetail" data-id="${esc(d.id)}" data-found="${got}" aria-label="${esc(d.name)}・${got ? '登録済み' : '未登録'}の詳細"><span class="dex-art">${art}</span><b>${esc(d.name)}</b><span class="dex-state">${got ? '✓ 登録済み' : '未登録 · 作り方を見る'}</span></button>`;
     }).join('');
     const dtab = S.dexTab || 'dex';
     const dtabs = `<div class="shop-tabs three" role="tablist">${[['dex', '図鑑'], ['show', '品評会'], ['rec', '実績']].map(([k, n]) => `<button role="tab" aria-selected="${dtab === k}" class="${dtab === k ? 'on' : ''}" data-action="dexTab" data-tab="${k}">${n}</button>`).join('')}</div>`;
@@ -1886,9 +1879,8 @@
       <h2 class="h2">モルフ図鑑 <small class="muted">${found} / ${G.DEX.length}</small></h2>
       ${dtabs}
       <div class="dex-progress" role="progressbar" aria-label="図鑑の達成度" aria-valuemin="0" aria-valuemax="${G.DEX.length}" aria-valuenow="${found}"><span style="width:${found / G.DEX.length * 100}%"></span></div>
-      <div class="dex-search"><label for="dexSearch">モルフの名前で探す</label><input id="dexSearch" type="search" placeholder="例：ギャラクシー" maxlength="80" autocomplete="off"><button class="chip" id="dexFoundFilter" data-action="dexFoundFilter" aria-pressed="false">登録済みだけ</button></div>
+      <div class="dex-search"><button class="chip" id="dexFoundFilter" data-action="dexFoundFilter" aria-pressed="false">登録済みだけ</button></div>
       <p class="muted small" id="dexResult" aria-live="polite"></p>
-      <div class="card empty" id="dexNoResults" hidden><p>見つかりませんでした。名前を短くするか、絞り込みを戻してみてね。</p><button class="act" data-action="dexClearFilter">絞り込みを戻す</button></div>
       <div class="dex-grid">${cards}</div>
       ${extra.length ? `<h3 class="h3">これまでに出会ったモルフ名 <small class="muted">${extra.length}種</small></h3><div class="tags">${extra.map(n => `<span class="tag">${esc(n)}</span>`).join('')}</div>` : ''}
       <details class="card guide">
@@ -1897,16 +1889,7 @@
         <p><b>共優性</b>（マックスノー）：1つで見た目に出て、2つそろうと「スーパー」になります。</p>
         <p><b>見た目の遺伝</b>（タンジェリン度・斑点の量や大きさ・頭の斑点・しっぽのオレンジ・ラベンダー・模様の乱れ・黒さ）：子は両親の平均くらいになり、1匹ずつばらつきます。同じモルフ名でも見た目は1匹ずつちがいます。望む特徴の強い子を選んで掛けあわせ続けると、ハイポやキャロットテールなどの血統が作れます。</p>
       </details>`;
-    const previousInput = $('#dexSearch');
-    const restoreSearch = previousInput && document.activeElement === previousInput;
-    const selection = restoreSearch ? [previousInput.selectionStart, previousInput.selectionEnd] : null;
-    const changed = html !== dexHTML;
-    if (changed) { setHTML($('#view-dex'), html); dexHTML = html; }
-    const input = $('#dexSearch'); if (input && input.value !== dexQuery) input.value = dexQuery;
-    if (changed && restoreSearch && input) {
-      input.focus({ preventScroll: true });
-      input.setSelectionRange(selection[0], selection[1]);
-    }
+    if (html !== dexHTML) { setHTML($('#view-dex'), html); dexHTML = html; }
     filterDex();
   }
 
@@ -2403,7 +2386,8 @@
           <span class="row-main"><b>${v.name}${on ? '（いま）' : ''}</b><small>${v.note}</small></span>
           ${open ? '' : `<span class="row-side price">${v.cost}</span>`}
         </button>`;
-      }).join('')}</div>`;
+      }).join('')}</div>
+      <p class="muted small">速いほど、おなかも早くすきます（3倍速で約1.7倍、12倍速で約3.5倍）。</p>`;
   }
   // 見本写真：撮りおわっていればそのまま、まだなら後で1枚ずつ撮って差しこむ
   function thumb(kind, id, cls) {
