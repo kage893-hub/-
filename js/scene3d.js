@@ -3712,7 +3712,7 @@
     const ACT_POSE = { pitch: 0, drop: null, look: 0, tilt: 0, jaw: 0, wag: 0, blink: 0, churn: 0, tail: 0 };
     function startAct(type, extra) {
       if (st.hand || st.pair || st.meal || st.foods.some(f => !f.refuse) || st.sleeping) return false;
-      st.act = Object.assign({ type, t: 0, ph: 'do' }, extra || {});
+      st.act = Object.assign({ type, t: 0, ph: 'do', side: Math.random() < 0.5 ? -1 : 1 }, extra || {});
       st.mode = 'act';
       return true;
     }
