@@ -425,17 +425,28 @@
   }
 
   // ---------- シート（下から出るパネル）
-  function openSheet(html) {
+  let sheetReturnFocus = null;
+  function openSheet(html, options) {
     const wrap = $('#sheet');
+    if (wrap.hidden) sheetReturnFocus = document.activeElement;
+    $('#sheetBody').classList.toggle('photo-sheet', !!(options && options.photo));
     $('#sheetBody').innerHTML = html;
     wrap.hidden = false;
+    $('#sheetBody').scrollTop = 0;
+    $('#app').inert = true;
+    document.body.classList.add('sheet-open');
     killViewer();
     const f = $('#sheetBody input, #sheetBody button');
-    if (f) setTimeout(() => f.focus(), 50);
+    if (f) setTimeout(() => f.focus({ preventScroll: f.tagName !== 'INPUT' }), 50);
   }
   let viewer = null;
   function killViewer() { if (viewer) { try { viewer.destroy(); } catch (e) {} viewer = null; } }
-  function closeSheet() { killViewer(); $('#sheet').hidden = true; $('#sheetBody').innerHTML = ''; }
+  function closeSheet() {
+    killViewer(); $('#sheet').hidden = true; $('#sheetBody').innerHTML = '';
+    $('#app').inert = false; document.body.classList.remove('sheet-open');
+    if (sheetReturnFocus && sheetReturnFocus.isConnected) sheetReturnFocus.focus({ preventScroll: true });
+    sheetReturnFocus = null;
+  }
 
   // ======================================================
   // ケースの中（3D）
@@ -471,6 +482,7 @@
       onDecorTap: i => decorTap(i),
       onHandling: type => onHandling(type),
       onPairing: ev => onPairing(ev),
+      onObserve: on => syncObserveControls(on),
     });
   }
   function sceneMount() {
@@ -511,7 +523,8 @@
     const key = L3.photoKey(look).replace(/[^\w|.-]/g, '');
     photoQueue.set(key, look);
     if (!photoBusy) { photoBusy = true; setTimeout(pumpPhotos, 30); }
-    return `<img class="photo-wait" data-photo="${key}" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="${esc(label || '')}">`;
+    const fallback = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(A.gecko(look, { stage: look.stage }));
+    return `<img class="photo-wait" data-photo="${key}" src="${fallback}" alt="${esc(label || '')}">`;
   }
   function pumpPhotos() {
     const next = photoQueue.entries().next();
@@ -1592,9 +1605,18 @@
     gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
   };
   const ic = k => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]}</svg>`;
+  function syncObserveControls(on) {
+    if (on === undefined) on = !tank || tank._st.observe;
+    for (const b of document.querySelectorAll('[data-action="observeMode"]')) {
+      b.setAttribute('aria-pressed', String((b.dataset.mode === 'gecko') === on));
+    }
+  }
+  ACTIONS.observeMode = t => { if (tank) tank.setObserve(t.dataset.mode === 'gecko'); };
   function renderCase() {
     const now = Date.now();
     const g = selected();
+    $('#caseTools').hidden = !g || !!editing;
+    syncObserveControls();
     setHTML($('#geckoTabs'), S.geckos.map(x => `<button class="chip${x.id === S.selected ? ' on' : ''}" data-action="select" data-id="${x.id}" aria-pressed="${x.id === S.selected}">${A.swatch(x)}<span>${esc(x.name)}</span><span class="sex ${x.sex}">${sexMark(x)}</span>${needsCare(x) ? '<i class="dot" aria-label="お世話が必要"></i>' : ''}</button>`).join('') +
       (S.geckos.length > 1 ? '<button class="chip ghost sort-chip" data-action="sortMenu" aria-label="ならびかえ">⇅ ならびかえ</button>' : '') +
       (S.geckos.length < S.cases ? `<span class="chip ghost">空きケース ${S.cases - S.geckos.length}</span>` : ''));
@@ -1652,9 +1674,6 @@
       <div class="actions sub">
         <button class="act ghost" data-action="viewGecko" data-id="${g.id}">${ic('look')}くわしく見る</button>
         <button class="act ghost" data-action="pairMenu">${ic('heart')}ペアリング${block ? '' : ' OK'}</button>
-        <button class="act ghost" data-action="camera">${ic('camera')}カメラで撮る</button>
-        <button class="act ghost" data-action="album">${ic('album')}アルバム</button>
-        <button class="act ghost" data-action="profileCard">${ic('card')}プロフィールカード</button>
         <button class="act ghost" data-action="editStart">${ic('sofa')}もようがえ</button>
         <button class="act ghost" data-action="rehomeMenu">${ic('home')}里親に出す</button>
       </div>
@@ -1801,31 +1820,55 @@
     'ギャラクシー': { type: '組み合わせ', cond: 'マックスノー（1つ）＋ エクリプス（2つ）＋ 模様の乱れが70以上。', how: ['マックスノー エクリプスを作ります（作り方は「マックスノー エクリプス」を見てね）。', '模様の乱れが大きい子と掛けあわせて、模様の乱れを選別していきます。'], tip: '白と黒の模様がまだらに散って、星空のように見えます。（ギャラクシーの呼び方はブリーダーによって少しちがうので、このゲームではこの条件にしています）' },
     'ディアブロブランコ': { type: '組み合わせ', cond: 'トレンパーアルビノ・エクリプス・ブリザードの3つとも2つずつ。', how: ['レッドアイアルビノとブレイジングブリザードをそれぞれ作ります。', '掛けあわせて、3つ全部の遺伝子を持つ子を作り、さらに掛けあわせます。'], tip: '図鑑でいちばんむずかしいモルフ。何代もかかります。' },
   };
-  const GUIDE_TYPE = { '基本': 'muted', 'ライン': 'good', '劣性': 'info', '共優性': 'pink', '組み合わせ': 'warn' };
-  const openGuide = {};
-  document.addEventListener('toggle', e => { const d = e.target; if (d.classList && d.classList.contains('mguide')) openGuide[d.dataset.id] = d.open; }, true);
-  function morphGuide() {
-    return `<h3 class="h3">モルフの条件と作り方</h3>
-      <p class="muted small">名前をタップすると、くわしい条件と作り方が出ます。「ライン」は見た目の遺伝で、親を選びつづけて作ります。</p>
-      <div class="mguide-list">${G.DEX.map(d => {
-        const M = MORPH_GUIDE[d.id];
-        if (!M) return '';
-        const got = !!S.dex[d.id];
-        return `<details class="mguide"${openGuide[d.id] ? ' open' : ''} data-id="${esc(d.id)}">
-          <summary><span class="mg-name">${got ? '✓ ' : ''}${esc(d.name)}</span><span class="pill ${GUIDE_TYPE[M.type]}">${M.type}</span></summary>
-          <p><b>条件：</b>${M.cond}</p>
-          <p><b>作り方：</b></p><ol>${M.how.map(h => `<li>${h}</li>`).join('')}</ol>
-          ${M.tip ? `<p class="muted small">${M.tip}</p>` : ''}
-        </details>`;
-      }).join('')}</div>`;
+  let dexQuery = '', dexOnlyFound = false;
+  const dexSilhouettes = new Map();
+  const dexSearchKey = s => String(s).normalize('NFKC').toLowerCase()
+    .replace(/[\u30a1-\u30f6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60)).replace(/\s+/g, '');
+  function filterDex() {
+    const q = dexSearchKey(dexQuery);
+    let count = 0;
+    for (const card of document.querySelectorAll('.dex-card')) {
+      card.hidden = !card.dataset.search.includes(q) || (dexOnlyFound && card.dataset.found !== 'true');
+      if (!card.hidden) count++;
+    }
+    const result = $('#dexResult'), text = `${count}種類を表示`;
+    if (result && result.textContent !== text) result.textContent = text;
+    const empty = $('#dexNoResults'); if (empty) empty.hidden = count !== 0;
+    const toggle = $('#dexFoundFilter'); if (toggle) toggle.setAttribute('aria-pressed', String(dexOnlyFound));
   }
+  document.addEventListener('input', e => {
+    if (e.target.id === 'dexSearch') { dexQuery = e.target.value; filterDex(); }
+  });
+  ACTIONS.dexFoundFilter = () => { dexOnlyFound = !dexOnlyFound; filterDex(); };
+  ACTIONS.dexClearFilter = () => {
+    dexQuery = ''; dexOnlyFound = false;
+    const input = $('#dexSearch'); if (input) input.value = '';
+    filterDex();
+  };
+  ACTIONS.dexDetail = t => {
+    const d = G.DEX.find(x => x.id === t.dataset.id); if (!d) return;
+    const got = !!S.dex[d.id], M = MORPH_GUIDE[d.id];
+    const look = { ...d.rep, stage: 'adult', seed: 1000 + G.DEX.indexOf(d) * 7919 };
+    openSheet(`<div class="viewer-sheet dex-detail">
+      <p class="eyebrow">モルフ図鑑 · ${got ? '登録済み' : '未登録'}</p>
+      <h3 class="morph big">${esc(d.name)}</h3>
+      ${got && L3.supported ? `<div class="viewer-btns">${[['face', '顔'], ['body', '全身'], ['side', '横'], ['top', '上']].map(([k, n]) => `<button class="chip" data-action="viewAngle" data-v="${k}">${n}</button>`).join('')}</div>` : ''}
+      <div class="viewer3d${got ? '' : ' dex-unfound'}" id="dexViewer">${got && L3.supported ? '' : A.gecko(look, { stage: 'adult' })}</div>
+      <p class="muted small">${got ? '代表的な成体の見た目です。同じモルフでも、色や柄には個体差があります。' : 'おむかえやふ化で登録すると、姿をじっくり見られます。'}</p>
+      <div class="card guide"><h4 class="h3">見た目の特徴</h4><p>${esc(d.hint)}</p></div>
+      ${M ? `<div class="card guide"><h4 class="h3">条件と作り方</h4><p><b>${esc(M.type)}</b> · ${esc(M.cond)}</p><ol>${M.how.map(h => `<li>${esc(h)}</li>`).join('')}</ol>${M.tip ? `<p>${esc(M.tip)}</p>` : ''}</div>` : ''}
+      <button class="act wide" data-action="closeSheet">図鑑に戻る</button></div>`);
+    if (got && L3.supported) viewer = L3.createViewer($('#dexViewer'), look);
+  };
   function renderDex() {
     const found = G.DEX.filter(d => S.dex[d.id]).length;
     const extra = Object.keys(S.names).filter(n => !G.DEX.some(d => d.name === n)).sort();
     const cards = G.DEX.map((d, i) => {
       const got = !!S.dex[d.id];
-      const art = portrait({ genes: d.rep.genes, tang: d.rep.tang, poly: d.rep.poly, seed: 1000 + i * 7919 }, 'adult', got ? d.name : '');
-      return `<div class="dex-card${got ? '' : ' locked'}"><div class="dex-art">${art}</div><b>${esc(d.name)}</b><small class="muted">${esc(d.hint)}</small></div>`;
+      const look = { ...d.rep, seed: 1000 + i * 7919 };
+      if (!got && !dexSilhouettes.has(d.id)) dexSilhouettes.set(d.id, A.gecko(look, { stage: 'adult' }));
+      const art = got ? portrait(look, 'adult', d.name) : dexSilhouettes.get(d.id);
+      return `<button type="button" class="dex-card${got ? '' : ' locked'}" data-action="dexDetail" data-id="${esc(d.id)}" data-search="${esc(dexSearchKey(d.name))}" data-found="${got}" aria-label="${esc(d.name)}・${got ? '登録済み' : '未登録'}の詳細"><span class="dex-art">${art}</span><b>${esc(d.name)}</b><span class="dex-state">${got ? '✓ 登録済み' : '未登録 · 作り方を見る'}</span></button>`;
     }).join('');
     const dtab = S.dexTab || 'dex';
     const dtabs = `<div class="shop-tabs three" role="tablist">${[['dex', '図鑑'], ['show', '品評会'], ['rec', '実績']].map(([k, n]) => `<button role="tab" aria-selected="${dtab === k}" class="${dtab === k ? 'on' : ''}" data-action="dexTab" data-tab="${k}">${n}</button>`).join('')}</div>`;
@@ -1842,17 +1885,29 @@
     const html = `
       <h2 class="h2">モルフ図鑑 <small class="muted">${found} / ${G.DEX.length}</small></h2>
       ${dtabs}
-      <h3 class="h3">モルフ</h3>
+      <div class="dex-progress" role="progressbar" aria-label="図鑑の達成度" aria-valuemin="0" aria-valuemax="${G.DEX.length}" aria-valuenow="${found}"><span style="width:${found / G.DEX.length * 100}%"></span></div>
+      <div class="dex-search"><label for="dexSearch">モルフの名前で探す</label><input id="dexSearch" type="search" placeholder="例：ギャラクシー" maxlength="80" autocomplete="off"><button class="chip" id="dexFoundFilter" data-action="dexFoundFilter" aria-pressed="false">登録済みだけ</button></div>
+      <p class="muted small" id="dexResult" aria-live="polite"></p>
+      <div class="card empty" id="dexNoResults" hidden><p>見つかりませんでした。名前を短くするか、絞り込みを戻してみてね。</p><button class="act" data-action="dexClearFilter">絞り込みを戻す</button></div>
       <div class="dex-grid">${cards}</div>
-      ${morphGuide()}
       ${extra.length ? `<h3 class="h3">これまでに出会ったモルフ名 <small class="muted">${extra.length}種</small></h3><div class="tags">${extra.map(n => `<span class="tag">${esc(n)}</span>`).join('')}</div>` : ''}
-      <div class="card guide">
-        <h3 class="h3">遺伝のきほん</h3>
+      <details class="card guide">
+        <summary>遺伝のきほん</summary>
         <p><b>劣性</b>（アルビノ・エクリプス・ブリザード）：両親から1つずつ、合わせて2つ受け継ぐと見た目に出ます。1つだけ持っている子は「het（ヘテロ）」と呼び、見た目は変わりませんが子どもに伝えられます。</p>
         <p><b>共優性</b>（マックスノー）：1つで見た目に出て、2つそろうと「スーパー」になります。</p>
         <p><b>見た目の遺伝</b>（タンジェリン度・斑点の量や大きさ・頭の斑点・しっぽのオレンジ・ラベンダー・模様の乱れ・黒さ）：子は両親の平均くらいになり、1匹ずつばらつきます。同じモルフ名でも見た目は1匹ずつちがいます。望む特徴の強い子を選んで掛けあわせ続けると、ハイポやキャロットテールなどの血統が作れます。</p>
-      </div>`;
-    if (html !== dexHTML) { setHTML($('#view-dex'), html); dexHTML = html; }
+      </details>`;
+    const previousInput = $('#dexSearch');
+    const restoreSearch = previousInput && document.activeElement === previousInput;
+    const selection = restoreSearch ? [previousInput.selectionStart, previousInput.selectionEnd] : null;
+    const changed = html !== dexHTML;
+    if (changed) { setHTML($('#view-dex'), html); dexHTML = html; }
+    const input = $('#dexSearch'); if (input && input.value !== dexQuery) input.value = dexQuery;
+    if (changed && restoreSearch && input) {
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(selection[0], selection[1]);
+    }
+    filterDex();
   }
 
   function renderShop() {
@@ -2780,9 +2835,23 @@
   // ======================================================
   // カメラ：好きな角度にしてシャッター → 名前と日付つきの写真に。アルバムに残す／スマホに保存
   // ======================================================
-  let shot = null; // { img(dataUrl), id }
+  let shot = null; // { img(dataUrl), id, file, saving }
+  function prepareShot(img, g) {
+    return { img, id: g.id, file: window.LeopaPhotoSave.createFile(img, `leopa-${g.name}-${Date.now()}.jpg`), saving: false };
+  }
+  const photoSaveHint = '<p class="muted small">ダウンロードは、スマホの「ダウンロード」フォルダに保存されます。</p><details class="photo-help"><summary>保存先が見つからないとき</summary><p class="small">「共有する」で保存先を選ぶか、写真を長押しして保存してね。「アルバムに残す」はゲームの中への保存です。</p></details>';
+  function photoSaveActions(album) {
+    return `<div class="photo-save-actions"><button class="act primary" data-action="shotDownload">ダウンロード</button><button class="act" data-action="shotSave">共有する</button>${album ? '<button class="act photo-album" data-action="shotAlbum">ゲームのアルバムに残す</button>' : ''}</div>`;
+  }
+  function downloadShot(photo) {
+    try {
+      window.LeopaPhotoSave.download(photo.file);
+      toast('ダウンロードを開始しました。「ダウンロード」フォルダを確認してね');
+    } catch (e) { toast('写真を長押しして、保存してください'); }
+  }
   function cameraSheet(g) {
     const sc = $('#tank');
+    window._camWasClose = !!(tank && tank._st.close);
     if (tank) tank.setClose(true);
     const bar = $('#camBar');
     if (bar) bar.remove();
@@ -2841,21 +2910,22 @@
       save(); renderView(); ACTIONS.sortMenu();
     },
     camera() { const g = selected(); if (!g || !tank) return; cameraSheet(g); },
-    camCancel() { camClose(); if (tank) tank.setClose(false); },
+    camCancel() { camClose(); if (tank) tank.setClose(!!window._camWasClose); },
     async camShoot(keep) {
       const g = S.geckos.find(x => x.id === window._camGecko);
       if (!g || !tank) { camClose(); return; }
       let raw;
       try { raw = tank.snapshot(1200, false); } catch (e) { toast('写真をとれませんでした'); return; }
       camClose();
-      if (keep !== true) tank.setClose(false);
+      if (keep !== true) tank.setClose(!!window._camWasClose);
       sfx('tap');
       const img = await stamp(raw, g);
-      shot = { img, id: g.id };
+      shot = prepareShot(img, g);
       openSheet(`<p class="eyebrow">撮影</p><h3 class="sheet-title">いい写真がとれました</h3>
         <div class="shot-view"><img src="${img}" alt="${esc(g.name)}の写真"></div>
-        <div class="actions"><button class="act primary" data-action="shotAlbum">アルバムに残す</button><button class="act" data-action="shotSave">スマホに保存</button></div>
-        <button class="act ghost" data-action="closeSheet">とじる</button>`);
+        ${photoSaveActions(true)}
+        ${photoSaveHint}
+        <button class="act ghost" data-action="closeSheet">とじる</button>`, { photo: true });
     },
     shotAlbum() {
       const g = S.geckos.find(x => x.id === (shot && shot.id)); if (!g) return;
@@ -2867,21 +2937,16 @@
       save(); toast('アルバムに残しました'); sfx('coin'); closeSheet();
     },
     async shotSave() {
-      if (!shot) return;
-      const g = S.geckos.find(x => x.id === shot.id);
-      const name = `leopa-${(g ? g.name : 'photo')}-${Date.now()}.jpg`;
+      const photo = shot;
+      if (!photo || photo.saving) return;
+      photo.saving = true;
       try {
-        const blob = await (await fetch(shot.img)).blob();
-        const file = new File([blob], name, { type: 'image/jpeg' });
-        // スマホなら共有メニュー（「画像を保存」を選べる）。使えないときは、ダウンロード
-        if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'レオパといっしょ' }); return; }
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
-        document.body.appendChild(a); a.click(); a.remove();
-        toast('写真を保存しました（ダウンロードの中）');
-      } catch (e) {
-        if (e && e.name === 'AbortError') return;
-        toast('保存できませんでした。写真を長押しして、保存してください');
-      }
+        const result = await window.LeopaPhotoSave.share(photo.file);
+        if (result === 'unavailable' || result === 'failed') downloadShot(photo);
+      } finally { photo.saving = false; }
+    },
+    shotDownload() {
+      if (shot && !shot.saving) downloadShot(shot);
     },
   });
 
@@ -2961,10 +3026,11 @@
       if (!g) return;
       openSheet('<div class="show-judge"><span class="spinner big" aria-hidden="true"></span><p class="muted">カードを作っています……</p></div>');
       const img = await profileCard(g);
-      shot = { img, id: g.id };
+      shot = prepareShot(img, g);
       openSheet(`<p class="eyebrow">プロフィールカード</p>
         <div class="shot-view"><img src="${img}" alt="${esc(g.name)}のプロフィールカード"></div>
-        <div class="actions"><button class="act primary" data-action="shotSave">スマホに保存・共有</button><button class="act" data-action="closeSheet">とじる</button></div>`);
+        ${photoSaveActions(false)}
+        ${photoSaveHint}<button class="act ghost" data-action="closeSheet">とじる</button>`, { photo: true });
     },
   });
 

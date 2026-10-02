@@ -44,6 +44,17 @@
         <div class="tank-loading" id="tankLoading"><span class="spinner" aria-hidden="true"></span>レオパを準備中…</div>
       </div>
       <div id="tankBars" class="tank-bars"></div>
+      <div class="case-tools" id="caseTools" hidden>
+        <div class="observe-switch" role="group" aria-label="ケースの見かた">
+          <button type="button" data-action="observeMode" data-mode="gecko" aria-pressed="true">レオパを眺める</button>
+          <button type="button" data-action="observeMode" data-mode="case" aria-pressed="false">ケース全体</button>
+        </div>
+        <div class="case-quick-actions">
+          <button class="act" data-action="camera">写真を撮る</button>
+          <button class="act" data-action="album">アルバム</button>
+          <button class="act" data-action="profileCard">カード</button>
+        </div>
+      </div>
       <div id="caseInfo"></div>
     </section>
     <section id="view-eggs" class="view" hidden></section>
@@ -70,6 +81,7 @@
 <script src="js/scene3d.js"></script>
 <script src="js/music.js"></script>
 <script src="js/kids.js"></script>
+<script src="js/photo-save.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

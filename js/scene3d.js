@@ -2719,7 +2719,7 @@
       lick: 0, happy: 0, stalk: 0, meal: null, hunt: null, eatLook: 0, eatPitch: 0, look: 0, tiltT: 0, active: true, night: false,
       drop: 0.04, curl: 0, pitch: 0,
       heatGlow: 1, heatPref: 0,
-      close: false, orbit: 0.55, elev: 0.3, zoom: 1,
+      close: false, observe: true, orbit: 0.55, elev: 0.3, zoom: 1,
     };
     const P = restPose();
 
@@ -2735,12 +2735,18 @@
 
     function setClose(on) {
       st.close = on;
-      camBtn.textContent = on ? 'ぜんたい' : 'アップで見る';
+      camBtn.textContent = on ? (st.observe ? '全身に戻す' : 'ケースに戻す') : '顔をアップ';
       camBtn.setAttribute('aria-pressed', String(on));
       container.classList.toggle('closeup', on);
     }
     camBtn.addEventListener('click', e => { e.stopPropagation(); setClose(!st.close); });
     setClose(false);
+
+    function setObserve(on) {
+      st.observe = !!on;
+      setClose(false);
+      if (handlers.onObserve) handlers.onObserve(st.observe);
+    }
 
     function setGecko(look) {
       if (!look) {
@@ -4116,7 +4122,7 @@
     const _t = new T.Vector3(), _c = new T.Vector3();
     function stepCamera(dt) {
       // アップのときは、手前のガラスが視界をさえぎらないように隠す
-      for (const o of frontGlass) o.visible = !st.close;
+      for (const o of frontGlass) o.visible = !(st.close || (st.observe && !edit && !st.pair));
       if (st.close && st.gk) {
         st.gk.bones.neck.getWorldPosition(_t);
         const D = (3.4 * 0.95 * st.size + 1.4) * st.zoom;
@@ -4124,6 +4130,17 @@
         _c.set(_t.x + Math.sin(az) * Math.cos(st.elev) * D, _t.y + Math.sin(st.elev) * D, _t.z + Math.cos(az) * Math.cos(st.elev) * D);
         camera.position.lerp(_c, Math.min(1, dt * 3));
         camLook.lerp(_t, Math.min(1, dt * 4));
+      } else if (st.observe && st.gk && !edit && !st.pair) {
+        // 模型のサイズは変えず、全身と尾が見える距離で個体を追う。
+        _t.set(0, 0.3, -0.55);
+        st.gk.root.localToWorld(_t);
+        const D = LEN * 0.95 * st.size / (2 * Math.tan(T.MathUtils.degToRad(camera.fov / 2)))
+          * 1.1 * Math.max(1, 1.15 / camera.aspect);
+        const az = st.yaw + 0.85, elev = 0.58;
+        _c.set(_t.x + Math.sin(az) * Math.cos(elev) * D, _t.y + Math.sin(elev) * D,
+          _t.z + Math.cos(az) * Math.cos(elev) * D);
+        camera.position.lerp(_c, Math.min(1, dt * 2.5));
+        camLook.lerp(_t, Math.min(1, dt * 3));
       } else {
         // 縦長の画面（全画面の縦持ちなど）では、ケースの左右が切れないように少し引く
         const fit = camera.aspect < 1.2 ? (4 / 3) / camera.aspect * 1.32 : 1;
@@ -4199,7 +4216,7 @@
       startTweezers, tweezersActive: () => !!st.tw,
       startPairing, skipPairing, endPairing: () => endPairing(true), pairing: () => st.pair ? st.pair.ph : null,
       startHandling, endHandling: () => endHandling(true), handCmd, handling: () => st.hand ? st.hand.phase : null,
-      _st: st, _cam: camera, _hide: () => HIDE, refreshDecor, setCage, setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setDecor, setEdit,
+      _st: st, _cam: camera, _hide: () => HIDE, refreshDecor, setCage, setGecko, spawnFood, takeFoods, setPoops, setNight, setClock, snapshot, setDirty, wake, hearts, setClose, setObserve, setDecor, setEdit,
       pendingFoods: () => st.foods.filter(f => !f.refuse).map(f => f.kind),
       lick() { st.lick = 0.9; },
       happy() { st.happy = 1.4; if (st.sleeping) wake(); seen('happy'); },
@@ -4241,7 +4258,7 @@
     P.drop = 0.05; P.look = 0; P.t = 0;
     gk.root.scale.setScalar(1.0);
     scene.add(gk.root);
-    const aim = new T.Vector3(0, 0.4, 0.2);
+    const aim = new T.Vector3(0, 0.3, -0.55);
     const st = { az: 0.7, el: 0.38, zoom: 1, t: 0, auto: true, done: false };
     const aimGoal = aim.clone();
     const ro = () => {
@@ -4274,7 +4291,9 @@
       P.blink = (st.t % 4.2) < 0.13 ? 1 : 0;
       if (st.auto) st.az += dt * 0.35;
       pose(gk, P);
-      const D = 7.2 * st.zoom;
+      const fitDistance = LEN / (2 * Math.tan(T.MathUtils.degToRad(camera.fov / 2)))
+        * 1.18 * Math.max(1, 1 / camera.aspect);
+      const D = (st.focus ? 7.2 : fitDistance) * st.zoom;
       aim.lerp(aimGoal, 0.12);
       camera.position.set(aim.x + Math.sin(st.az) * Math.cos(st.el) * D, aim.y + Math.sin(st.el) * D, aim.z + Math.cos(st.az) * Math.cos(st.el) * D);
       camera.lookAt(aim);
@@ -4293,7 +4312,7 @@
           const fwd = m.clone().sub(h).setY(0).normalize();
           st.az = Math.atan2(fwd.x, fwd.z) + 0.55;
           aimGoal.copy(h).lerp(m, 0.35); aimGoal.y += 0.15;
-        } else aimGoal.set(0, 0.4, 0.2);
+        } else aimGoal.set(0, 0.3, -0.55);
       },
       destroy() { st.done = true; try { disposeGecko(gk); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); } catch (e) { /* noop */ } },
     };
@@ -4470,13 +4489,23 @@
     Object.values(gk.bones).forEach(b => box.expandByPoint(b.getWorldPosition(q)));
     box.expandByPoint(gk.mouth.getWorldPosition(q));
     gk.legs.forEach(l => box.expandByPoint(l.wrist.getWorldPosition(q)));
+    if (gk.glb) {
+      // GLB の骨の目印だけでは尾が範囲に入らず、図鑑写真の全身が切れていた。
+      const pos = gk.mesh.geometry.attributes.position;
+      const stride = Math.max(1, Math.floor(pos.count / 2000));
+      for (let i = 0; i < pos.count; i += stride) {
+        q.fromBufferAttribute(pos, i);
+        box.expandByPoint(deformPoint(q, gk.U).applyMatrix4(gk.mesh.matrixWorld));
+      }
+    }
     box.expandByScalar(0.45);
     const c = box.getCenter(new T.Vector3());
     const size = box.getSize(new T.Vector3());
     if (side) {
       // 参考写真と同じ、ななめ前の低い位置から全身
-      pr.camera.position.set(c.x + 3.4, 2.3, c.z + 9.8);
-      pr.camera.lookAt(c.x, 0.35, c.z);
+      const dist = Math.max(size.x, size.z) / (2 * Math.tan(T.MathUtils.degToRad(pr.camera.fov / 2))) * 1.1;
+      pr.camera.position.set(c.x + dist * 0.25, c.y + dist * 0.45, c.z + dist);
+      pr.camera.lookAt(c);
     } else if (face) {
       // 顔のアップ：ななめ前から
       const h = gk.bones.head.getWorldPosition(new T.Vector3());
