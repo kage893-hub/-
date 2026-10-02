@@ -699,3 +699,16 @@ html.kids .pill { white-space: normal; }
 .lic-date { left: 77%; top: 84.5%; font-size: 3.2cqw; font-weight: 700; }
 .lic-input { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
 .lic-input input { font: inherit; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--line, #E3D6BF); background: var(--card, #fff); color: inherit; }
+
+/* はじめて開いたときの案内 */
+.first-install .notice { margin: 6px 0 10px; }
+.first-install .first-icon { display: block; margin: 12px auto; border-radius: 18px; box-shadow: 0 4px 12px rgba(0, 0, 0, .15); }
+.first-install .act.ghost.wide { width: 100%; margin-top: 8px; }
+.mode-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+.mode-card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 10px; border-radius: 18px; border: 2px solid var(--line, #E3D6BF); background: var(--card, #fff); color: inherit; font: inherit; cursor: pointer; text-align: center; }
+.mode-card b { font-size: 1.25rem; }
+.mode-card small { font-size: .75rem; opacity: .75; }
+.mode-card .mode-sample { margin-top: 8px; padding: 8px; border-radius: 10px; background: rgba(233, 162, 59, .12); font-size: .85rem; line-height: 1.5; }
+.mode-card.kids { border-color: #F2B5C8; }
+.mode-card.kids .mode-sample { background: rgba(242, 140, 170, .14); }
+.mode-card:active { transform: scale(.98); }

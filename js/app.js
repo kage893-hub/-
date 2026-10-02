@@ -1438,7 +1438,8 @@
       closeSheet();
       saveNow();
       switchView('case');
-      welcome();
+      S.introInstall = 1;
+      firstRun();
     },
     welcomeDone() { S.welcomed = true; save(); closeSheet(); },
   };
@@ -1907,6 +1908,50 @@
     if (tab === 'interior') fillThumbs();
   }
 
+  // ---- はじめて開いたとき：①ホーム画面に追加 → ②文字モード → ようこそ
+  function firstRun() {
+    if (!S.introInstall && !isStandalone() && !inFrame) firstInstall();
+    else if (!S.introMode) firstMode();
+    else welcome();
+  }
+  function firstInstall(done) {
+    openSheet(`<div class="first-install">
+      <p class="eyebrow">はじめに</p>
+      <h3 class="sheet-title">${done ? 'ホーム画面のアイコンから開いてね' : 'まずはホーム画面に追加しよう'}</h3>
+      ${done ? `<p>追加できたら、このページは閉じて、ホーム画面の<b>「レオパ」</b>のアイコンから開いてください。そこから新しく遊びはじめられます。</p>
+        <img class="first-icon" src="icons/icon-192.png" alt="" width="72" height="72">`
+      : `<p class="notice">ブラウザで遊んだデータと、ホーム画面に追加したアプリのデータは、<b>別々</b>になることがあります（とくに iPhone）。先にホーム画面に追加して、アイコンから遊びはじめるのがおすすめです。</p>
+        ${installEvt ? '<button class="act primary" data-action="installNow">いますぐ追加する</button>' : ''}
+        ${installSteps()}`}
+      <div class="actions">${done ? '<button class="act" data-action="firstInstallBack">手順をもう一度見る</button>' : '<button class="act primary" data-action="firstInstallDone">追加できた</button>'}</div>
+      <button class="act ghost wide" data-action="firstInstallSkip">このままブラウザで遊ぶ</button>
+      <p class="muted small">ブラウザで遊びはじめて、あとからホーム画面に追加すると、データが引きつがれないことがあります。</p>
+    </div>`);
+  }
+  function firstMode() {
+    openSheet(`<div class="first-mode">
+      <p class="eyebrow">はじめに</p>
+      <h3 class="sheet-title" data-raw>もじの ようすを えらんでね</h3>
+      <div class="mode-pick">
+        <button class="mode-card" data-action="firstModePick" data-v="0">
+          <b data-raw>ふつう</b><small data-raw>漢字とカタカナ</small>
+          <span class="mode-sample" data-raw>レオパにごはんをあげよう</span></button>
+        <button class="mode-card kids" data-action="firstModePick" data-v="1">
+          <b data-raw>おこさま</b><small data-raw>ぜんぶ ひらがな・やさしい ことば</small>
+          <span class="mode-sample" data-raw>れおぱに ごはんを あげよう</span></button>
+      </div>
+      <p class="muted small" data-raw>あとから 右上の ⚙（せってい）で かえられます</p>
+    </div>`);
+  }
+  Object.assign(ACTIONS, {
+    firstInstallDone() { firstInstall(true); },
+    firstInstallBack() { firstInstall(false); },
+    firstInstallSkip() { S.introInstall = 1; save(); firstRun(); },
+    firstModePick(t) {
+      S.kids = t.dataset.v === '1'; S.introMode = 1; S.introInstall = 1;
+      save(); renderView(); firstRun();
+    },
+  });
   function welcome() {
     openSheet(`<div class="welcome">
       <p class="eyebrow">ようこそ</p>
@@ -3159,17 +3204,25 @@
       <div class="install-btns"><button class="act primary sm" data-action="installMenu">追加する</button><button class="act ghost sm" data-action="installLater">あとで</button></div>
     </div>`;
   }
-  function installSheet() {
+  // データが引きつがれるかの説明（iPhone は Safari とホーム画面のアプリでデータが別々）
+  const installDataNote = () => isIOS
+    ? 'iPhone では、Safari で遊んだデータと、ホーム画面のアプリのデータは別々です。いまのデータを移すときは「セーブデータの控え」を使ってね。'
+    : '多くの場合、セーブデータはそのまま引きつがれます。心配なときは「セーブデータの控え」で移せます。';
+  function installSteps() {
     const step = (n, html) => `<li><span class="step-n">${n}</span><span>${html}</span></li>`;
     const share = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5v10h14V11h-1"/></svg>';
     const how = isIOS
       ? `<ol class="steps">${step(1, '<b>Safari</b> でこのページを開きます（ほかのアプリの中で開いているときは、Safari で開き直してね）')}${step(2, `画面の下（または上）にある <b>共有ボタン</b> ${share} をタップ`)}${step(3, 'メニューを下にスクロールして <b>「ホーム画面に追加」</b> をタップ')}${step(4, '右上の <b>「追加」</b> をタップしたら完成！')}</ol>`
       : `<ol class="steps">${step(1, '<b>Chrome</b> などのブラウザでこのページを開きます')}${step(2, '右上の <b>︙（メニュー）</b> をタップ')}${step(3, '<b>「ホーム画面に追加」</b> または <b>「アプリをインストール」</b> をタップ')}${step(4, '<b>「追加」</b>（インストール）をタップしたら完成！')}</ol>`;
+    return how;
+  }
+  function installSheet() {
+    const how = installSteps();
     openSheet(`<h3 class="sheet-title">ホーム画面に追加する</h3>
       <p class="small">ホーム画面のアイコンから、アプリのように全画面で遊べます。電波がないところでも遊べて、通知も使えるようになります。</p>
       ${installEvt ? '<button class="act primary" data-action="installNow">いますぐ追加する</button><p class="muted small">うまくいかないときは、下の手順でも追加できます。</p>' : ''}
       ${how}
-      <p class="muted small">セーブデータはそのまま引きつがれます（同じブラウザで開いたとき）。ブラウザを変えるときは「セーブデータの控え」で移してね。</p>
+      <p class="muted small">${installDataNote()}</p>
       <button class="act" data-action="closeSheet">とじる</button>`);
   }
   Object.assign(ACTIONS, {
@@ -3316,7 +3369,7 @@
   function expoTick(now) {
     const info = expoInfo(now), E = expoState(now);
     if (!info || !E) return;
-    if (!E.noticed && !info.over) {
+    if (!E.noticed && !info.over && S.welcomed) {
       E.noticed = true;
       setTimeout(() => toast(`今週の日曜日はレプタイルズショー！（${EXPO_OPEN}:00〜${EXPO_CLOSE}:00）自分のブースに出す子を決めよう`), 2500);
       notify('expo' + E.day, '今週の日曜日はレプタイルズショー', 'ブースに出すレオパを決めておこう');
@@ -3660,7 +3713,7 @@
   setInterval(tick, 5000);
   let hiddenAt = 0;
   document.addEventListener('visibilitychange', () => { if (document.hidden) { hiddenAt = Date.now(); saveNow(); } else { tick(); if (hiddenAt) awaySummary(hiddenAt, Date.now()); } });
-  if (!S.welcomed) { if (!S.geckos.length && !(S.starters && S.starters.length)) S.starters = makeStarters(); if (S.geckos.length && S.starters && S.starters.length) starterList(); else welcome(); }
+  if (!S.welcomed) { if (!S.geckos.length && !(S.starters && S.starters.length)) S.starters = makeStarters(); if (S.geckos.length && S.starters && S.starters.length) starterList(); else firstRun(); }
 
   if ('serviceWorker' in navigator && /^(https:|http:\/\/localhost)/.test(location.href)) {
     navigator.serviceWorker.register('sw.js').catch(() => { /* プレビュー環境などでは使えない */ });
