@@ -4251,6 +4251,123 @@
     };
   }
 
+
+  // ======================================================
+  // ふ化の演出：卵がカタカタ → ひび → 殻が割れて、ベビーが顔を出す（約6秒、タップで飛ばせる）
+  // ======================================================
+  function hatchScene(container, look, onEvent) {
+    if (!supported) return null;
+    const renderer = new T.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(root.devicePixelRatio || 1, 2));
+    renderer.outputEncoding = T.sRGBEncoding;
+    renderer.toneMapping = T.ACESFilmicToneMapping;
+    container.appendChild(renderer.domElement);
+    const scene = new T.Scene();
+    scene.environment = makeEnvironment(renderer);
+    const key1 = new T.DirectionalLight('#FFF4E6', 1.1);
+    key1.position.set(-2, 6, 4);
+    key1.castShadow = true;
+    key1.shadow.mapSize.set(1024, 1024);
+    Object.assign(key1.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 1, far: 15 });
+    key1.shadow.radius = 4;
+    scene.add(new T.HemisphereLight('#FFF6E4', '#B9A57E', 0.4), key1);
+    // 床はインキュベーターの中の、しめった土（下にかくれた体は見えない）
+    const soil = new T.Mesh(new T.CircleGeometry(6, 48), phys('#8C6B4A', { roughness: 1 }));
+    soil.rotation.x = -Math.PI / 2; soil.receiveShadow = true;
+    scene.add(soil);
+    const camera = new T.PerspectiveCamera(32, 1, 0.1, 40);
+    camera.position.set(0, 1.9, 4.4); camera.lookAt(0, 0.65, 0);
+    // 卵：上と下のふたつに分けておき、上の殻が割れてはずれる
+    const ec = document.createElement('canvas'); ec.width = 512; ec.height = 256;
+    const ex = ec.getContext('2d');
+    const r0 = prng((look.seed || 1) * 3 + 7);
+    const cracks = [];
+    for (let i = 0; i < 7; i++) {
+      const pts = []; let x = r0() * 512, y = 70 + r0() * 30;
+      for (let k = 0; k < 6; k++) { pts.push([x, y]); x += (r0() - 0.5) * 60; y += 8 + r0() * 14; }
+      cracks.push(pts);
+    }
+    const drawEgg = n => {
+      ex.fillStyle = '#F6F1E4'; ex.fillRect(0, 0, 512, 256);
+      const r = prng(11);
+      for (let i = 0; i < 160; i++) { ex.fillStyle = `rgba(190,175,150,${0.15 + r() * 0.25})`; ex.beginPath(); ex.arc(r() * 512, r() * 256, 0.6 + r() * 1.6, 0, 7); ex.fill(); }
+      ex.strokeStyle = '#6E5B44'; ex.lineWidth = 2.2; ex.lineJoin = 'round';
+      for (let i = 0; i < Math.min(n, cracks.length); i++) { ex.beginPath(); cracks[i].forEach(([x, y], k) => k ? ex.lineTo(x, y) : ex.moveTo(x, y)); ex.stroke(); }
+      eggTex.needsUpdate = true;
+    };
+    const eggTex = new T.CanvasTexture(ec); eggTex.encoding = T.sRGBEncoding;
+    const shellMat = () => phys('#ffffff', { map: eggTex, roughness: 0.8, transparent: true });
+    const CUT = 0.95;
+    const top = new T.Mesh(new T.SphereGeometry(1, 40, 24, 0, Math.PI * 2, 0, CUT), shellMat());
+    const bot = new T.Mesh(new T.SphereGeometry(1, 40, 24, 0, Math.PI * 2, CUT, Math.PI - CUT), shellMat());
+    bot.material.side = T.DoubleSide; top.material.side = T.DoubleSide;
+    const egg = new T.Group();
+    for (const m of [top, bot]) { m.castShadow = true; egg.add(m); }
+    egg.scale.set(0.52, 0.72, 0.52); egg.position.y = 0.7;
+    scene.add(egg);
+    drawEgg(0);
+    // 中にいるベビー（鼻先を上に向けて、卵の中にかくれている）
+    const baby = Object.assign({}, look, { stage: 'baby' });
+    const gk = buildGecko(baby, 'high');
+    const P = restPose();
+    const SC = 0.42;
+    gk.root.scale.setScalar(SC);
+    scene.add(gk.root);
+    const st = { t: 0, done: false, ev: {} };
+    const ro = () => { const w = container.clientWidth, h = container.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
+    ro();
+    if (root.ResizeObserver) new ResizeObserver(ro).observe(container);
+    const once = (k, at) => { if (st.t >= at && !st.ev[k]) { st.ev[k] = 1; onEvent && onEvent(k); } };
+    let last = performance.now();
+    function loop(now) {
+      if (st.done) return;
+      const dt = Math.min(0.1, (now - last) / 1000); last = now;
+      st.t += dt;
+      const t = st.t;
+      // 1. カタカタ（だんだん強く）とひび
+      const shake = t < 2.1 ? Math.sin(t * 26) * 0.12 * Math.min(1, t / 1.4) * (Math.sin(t * 3) > -0.3 ? 1 : 0.2) : 0;
+      egg.rotation.z = shake;
+      if (t < 2.1) drawEgg(Math.floor(t / 0.3));
+      once('crack', 0.6); once('crack2', 1.3);
+      // 2. 上の殻がはずれる
+      if (t > 2.1) {
+        once('open', 2.1);
+        const k = Math.min(1, (t - 2.1) / 0.8);
+        top.position.set(k * 1.6, 1.0 * Math.sin(k * Math.PI) + k * 0.2, k * 0.3);
+        top.rotation.set(k * 1.2, 0, -k * 2.2);
+        top.material.opacity = 1 - Math.max(0, (t - 2.6) / 0.6);
+      }
+      // 3. ベビーが顔を出す → 4. 体を起こして、殻から一歩
+      const rise = clamp((t - 2.4) / 1.6, 0, 1), level = clamp((t - 4.3) / 1.1, 0, 1);
+      const tilt = lerp(-1.15, 0, smooth(level));
+      gk.root.rotation.set(tilt, 0.25 * (1 - level), 0);
+      // 殻の中では足をちぢめて、殻から足がはみ出さないようにする
+      gk.root.scale.set(SC * lerp(0.62, 1, smooth(level)), SC, SC);
+      gk.root.position.set(0, lerp(-0.9, 0.55, smooth(rise)) * (1 - level) + level * 0.0, lerp(0, 0.6, smooth(level)));
+      bot.material.opacity = 1 - clamp((t - 4.4) / 0.9, 0, 1);
+      if (bot.material.opacity <= 0.01) bot.visible = false;
+      P.t = t; P.breathe = Math.sin(t * 3);
+      P.blink = (t > 3.2 && t < 3.35) || (t > 4.9 && t < 5.05) ? 1 : 0;
+      P.tongue = t > 3.6 && t < 4.1 ? Math.sin((t - 3.6) / 0.5 * Math.PI) : 0;
+      P.look = t > 2.8 && t < 4.3 ? Math.sin(t * 1.6) * 0.35 : 0;
+      P.walk = level > 0 && level < 1 ? 0.8 : 0; P.phase = t * 6;
+      pose(gk, P);
+      once('out', 3.0);
+      if (t > 6.2) { finish(); return; }
+      renderer.render(scene, camera);
+      requestAnimationFrame(loop);
+    }
+    function finish() {
+      if (st.done) return;
+      st.done = true;
+      onEvent && onEvent('done');
+      try { disposeGecko(gk); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); } catch (e) { /* noop */ }
+    }
+    renderer.domElement.addEventListener('pointerup', () => { if (st.t > 0.4) finish(); });
+    requestAnimationFrame(loop);
+    return { skip: finish, _st: st };
+  }
+
   // ======================================================
   // 図鑑やショップ用の写真
   // ======================================================
@@ -4339,5 +4456,5 @@
   }
   function photoReady(look, opts) { return photoCache.get(photoKey(look, opts)) || null; }
 
-  root.Leopa3D = { _buildKit: (n, f) => buildKit(n, f), loadKit, CAGE_SIZES, CAGE_THEMES, itemPhoto, itemPhotoReady, supported, createTank, createViewer, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR, TANK };
+  root.Leopa3D = { _buildKit: (n, f) => buildKit(n, f), loadKit, CAGE_SIZES, CAGE_THEMES, itemPhoto, itemPhotoReady, supported, createTank, createViewer, hatchScene, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR, TANK };
 })(typeof window !== 'undefined' ? window : globalThis);

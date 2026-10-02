@@ -807,11 +807,7 @@
     renderView();
     const morph = nameOf(g);
     const hets = G.hets(g.genes);
-    // 卵がカタカタ → パカッ → 誕生
-    openSheet(`<div class="hatching"><div class="hatch-egg">${A.egg()}</div><p class="muted">カタカタ……</p></div>`);
-    setTimeout(() => sfx('crack'), 500);
-    setTimeout(() => sfx('crack'), 1050);
-    setTimeout(() => {
+    const reveal = () => {
       sfx('hatch');
       openSheet(`<div class="reveal">
         <div class="reveal-art">${portrait(g, "baby", morph)}</div>
@@ -825,7 +821,26 @@
           <input id="renameInput" value="${esc(g.name)}" maxlength="10" autocomplete="off">
           <button class="act primary" type="submit">おむかえする</button>
         </form></div>`);
-    }, 1600);
+    };
+    // 3D で、卵がカタカタ → ひび → 殻が割れて、ベビーが顔を出す
+    if (L3.supported && L3.hatchScene) {
+      openSheet(`<div class="hatch3d" id="hatch3d"></div><p class="muted hatch-say" id="hatchSay">カタカタ……</p><p class="muted small">画面をタップすると、とばせます</p>`);
+      let done = false;
+      const say = t => { const el = $('#hatchSay'); if (el) el.textContent = t; };
+      L3.hatchScene($('#hatch3d'), lookOf(g), ev => {
+        if (ev === 'crack' || ev === 'crack2') sfx('crack');
+        if (ev === 'crack2') say('ピキッ……ひびが入った！');
+        if (ev === 'open') say('パカッ！');
+        if (ev === 'out') say('こんにちは！');
+        if (ev === 'done' && !done) { done = true; reveal(); }
+      });
+      return;
+    }
+    // 卵がカタカタ → パカッ → 誕生
+    openSheet(`<div class="hatching"><div class="hatch-egg">${A.egg()}</div><p class="muted">カタカタ……</p></div>`);
+    setTimeout(() => sfx('crack'), 500);
+    setTimeout(() => sfx('crack'), 1050);
+    setTimeout(reveal, 1600);
   }
 
   // ---------- 操作
@@ -1572,6 +1587,7 @@
     heart: '<path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/>',
     sofa: '<path d="M5 11V8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3"/><path d="M3 12a2 2 0 0 1 4 0v2h10v-2a2 2 0 0 1 4 0v6H3z"/><path d="M5 18v2M19 18v2"/>',
     home: '<path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-5h4v5"/>',
+    card: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="11" r="2.2"/><path d="M5.5 16c.6-1.6 1.7-2.4 3-2.4s2.4.8 3 2.4M14 10h4M14 13.5h4"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
   };
   const ic = k => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]}</svg>`;
@@ -1637,6 +1653,7 @@
         <button class="act ghost" data-action="pairMenu">${ic('heart')}ペアリング${block ? '' : ' OK'}</button>
         <button class="act ghost" data-action="camera">${ic('camera')}カメラで撮る</button>
         <button class="act ghost" data-action="album">${ic('album')}アルバム</button>
+        <button class="act ghost" data-action="profileCard">${ic('card')}プロフィールカード</button>
         <button class="act ghost" data-action="editStart">${ic('sofa')}もようがえ</button>
         <button class="act ghost" data-action="rehomeMenu">${ic('home')}里親に出す</button>
       </div>
@@ -2819,6 +2836,89 @@
         if (e && e.name === 'AbortError') return;
         toast('保存できませんでした。写真を長押しして、保存してください');
       }
+    },
+  });
+
+  // ---- プロフィールカード：名前・モルフ・家系・体重を1枚の画像に
+  function profileCard(g) {
+    ensureDates(g);
+    return new Promise(res => {
+      const K = t => (window.LKids && LKids.on ? LKids.conv(t) : t);
+      const W = 1080, H = 1350;
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const x = c.getContext('2d');
+      const font = (w, px) => `${w} ${px}px "Zen Maru Gothic","Hiragino Maru Gothic ProN","Hiragino Sans",sans-serif`;
+      const rr = (X, Y, w, h, r) => { x.beginPath(); x.moveTo(X + r, Y); x.arcTo(X + w, Y, X + w, Y + h, r); x.arcTo(X + w, Y + h, X, Y + h, r); x.arcTo(X, Y + h, X, Y, r); x.arcTo(X, Y, X + w, Y, r); x.closePath(); };
+      const bg = x.createLinearGradient(0, 0, W, H);
+      bg.addColorStop(0, '#FFF6E3'); bg.addColorStop(1, '#F6E7CF');
+      x.fillStyle = bg; x.fillRect(0, 0, W, H);
+      const head = x.createLinearGradient(0, 0, W, 0);
+      head.addColorStop(0, '#E9A23B'); head.addColorStop(1, '#F2C26B');
+      x.fillStyle = head; x.fillRect(0, 0, W, 120);
+      x.fillStyle = '#fff'; x.font = font(800, 44); x.textBaseline = 'middle';
+      x.fillText(K('レオパ プロフィールカード'), 60, 62);
+      const done = img => {
+        const PH = 560;
+        rr(60, 160, W - 120, PH, 36); x.save(); x.clip();
+        x.fillStyle = '#EFE3C9'; x.fillRect(60, 160, W - 120, PH);
+        if (img) { const k = Math.max((W - 120) / img.width, PH / img.height); const iw = img.width * k, ih = img.height * k; x.drawImage(img, 60 + (W - 120 - iw) / 2, 160 + (PH - ih) / 2, iw, ih); }
+        x.restore();
+        x.textBaseline = 'alphabetic';
+        x.fillStyle = '#3B2E22'; x.font = font(800, 76);
+        x.fillText(K(g.name), 70, 812);
+        const nw = x.measureText(K(g.name)).width;
+        x.fillStyle = g.sex === 'M' ? '#4A86C5' : '#D9668A'; x.font = font(800, 64);
+        x.fillText(g.sex === 'M' ? '♂' : '♀', 90 + nw, 812);
+        x.fillStyle = '#7A5A2E'; x.font = font(700, 40);
+        x.fillText(K(nameOf(g)), 72, 866);
+        const hets = G.hets(g.genes);
+        let y = 866;
+        if (hets.length) { y += 44; x.fillStyle = '#B0577A'; x.font = font(700, 30); x.fillText(K(hets.map(h => 'het ' + h).join(' / ')), 72, y); }
+        // 情報の表
+        const rows = [['体重', `${weightOf(g)}g`], ['成長', STAGE_LABEL[stageOf(g)]], ['世代', `第${g.gen || 1}世代`], ['なれ度', `${Math.round(g.tame)}`],
+          [g.birthEst ? '誕生日（推定）' : '誕生日', fmtDay(g.birthday)], ['おむかえ日', fmtDay(g.adopted || g.born)]];
+        y += 30;
+        rows.forEach(([k, v], i) => {
+          const cx = 72 + (i % 2) * 470, cy = y + Math.floor(i / 2) * 74;
+          rr(cx - 12, cy, 450, 64, 16); x.fillStyle = 'rgba(255,255,255,.7)'; x.fill();
+          x.fillStyle = '#9A8668'; x.font = font(700, 24); x.fillText(K(k), cx + 8, cy + 26);
+          x.fillStyle = '#3B2E22'; x.font = font(800, 30); x.fillText(K(v), cx + 8, cy + 56);
+        });
+        y += 3 * 74 + 36;
+        const par = g.parents ? `${g.parents.mom ? g.parents.mom.name : '？'} × ${g.parents.dad ? g.parents.dad.name : '？'}` : 'ショップからおむかえ';
+        x.fillStyle = '#5A4630'; x.font = font(700, 30);
+        x.fillText(K(`両親：${par}`), 72, y);
+        const notes = traitRows(g).filter(r => r.v >= 75 || (r.v <= 25 && !r.quietLow)).slice(0, 3).map(r => `${r.name}：${r.v >= 75 ? r.hi : r.lo}`);
+        const tro = (S.trophies || []).filter(t => t.name === g.name).length;
+        const extra = notes.concat(tro ? [`トロフィー・リボン ${tro}こ`] : []);
+        if (extra.length) {
+          // 横はばに入るように、2行までで折りかえす
+          x.fillStyle = '#7A5A2E'; x.font = font(700, 26);
+          const lines = [''];
+          extra.map(K).forEach(t => { const cur = lines[lines.length - 1]; const nx = cur ? cur + '　' + t : t; if (!cur || x.measureText(nx).width <= W - 144) lines[lines.length - 1] = nx; else lines.push(t); });
+          lines.slice(0, 2).forEach(t => { y += 40; x.fillText(t, 72, y); });
+        }
+        x.fillStyle = '#B09A78'; x.font = font(700, 26);
+        const d = new Date();
+        x.fillText(K(`${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}  レオパといっしょ`), 72, H - 34);
+        res(c.toDataURL('image/jpeg', 0.9));
+      };
+      let url = null;
+      try { url = L3.supported ? L3.photo(Object.assign(lookOf(g), { gravid: false })) : null; } catch (e) { url = null; }
+      if (!url) { done(null); return; }
+      const im = new Image(); im.onload = () => done(im); im.onerror = () => done(null); im.src = url;
+    });
+  }
+  Object.assign(ACTIONS, {
+    async profileCard() {
+      const g = selected();
+      if (!g) return;
+      openSheet('<div class="show-judge"><span class="spinner big" aria-hidden="true"></span><p class="muted">カードを作っています……</p></div>');
+      const img = await profileCard(g);
+      shot = { img, id: g.id };
+      openSheet(`<p class="eyebrow">プロフィールカード</p>
+        <div class="shot-view"><img src="${img}" alt="${esc(g.name)}のプロフィールカード"></div>
+        <div class="actions"><button class="act primary" data-action="shotSave">スマホに保存・共有</button><button class="act" data-action="closeSheet">とじる</button></div>`);
     },
   });
 
