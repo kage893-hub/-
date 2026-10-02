@@ -135,10 +135,10 @@
     const m = mendelTokens(genes, tang);
     let line = lineTokens(genes, tang, poly);
     if (m.tangUsed) line = line.filter(x => x !== 'タンジェリン');
-    // 組み合わせの呼び名：サングロー（アルビノ＋スーパーハイポ＋タンジェリン）、ギャラクシー（マックスノー エクリプスで模様が大きく乱れた子）
+    // 組み合わせの呼び名：サングロー（アルビノ＋スーパーハイポ＋タンジェリン）、ギャラクシー（トータルエクリプスで斑点の多い子）
     const sw = (drop, name, at) => { m.tokens = m.tokens.filter(x => !drop.includes(x)); line = line.filter(x => !drop.includes(x)); m.tokens.splice(Math.min(at, m.tokens.length), 0, name); };
     if (isSunglow(genes, tang, poly)) sw(['トレンパーアルビノ', 'スーパーハイポ', 'タンジェリン'], 'サングロー', 9);
-    if (isGalaxy(genes, poly)) { sw(['マックスノー', 'エクリプス', 'ジャングル', 'ストライプ'], 'ギャラクシー', 9); }
+    if (isGalaxy(genes, poly)) sw(['トータルエクリプス'], 'ギャラクシー', 9);
     if (!m.tokens.length && !line.length) return tang >= TANG_MID ? 'ハイイエロー' : 'ノーマル';
     return m.tokens.concat(line).join(' ');
   }
@@ -147,9 +147,10 @@
     const g = normGenes(genes);
     return !!poly && g.alb === 2 && g.ecl !== 2 && g.bliz !== 2 && poly.spots < T.superHypo && tang >= TANG_HIGH;
   }
+  // 本物のギャラクシー：スーパーマックスノー＋エクリプス（＝トータルエクリプス）を、斑点の多い子で選別したもの
   function isGalaxy(genes, poly) {
     const g = normGenes(genes);
-    return !!poly && g.snow === 1 && g.ecl === 2 && g.alb !== 2 && poly.aberrant >= T.galaxy;
+    return !!poly && g.snow === 2 && g.ecl === 2 && g.alb !== 2 && g.bliz !== 2 && normPoly(poly).spots >= T.galaxy;
   }
   // 見た目に出ていない劣性遺伝子（ヘテロ）
   function hets(genes) {
@@ -247,7 +248,7 @@
     { id: 'ベルアルビノ', name: 'ベルアルビノ', hint: '劣性。トレンパーとは別のアルビノで、ピンクがかった色', rep: { genes: { bell: 2 }, tang: 20, poly: P({}) }, test: g => g.bell === 2 },
     { id: 'レーダー', name: 'レーダー', hint: 'ベルアルビノ＋エクリプス。目が赤くなる', rep: { genes: { bell: 2, ecl: 2 }, tang: 25, poly: P({}) }, test: g => g.bell === 2 && g.ecl === 2 && g.alb !== 2 },
     { id: 'サングロー', name: 'サングロー', hint: 'トレンパーアルビノ＋スーパーハイポ＋タンジェリン。斑点のないオレンジ', rep: { genes: { alb: 2 }, tang: 88, poly: P({ spots: 3, head: 20, carrot: 70 }) }, test: (g, t, p) => isSunglow(g, t, p) },
-    { id: 'ギャラクシー', name: 'ギャラクシー', hint: 'マックスノー エクリプスで、模様が大きく乱れた子。星空のような姿', rep: { genes: { snow: 1, ecl: 2 }, tang: 10, poly: P({ aberrant: 85, blotch: 70 }) }, test: (g, t, p) => isGalaxy(g, p) },
+    { id: 'ギャラクシー', name: 'ギャラクシー', hint: 'トータルエクリプスで斑点の多い子。白い地に細かい黒い点がびっしり、手足は白く抜ける', rep: { genes: { snow: 2, ecl: 2 }, tang: 10, poly: P({ spots: 85, blotch: 25, head: 75, aberrant: 10 }) }, test: (g, t, p) => isGalaxy(g, p) },
   ];
   // その個体が当てはまる図鑑の項目
   function dexMatches(genes, tang, poly) {
@@ -257,7 +258,7 @@
 
   const api = {
     LOCI, POLY, TANG_HIGH, TANG_MID, THRESH: T, DEX,
-    morphName, mendelName, lineTokens, hets, locusDist, breed, forecast, normGenes, normPoly, randomPoly, dexMatches,
+    morphName, mendelName, lineTokens, isGalaxy, hets, locusDist, breed, forecast, normGenes, normPoly, randomPoly, dexMatches,
   };
   root.LeopaGenetics = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

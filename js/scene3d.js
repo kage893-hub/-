@@ -327,10 +327,12 @@
       ctx.globalAlpha = 1;
     };
 
+    // ギャラクシー（本物の写真にあわせて）：ピンク・ラベンダーがかった地に、小さな黒い点がびっしり。手足と鼻先は白っぽいピンクに抜ける
+    const galaxy = !!pal.galaxy && st !== 'baby';
     // ---- 地の色（背中は少し濃く、横は明るく、おなかは白）
-    ctx.fillStyle = around([belly, pal.base, A.mix(pal.base, '#7A4A08', 0.1)]);
+    ctx.fillStyle = around([belly, pal.base, A.mix(pal.base, galaxy ? '#6E5A68' : '#7A4A08', 0.1)]);
     ctx.fillRect(0, 0, W, H);
-    const tailCol = A.mix(st === 'baby' ? A.mix(pal.tail, '#FFFFFF', 0.35) : A.mix(pal.base, '#8A8790', 0.4), lavCol, poly.lav / 100 * 0.45);
+    const tailCol = galaxy ? pal.tail : A.mix(st === 'baby' ? A.mix(pal.tail, '#FFFFFF', 0.35) : A.mix(pal.base, '#8A8790', 0.4), lavCol, poly.lav / 100 * 0.45);
     vertFade(-0.8, -1.25, around([A.mix(tailCol, '#FFFFFF', 0.6), tailCol, A.mix(tailCol, '#6E6070', 0.08)]));
     // キャロットテール：しっぽの付け根からオレンジ
     if (poly.carrot > 8) {
@@ -379,12 +381,9 @@
         ctx.fill();
       }
     };
-    // ギャラクシー（マックスノー エクリプスで模様が大きく乱れた子）は、すじにならず、まだらに広がって白い点が散る
-    const gg = look.genes || {};
-    const galaxy = gg.snow === 1 && gg.ecl === 2 && gg.alb !== 2 && poly.aberrant >= 70;
-    const jungle = poly.aberrant >= 60, stripe = poly.aberrant >= 82 && !galaxy;
+    const jungle = poly.aberrant >= 60 && !galaxy, stripe = poly.aberrant >= 82 && !galaxy;
     if (pal.pattern) {
-      const bandA = st === 'baby' ? 0.95 : st === 'young' ? 0.42 : 0;
+      const bandA = st === 'baby' ? 0.95 : st === 'young' && !galaxy ? 0.42 : 0;
       if (bandA > 0) {
         if (stripe && st === 'baby') {
           // ストライプのベビーは、背中の両わきに太いすじ
@@ -401,7 +400,7 @@
         }
       }
       // おとなに残る、ラベンダーがかった帯
-      if (st !== 'baby') {
+      if (st !== 'baby' && !galaxy) {
         const la = 0.12 + poly.lav / 100 * 0.45;
         for (const [z0, z1] of bandZ) band(z0 + 0.03, z1 - 0.03, A.mix(pal.base, lavCol, 0.75), la * (z1 > Z_TAILBASE ? 1 : 0.8), jungle);
       }
@@ -470,15 +469,12 @@
           const z = 1.25 - r() * (1.25 - Z_TAILBASE + 1.6);
           let u = 0.5 + (r() + r() - 1) * 0.36;
           if (stripe) u = (r() < 0.5 ? 0.42 : 0.58) + (r() - 0.5) * 0.05;
-          blob(u, z, (0.03 + r() * 0.04) * sizeMul * (galaxy ? 1.35 : 1), pal.spot, alpha, (r() - 0.5) * 0.6, stripe ? 1.4 : galaxy ? 1.2 + r() * 1.4 : 2.2 + r() * 1.6);
+          blob(u, z, (0.03 + r() * 0.04) * sizeMul, pal.spot, alpha, (r() - 0.5) * 0.6, stripe ? 1.4 : 2.2 + r() * 1.6);
         }
-        if (galaxy) {
-          // 星のような白い点
-          for (let i = 0; i < 260; i++) {
-            const z = 1.25 - r() * (1.25 - Z_TAILBASE + 1.8), u = 0.5 + (r() + r() - 1) * 0.4;
-            blob(u, z, 0.006 + r() * 0.012, '#FFFFFF', 0.7 + r() * 0.3);
-          }
-        }
+      } else if (galaxy) {
+        // ギャラクシー：小さな丸い点が、背中からわき腹・しっぽの先まで、すきまなく並ぶ（ゴマ模様）
+        scatter(950, 1.24, Z_TAILBASE, 0.44, () => 0.03, 1.12, false);
+        scatter(650, Z_TAILBASE - 0.05, -3.1, 0.46, z => 0.03 * clamp(circ(z) / 2.4, 0.45, 1.1), 1.12, false);
       } else {
         // 胴：背中を中心に
         const bodyN = poly.spots < 8 ? 0 : Math.round(165 * Math.pow(poly.spots / 60, 1.25));
@@ -487,9 +483,19 @@
         const tailN = Math.round(70 * (0.3 + 0.7 * poly.spots / 100));
         scatter(tailN, Z_TAILBASE - 0.05, Z_TAILBASE - 2.3, 0.4, z => 0.036 * sizeMul * clamp(circ(z) / 2.4, 0.45, 1.1), 1.6, true);
       }
-      // 頭：細かい点（少ないとボールディ）
-      const headN = poly.head < 10 ? 0 : Math.round(70 * Math.pow(poly.head / 60, 1.2));
-      scatter(headN, 2.1, 1.3, 0.3, z => (0.014 + (2.1 - z) * 0.012) * (0.75 + poly.blotch / 220), 1.7, false);
+      // 頭：細かい点（少ないとボールディ）。ギャラクシーは鼻先をあけて、細かい点をびっしり
+      if (galaxy) scatter(240, 1.95, 1.3, 0.35, z => 0.014 + (1.95 - z) * 0.011, 1.2, false);
+      else {
+        const headN = poly.head < 10 ? 0 : Math.round(70 * Math.pow(poly.head / 60, 1.2));
+        scatter(headN, 2.1, 1.3, 0.3, z => (0.014 + (2.1 - z) * 0.012) * (0.75 + poly.blotch / 220), 1.7, false);
+      }
+    }
+    // ギャラクシーの鼻先は、ピンクがかった白に抜ける
+    if (galaxy) {
+      const ng = ctx.createLinearGradient(0, Y(2.3), 0, Y(1.9));
+      ng.addColorStop(0, rgba('#EBC2CB', 1)); ng.addColorStop(0.55, rgba('#EBC2CB', 0.85)); ng.addColorStop(1, rgba('#EBC2CB', 0));
+      ctx.globalAlpha = 1; ctx.fillStyle = ng;
+      ctx.fillRect(0, 0, W, Y(1.9));
     }
     // 抱卵中はおなかの横に卵が透ける
     if (look.gravid) {
@@ -629,7 +635,8 @@
     ctx.fillStyle = col;
     ctx.fillRect(0, 0, 128, 128);
     const poly = Object.assign({}, DEFAULT_POLY, look.poly || {});
-    if (pal.pattern && look.stage !== 'baby' && poly.spots >= 8) {
+    // ギャラクシーの手足は、点のない白（ハイソックス）
+    if (pal.pattern && look.stage !== 'baby' && poly.spots >= 8 && !pal.galaxy) {
       const r = prng((look.seed || 1) + 41);
       ctx.fillStyle = pal.spot;
       ctx.globalAlpha = look.stage === 'young' ? 0.6 : 0.85;
@@ -803,7 +810,7 @@
       emissive: new T.Color('#ffffff'), emissiveMap: colorTex, emissiveIntensity: 0.07,
       sheen: new T.Color('#3a2a18'),
     });
-    const limbCol = A.mix(pal.base, '#FFF9EF', 0.06);
+    const limbCol = pal.galaxy && look.stage !== 'baby' ? '#E6B9C3' : A.mix(pal.base, '#FFF9EF', 0.06);
     const limbTex = canvasTexture(limbCanvas(pal, look, limbCol), { srgb: true, repeat: 2 });
     owned.push(limbTex);
     const limbMat = phys('#ffffff', { map: limbTex, bumpMap: granules(), bumpScale: 0.005, roughness: 0.6, clearcoat: shed ? 0 : 0.1, emissive: new T.Color('#ffffff'), emissiveMap: limbTex, emissiveIntensity: 0.07 });
@@ -1207,12 +1214,13 @@
 
   // 形の曲げ方（描画側 GLSL と、眼球などの位置合わせ用 JS で同じ式を使う）
   const DEFORM_GLSL = `
-    uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop, uTailFat, uTailLift, uBend, uJaw, uWag;
+    uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop, uTailFat, uTailLift, uBend, uJaw, uWag, uWhiteFeet;
     // 実物のレオパにあわせたしっぽ：長さは頭からお尻までの約0.8倍、いちばん太いところは首くらいの太さ
     #define TAIL_V -1.55
     #define TAIL_STRETCH 1.6
     #define TAIL_BASE 0.7
     varying float vLeoZ;
+    varying float vLeoFeet;
     attribute float aLeg;
     attribute vec3 aPivot;
     attribute float aCy;
@@ -1293,11 +1301,12 @@
       Object.assign(sh.uniforms, U);
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\n' + DEFORM_GLSL)
-        .replace('#include <begin_vertex>', 'vLeoZ = position.z;\nvec3 transformed = leoDeform(vec3(position));');
+        .replace('#include <begin_vertex>', 'vLeoZ = position.z;\n// 手足（付け根から先）だけを白くする目印（ギャラクシー）\nvLeoFeet = uWhiteFeet * step(0.5, aLeg) * smoothstep(0.06, 0.24, length(position.xz - aPivot.xz));\nvec3 transformed = leoDeform(vec3(position));');
       // 脱皮：まだ脱いでいない古い皮を白っぽく。頭から少しずつ脱いでいく（境目は皮がめくれて明るく）
       if (sh.fragmentShader.includes('#include <dithering_fragment>')) {
         sh.fragmentShader = sh.fragmentShader
-          .replace('#include <common>', '#include <common>\nuniform float uShedOn, uShedEdge;\nvarying float vLeoZ;')
+          .replace('#include <common>', '#include <common>\nuniform float uShedOn, uShedEdge;\nvarying float vLeoZ, vLeoFeet;')
+          .replace('#include <map_fragment>', '#include <map_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.90, 0.68, 0.73), vLeoFeet);')
           .replace('#include <dithering_fragment>', `#include <dithering_fragment>
             float oldSkin = uShedOn * (1.0 - smoothstep(uShedEdge - 0.1, uShedEdge + 0.1, vLeoZ));
             gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.80, 0.80, 0.77) + gl_FragColor.rgb * 0.22, oldSkin * 0.62);
@@ -1330,9 +1339,10 @@
     rough.wrapS = T.RepeatWrapping;
     const shed = false;
     const U = {};
-    for (const k of ['uT', 'uPhase', 'uWalk', 'uLook', 'uPitch', 'uTilt', 'uCurl', 'uStalk', 'uHappy', 'uBreathe', 'uDrop', 'uTailFat', 'uTailLift', 'uBend', 'uJaw', 'uWag', 'uShedOn', 'uShedEdge']) U[k] = { value: 0 };
+    for (const k of ['uT', 'uPhase', 'uWalk', 'uLook', 'uPitch', 'uTilt', 'uCurl', 'uStalk', 'uHappy', 'uBreathe', 'uDrop', 'uTailFat', 'uTailLift', 'uBend', 'uJaw', 'uWag', 'uShedOn', 'uShedEdge', 'uWhiteFeet']) U[k] = { value: 0 };
     // 脱皮中は古い皮で全体が白っぽい（ケースの中では少しずつ脱いでいく）
     U.uShedOn.value = look.shed ? 1 : 0; U.uShedEdge.value = 9;
+    U.uWhiteFeet.value = pal.galaxy && look.stage !== 'baby' ? 1 : 0;
     U.uTailFat.value = look.fat || 0;
     const skinMat = deformMaterial(phys('#ffffff', {
       map: colorTex, bumpMap: bump, bumpScale: 0.006, roughnessMap: rough, roughness: shed ? 0.95 : 0.6,

@@ -37,6 +37,9 @@
     if (s === 2) { base = '#F2F1EC'; tail = '#EDEDE9'; }
     if (b) { base = s ? mix(base, '#F4F2EC', 0.5) : mix(base, '#EFE7CF', 0.55); tail = mix(base, '#F2EEE6', 0.3); }
     if (b && a && e) { base = '#F6F4EE'; tail = '#F4F2EC'; }
+    // ギャラクシー：ピンク・ラベンダーがかった白い地に、細かい黒い点がびっしり
+    const galaxy = !!(root.LeopaGenetics && root.LeopaGenetics.isGalaxy(genes, poly));
+    if (galaxy && stage !== 'baby') { base = stage === 'young' ? '#CFB2C0' : '#D6B6C4'; tail = '#D2B3C1'; spot = '#221B21'; }
 
     // 黒さ（ブラックナイトの血統）：体も模様も黒くしずむ。アルビノには出ない
     const mel = poly && poly.mel != null ? poly.mel : 0;
@@ -50,7 +53,7 @@
     else if (bl) { eye = '#E5B3B3'; pupil = '#C0505E'; }
     else if (b) { eye = '#4A4540'; }
 
-    return { base, tail, spot, eye, pupil, solid, pattern: !b, outline: mix(base, '#3A2E22', 0.38) };
+    return { base, tail, spot, eye, pupil, solid, galaxy, pattern: !b, outline: mix(base, '#3A2E22', 0.38) };
   }
 
   const SHAPES = [
@@ -87,9 +90,9 @@
     }
     const spotOp = stage === 'baby' ? 0 : stage === 'young' ? 0.75 : 1;
     if (spotOp > 0) {
-      const n = genes.snow === 2 ? 72 : 54;
+      const n = c.galaxy ? 210 : genes.snow === 2 ? 72 : 54;
       for (let i = 0; i < n; i++) {
-        const x = 28 + r() * 44, y = 14 + r() * 178, rr = 1.2 + r() * 2.3;
+        const x = 28 + r() * 44, y = 14 + r() * 178, rr = c.galaxy ? 0.8 + r() * 0.6 : 1.2 + r() * 2.3;
         out += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${rr.toFixed(1)}" fill="${c.spot}" opacity="${spotOp}"/>`;
       }
     }
