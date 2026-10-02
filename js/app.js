@@ -243,6 +243,8 @@
   function simulate(now) {
     if (!S.speed) S.speed = 3;
     const dtH = (now - S.lastTick) / HOUR;
+    // 端末の時計が戻されたときは、そこから数えなおす（戻した分だけ時間が止まってしまわないように）
+    if (dtH < 0) S.lastTick = now;
     if (dtH > 0) {
       for (const g of S.geckos) {
         // ベビーはおなかがすきやすく、おとなはゆっくり（ベビーは毎日、おとなは2〜3日に1回が目安）
