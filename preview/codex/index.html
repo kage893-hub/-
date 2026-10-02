@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>【確認版】レオパといっしょ</title>
+<meta name="robots" content="noindex,nofollow">
+<meta name="description" content="レオパードゲッコーを育てて、モルフのブリードを楽しむゲーム">
+<meta name="theme-color" content="#E3A82B">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon-64.png" type="image/png" sizes="64x64">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="レオパ">
+<!-- FONTS -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&family=Zen+Maru+Gothic:wght@500;700&display=swap">
+<!-- /FONTS -->
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- APP -->
+<div id="app">
+  <aside class="preview-notice" aria-label="確認用ゲーム">確認版 · 公開版とは別のセーブです <a href="../../">公開版へ</a></aside>
+  <header class="topbar">
+    <h1 class="logo"><picture><source srcset="assets/logo.webp" type="image/webp"><img src="assets/logo.png" alt="レオパといっしょ" width="720" height="178"></picture></h1>
+    <div class="top-right"><button class="sound-btn" id="setBtn" data-action="settings" aria-label="設定"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button><button class="sound-btn" id="musicBtn" data-action="toggleMusic"></button><button class="sound-btn" id="soundBtn" data-action="toggleSound"></button><div class="coins" id="coins"></div></div>
+  </header>
+  <main>
+    <section id="view-case" class="view">
+      <div class="chips" id="geckoTabs"></div>
+      <div class="tank" id="tank">
+        <div id="tank3d" class="tank3d"></div>
+        <button class="thermo" data-action="heater" aria-label="ヒーターの温度を調整">ホット側 32℃ ／ クール側 26℃</button>
+        <p id="tankEmpty" class="tank-empty" hidden>ケースは空っぽです。ショップでおむかえしよう</p>
+        <div class="tank-name" id="tankName"></div>
+        <button class="full-btn" data-action="fullView" aria-label="全画面で見る"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        <button class="shutter full-shutter" data-action="fullShoot" aria-label="シャッター（写真をとる）"><span></span></button>
+        <div class="full-bar" id="fullBar">
+          <button class="act primary" data-action="feedMenu">ごはん</button>
+          <button class="act" data-action="fullRotate" id="fullRotate" hidden>横向き</button>
+          <button class="act" data-action="fullView">とじる</button>
+        </div>
+        <div class="tank-loading" id="tankLoading"><span class="spinner" aria-hidden="true"></span>レオパを準備中…</div>
+      </div>
+      <div id="tankBars" class="tank-bars"></div>
+      <div class="case-tools" id="caseTools" hidden>
+        <div class="observe-switch" role="group" aria-label="ケースの見かた">
+          <button type="button" data-action="observeMode" data-mode="gecko" aria-pressed="true">レオパを眺める</button>
+          <button type="button" data-action="observeMode" data-mode="case" aria-pressed="false">ケース全体</button>
+        </div>
+        <div class="case-quick-actions">
+          <button class="act" data-action="camera">写真を撮る</button>
+          <button class="act" data-action="album">アルバム</button>
+          <button class="act" data-action="profileCard">カード</button>
+        </div>
+      </div>
+      <div id="caseInfo"></div>
+    </section>
+    <section id="view-eggs" class="view" hidden></section>
+    <section id="view-dex" class="view" hidden></section>
+    <section id="view-shop" class="view" hidden></section>
+    <section id="view-expo" class="view" hidden></section>
+  </main>
+  <nav class="tabbar" aria-label="メニュー">
+    <button data-action="tab" data-view="case" class="on"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10.5h18"/></svg><span>ケース</span></button>
+    <button data-action="tab" data-view="eggs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c4 0 7 6 7 11a7 7 0 0 1-14 0c0-5 3-11 7-11z"/></svg><span>たまご</span><i class="badge" id="eggBadge" hidden></i></button>
+    <button data-action="tab" data-view="dex"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/></svg><span>図鑑</span></button>
+    <button data-action="tab" data-view="shop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 12H6.2z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg><span>ショップ</span></button>
+  </nav>
+</div>
+<div class="sheet-wrap" id="sheet" hidden>
+  <div class="sheet-backdrop" data-action="closeSheet"></div>
+  <div class="sheet" id="sheetBody" role="dialog" aria-modal="true" aria-label="メニュー"></div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<!-- /APP -->
+<script src="js/vendor/three.min.js"></script>
+<script src="js/genetics.js"></script>
+<script src="js/art.js"></script>
+<script src="js/scene3d.js"></script>
+<script src="js/music.js"></script>
+<script src="js/kids.js"></script>
+<script src="js/photo-save.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
