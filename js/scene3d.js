@@ -2126,6 +2126,17 @@
     g.traverse(m => { if (m.isMesh) m.castShadow = true; });
     return g;
   }
+  function starLamp() {
+    const g = new T.Group();
+    const sh = new T.Shape();
+    for (let i = 0; i < 10; i++) { const rr = i % 2 ? 0.38 : 0.9, a = Math.PI / 2 + i * Math.PI / 5; sh[i ? 'lineTo' : 'moveTo'](Math.cos(a) * rr, Math.sin(a) * rr); }
+    const star = new T.Mesh(new T.ExtrudeGeometry(sh, { depth: 0.25, bevelEnabled: true, bevelSize: 0.06, bevelThickness: 0.06, bevelSegments: 3 }), phys('#F2A900', { emissive: '#D98200', emissiveIntensity: 0.45, roughness: 0.3, metalness: 0.2 }));
+    star.position.set(0, 1.45, -0.12); g.add(star);
+    const pole = new T.Mesh(new T.CylinderGeometry(0.05, 0.05, 0.6, 12), phys('#C9CED8', { metalness: 0.9, roughness: 0.25 })); pole.position.y = 0.55; g.add(pole);
+    const base = new T.Mesh(new T.CylinderGeometry(0.45, 0.55, 0.25, 32), phys('#1F2C4C', { metalness: 0.3, roughness: 0.4 })); base.position.y = 0.12; g.add(base);
+    g.traverse(m => { if (m.isMesh) m.castShadow = true; });
+    return g;
+  }
   // 新しい家具（Poly Haven・CC0）
   Object.assign(DECOR, {
     phTrunk: { name: '流木（ながい）', price: 30, r: 1.4, climb: true, desc: '長く横たわる流木。上をのんびり歩けます', build: () => kitOr('PH_Trunk', 5.2, null, () => OLD_DECOR.log.build()) },
@@ -2146,6 +2157,7 @@
     phClock: { name: '置き時計', price: 120, r: 0.95, expo: 'night', desc: '木のアンティーク置き時計（レプタイルズショー限定）', build: () => kitOr('PH_Clock', 1.8, null, () => OLD_DECOR.stone.build()) },
     amethyst: { name: '光る紫の結晶', price: 150, r: 0.9, expo: 'night', desc: 'ほのかに光るアメジストの結晶（レプタイルズショー限定）', build: () => amethystCluster() },
     moonGlobe: { name: '月の地球儀', price: 150, r: 0.8, expo: 'night', imgs: ['assets/img/moon.webp'], desc: '本物の月の写真でできた地球儀（レプタイルズショー限定）', build: () => moonGlobe() },
+    starLamp: { name: '星のランプ', price: 120, r: 0.6, expo: 'night', desc: 'やさしく光る星のランプ（レプタイルズショー限定）', build: () => starLamp() },
     planet: { name: '輪のある惑星', price: 150, r: 0.9, expo: 'night', desc: '土星のような輪のある惑星の置物（レプタイルズショー限定）', build: () => ringedPlanet() },
   });
   const DEFAULT_DECOR = [{ t: 'wet', x: -4.4, z: -2.6, rot: 0 }, { t: 'dish', x: -5.0, z: 3.2, rot: 0 }, { t: 'plant', x: 1.8, z: -3.8, rot: 0 }];
