@@ -2086,8 +2086,8 @@
     dino: { name: '恐竜時代', price: 150, desc: '火山の背景とシダの森、足あとの残る大地。太古の世界へタイムスリップ', floor: 'dinofloor', tint: '#ffffff', frame: '#5B4A3A', back: 'volcano', thick: true, dino: true, backFull: true, backImg: 'assets/img/cage-dino-back.webp', floorImg: 'assets/img/cage-dino-floor.webp' },
     candy: { name: 'おかしの家', price: 150, desc: 'クッキーの床、チョコの壁、キャンディの柱。あまーいおうち', floor: 'cookie', tint: '#ffffff', frame: '#F7A8C4', back: 'choco', thick: true, candy: true, backImg: 'assets/img/cage-candy-back.webp', floorImg: 'assets/img/cage-candy-floor.webp', floorScale: 6 },
     // レプタイルズショーの会場でだけ買える
-    expoGold: { name: 'ショー限定・ゴールド', price: 180, desc: 'チャンピオンの気分。金彩の岩壁とアールデコの飾り枠、黄金の砂と水晶のきらめき（レプタイルズショー限定）', floor: 'sand', tint: '#FFF1D2', frame: '#C9A13B', back: 'wood', thick: true, expo: true, backImg: 'assets/img/cage-gold-back.webp', floorImg: 'assets/img/cage-gold-floor.webp' },
-    expoNight: { name: 'ショー限定・ミッドナイト', price: 180, desc: '星降る紫晶の洞窟と、星くずの黒い砂。夜空のような紺色のフレーム（レプタイルズショー限定）', floor: 'sand', tint: '#C8D2F0', frame: '#1F2C4C', back: 'rock', thick: true, expo: true, backImg: 'assets/img/cage-night-back.webp', floorImg: 'assets/img/cage-night-floor.webp' },
+    expoGold: { name: 'ショー限定・ゴールド', price: 500, desc: 'チャンピオンの気分。金彩の岩壁とアールデコの飾り枠、黄金の砂と水晶のきらめき（レプタイルズショー限定）', floor: 'sand', tint: '#FFF1D2', frame: '#9A6A0E', back: 'wood', thick: true, expo: true, backFull: true, backTint: '#94733F', luxe: { metal: '#A8740E', trim: '#D9A52A', gem: '#E8F6FF', emblem: 'trophy', trimTint: '#A87A30' }, backImg: 'assets/img/cage-gold-back.webp', floorImg: 'assets/img/cage-gold-floor.webp', frameImg: 'assets/img/cage-gold-trim.webp' },
+    expoNight: { name: 'ショー限定・ミッドナイト', price: 500, desc: '星降る紫晶の洞窟と、星くずの黒い砂。夜空のような紺色のフレーム（レプタイルズショー限定）', floor: 'sand', tint: '#C8D2F0', frame: '#1F2C4C', back: 'rock', thick: true, expo: true, backFull: true, luxe: { metal: '#C9CED8', trim: '#9AA6C4', gem: '#7FB2FF', glow: true, emblem: 'star' }, backImg: 'assets/img/cage-night-back.webp', floorImg: 'assets/img/cage-night-floor.webp', frameImg: 'assets/img/cage-night-trim.webp' },
   };
   // ケージ用の模様（一度作ったら使い回す）
   const cageTexCache = {};
@@ -2205,6 +2205,54 @@
     cageTexCache[kind] = t;
     return t;
   }
+  // ショー限定ケースの豪華な飾り：四すみの柱と玉、上の枠の飾り縁、背面の上の紋章
+  function luxeBits(g, front, th, hw, hd, ft) {
+    const lx = th.luxe;
+    const metal = phys(lx.metal, { roughness: 0.3, metalness: 0.55, clearcoat: 1 });
+    const trim = phys(lx.trim, { roughness: 0.3, metalness: 0.5, clearcoat: 1 });
+    const gem = phys(lx.gem, { roughness: 0.05, metalness: 0.1, clearcoat: 1, emissive: lx.glow ? lx.gem : '#000000', emissiveIntensity: lx.glow ? 0.6 : 0 });
+    const H = 2.2, x0 = hw + 0.1, z0 = hd + 0.1;
+    // 四すみの柱と、上下の玉
+    for (const [x, z] of [[-x0, -z0], [x0, -z0], [-x0, z0], [x0, z0]]) {
+      const parts = [];
+      const hh = z > 0 ? 0.5 : H;
+      const post = new T.Mesh(new T.BoxGeometry(ft * 1.5, hh + ft, ft * 1.5), metal);
+      post.position.set(x, hh / 2, z); parts.push(post);
+      const cap = new T.Mesh(new T.BoxGeometry(ft * 2, ft * 0.5, ft * 2), trim);
+      cap.position.set(x, hh + ft * 0.75, z); parts.push(cap);
+      const ball = new T.Mesh(new T.SphereGeometry(ft * 0.9, 16, 12), gem);
+      ball.position.set(x, hh + ft * 1.0 + ft * 0.9, z); parts.push(ball);
+      const foot = new T.Mesh(new T.BoxGeometry(ft * 2, ft * 0.6, ft * 2), trim);
+      foot.position.set(x, ft * 0.3, z); parts.push(foot);
+      for (const m of parts) { m.castShadow = true; g.add(m); if (z > 0) front.push(m); }
+    }
+    // 上の枠に重ねる細い飾り縁（後ろと左右）
+    for (const [x, z, w, d] of [[0, -z0, hw * 2 + 0.3, 0.1], [-x0, 0, 0.1, hd * 2 + 0.2], [x0, 0, 0.1, hd * 2 + 0.2]]) {
+      const m = new T.Mesh(new T.BoxGeometry(w + ft * 0.6, ft * 0.35, d + ft * 0.6), trim);
+      m.position.set(x, H + ft * 0.65, z); g.add(m);
+    }
+    // 背面の上の真ん中に、紋章
+    const em = new T.Group();
+    if (lx.emblem === 'star') {
+      const sh = new T.Shape();
+      for (let i = 0; i < 10; i++) { const r = i % 2 ? 0.17 : 0.4, a = Math.PI / 2 + i * Math.PI / 5; sh[i ? 'lineTo' : 'moveTo'](Math.cos(a) * r, Math.sin(a) * r); }
+      const star = new T.Mesh(new T.ExtrudeGeometry(sh, { depth: 0.06, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 2 }), gem);
+      em.add(star);
+      const ring = new T.Mesh(new T.TorusGeometry(0.5, 0.04, 8, 40), metal); em.add(ring);
+    } else {
+      const disc = new T.Mesh(new T.CylinderGeometry(0.46, 0.46, 0.08, 40), metal); disc.rotation.x = Math.PI / 2; em.add(disc);
+      const rim = new T.Mesh(new T.TorusGeometry(0.46, 0.04, 8, 40), trim); em.add(rim);
+      // トロフィー（杯・柄・台）
+      const cup = new T.Mesh(new T.CylinderGeometry(0.17, 0.09, 0.2, 20), trim); cup.position.set(0, 0.1, 0.07); em.add(cup);
+      const stem = new T.Mesh(new T.CylinderGeometry(0.03, 0.03, 0.12, 10), trim); stem.position.set(0, -0.05, 0.07); em.add(stem);
+      const base = new T.Mesh(new T.BoxGeometry(0.2, 0.05, 0.06), trim); base.position.set(0, -0.13, 0.07); em.add(base);
+      for (const sx of [-1, 1]) { const h = new T.Mesh(new T.TorusGeometry(0.06, 0.018, 6, 16, Math.PI), trim); h.rotation.z = sx * -Math.PI / 2; h.position.set(sx * 0.17, 0.12, 0.07); em.add(h); }
+      const g1 = new T.Mesh(new T.SphereGeometry(0.035, 12, 8), gem); g1.position.set(0, 0.13, 0.17); em.add(g1);
+    }
+    em.position.set(0, H + 0.3, -z0 + 0.12); em.scale.setScalar(1.15);
+    em.traverse(m => { if (m.isMesh) m.castShadow = true; });
+    g.add(em);
+  }
   // ケージ本体（床・ガラス・枠・背面・飾り）を作る。ケースの中とショップの見本で共用
   function makeCage(theme, hw, hd, sand) {
     const g = new T.Group(), front = [];
@@ -2216,8 +2264,9 @@
     g.add(floor);
     // ガラスと枠（手前は低くして中が見えるように）
     const glass = phys('#D5E4DD', { transparent: true, opacity: 0.28, roughness: 0.05, clearcoat: 1 });
-    const frame = phys(th.frame, { roughness: th.candy ? 0.35 : 0.4, clearcoat: th.candy ? 0.6 : 0 });
-    const ft = th.thick ? 0.22 : 0.1;
+    const lx = th.luxe;
+    const frame = phys(th.frame, lx ? { roughness: 0.32, metalness: 0.5, clearcoat: 0.8 } : { roughness: th.candy ? 0.35 : 0.4, clearcoat: th.candy ? 0.6 : 0 });
+    const ft = th.luxe ? 0.32 : th.thick ? 0.22 : 0.1, rails = [];
     for (const [x, z, w, d, h] of [[0, -hd - 0.1, hw * 2 + 0.3, 0.1, 2.2], [-hw - 0.1, 0, 0.1, hd * 2 + 0.2, 2.2], [hw + 0.1, 0, 0.1, hd * 2 + 0.2, 2.2], [0, hd + 0.1, hw * 2 + 0.3, 0.1, 0.5]]) {
       const m = new T.Mesh(new T.BoxGeometry(w, h, d), glass);
       m.position.set(x, h / 2, z);
@@ -2225,15 +2274,16 @@
       const f = new T.Mesh(new T.BoxGeometry(w + ft + 0.02, ft, d + ft + 0.02), frame);
       f.position.set(x, h, z);
       f.castShadow = !!th.thick;
-      g.add(f);
+      g.add(f); rails.push([f, Math.max(w, d)]);
       if (th.thick) {
         const base = new T.Mesh(new T.BoxGeometry(w + ft + 0.02, ft * 0.8, d + ft + 0.02), frame);
         base.position.set(x, ft * 0.4, z);
-        g.add(base);
+        g.add(base); rails.push([base, Math.max(w, d)]);
         if (z > 0) front.push(base);
       }
       if (z > 0) front.push(m, f);
     }
+    if (lx) luxeBits(g, front, th, hw, hd, ft);
     if (th.back) {
       const bt = cageTex(th.back);
       bt.wrapS = T.RepeatWrapping; bt.repeat.set(Math.max(1, hw / 6.5), 1);
@@ -2259,7 +2309,17 @@
       const bt = t.clone(); bt.needsUpdate = true;
       const rx = th.backFull ? Math.min(1, A / ia) : n;   // パネルより横長の絵は、左右を切る
       bt.wrapS = T.RepeatWrapping; bt.repeat.set(rx, ry); bt.offset.set(th.backFull ? (1 - rx) / 2 : 0, (1 - ry) / 2);
-      back.material.map = bt; back.material.color.set('#ffffff'); back.material.needsUpdate = true;
+      back.material.map = bt; back.material.color.set(th.backTint || '#ffffff'); back.material.needsUpdate = true;
+    });
+    // 飾り帯の画像：枠の長さに合わせて、横にくり返して貼る
+    if (th.frameImg) imgTex(th.frameImg, t => {
+      const im = t.image || {}, ia = im.width && im.height ? im.width / im.height : 10;
+      for (const [m, L] of rails) {
+        const h = m.geometry.parameters.height, tt = t.clone(); tt.needsUpdate = true;
+        tt.wrapS = T.RepeatWrapping; tt.repeat.set(Math.max(1, Math.round(L / (h * ia))), 1); tt.anisotropy = 4;
+        const mat = m.material.clone(); mat.map = tt; mat.color.set(th.luxe && th.luxe.trimTint || '#ffffff'); mat.metalness = 0.25; mat.needsUpdate = true;
+        m.material = mat;
+      }
     });
     if (th.candy) g.add(candyBits(hw, hd));
     if (th.dino) g.add(dinoBits(hw, hd));
@@ -2274,7 +2334,7 @@
     if (itemCache.has(key)) return itemCache.get(key);
     if (!supported) return '';
     // 画像を使うケースは、画像が読めてから撮る（まだなら null を返して、あとでもう一度）
-    const th = kind === 'theme' && CAGE_THEMES[id], us = th ? [th.backImg, th.floorImg].filter(Boolean) : [];
+    const th = kind === 'theme' && CAGE_THEMES[id], us = th ? [th.backImg, th.floorImg, th.frameImg].filter(Boolean) : [];
     if (us.length && !imgTexReady(us)) { us.forEach(u => imgTex(u, () => {})); return null; }
     if (!ir) {
       const renderer = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
