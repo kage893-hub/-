@@ -27,9 +27,9 @@
   const FOODS = {
     cricketS: { name: 'コオロギS', hunger: 9, growth: 2, price: 4, pack: 10, desc: '小さめのコオロギ。ベビーにちょうどいい大きさ' },
     cricket: { name: 'コオロギM', hunger: 15, growth: 3, price: 5, pack: 10, desc: '定番のごはん。ヤングやおとな向けの大きさ。ぴょんぴょん跳ねる' },
-    dubia: { name: 'デュビア', hunger: 25, growth: 5, price: 8, pack: 5, desc: '栄養たっぷり。動きがゆっくりで食べやすい' },
-    worm: { name: 'ミルワーム', hunger: 18, growth: 8, price: 4, pack: 5, desc: 'みんな大好き。脂肪が多いのでおやつに' },
-    paste: { name: '練り餌', hunger: 14, growth: 3, price: 12, pack: 10, unit: '回分', desc: '粉を水でねった人工フード。栄養のバランスがよく、カルシウム入り。においになれるまで食べないことも' },
+    dubia: { name: 'デュビア', hunger: 25, growth: 5, price: 8, pack: 10, desc: '栄養たっぷり。動きがゆっくりで食べやすい' },
+    worm: { name: 'ミルワーム', hunger: 18, growth: 8, price: 7, pack: 10, desc: 'みんな大好き。脂肪が多いのでおやつに' },
+    paste: { name: '練り餌', hunger: 14, growth: 3, price: 10, pack: 10, unit: '回分', desc: '粉を水でねった人工フード。栄養のバランスがよく、カルシウム入り。においになれるまで食べないことも' },
   };
   // 卵の温度で性別と日数が変わる（温度依存性決定）
   const TEMPS = [
@@ -566,7 +566,8 @@
   const tooBig = (k, g) => stageOf(g) === 'baby' && (k === 'cricket' || k === 'dubia');
   const hasDish = g => decorOf(g).some(d => L3.DECOR[d.t] && L3.DECOR[d.t].drink);
   const hasWet = g => decorOf(g).some(d => /^wet/.test(d.t));
-  const waterDirty = (g, now) => hasDish(g) && now - (g.waterAt || now) > realDays(1);
+  // 水のよごれは実時間で48時間（ゲームの速さに関係なし）
+  const waterDirty = (g, now) => hasDish(g) && now - (g.waterAt || now) > 48 * HOUR;
   // 湿度：ウェットシェルターと水入れ、しっとりケアで上がる
   function humidOf(g, now) {
     now = now || Date.now();
@@ -575,7 +576,7 @@
   // まなんだ飼育のポイント（がんばりきろくに並ぶ）
   const LEARN = {
     shed: { t: '脱皮中はさわらない', d: '脱皮のあいだは皮がやわらかく、体もびんかんです。さわると皮がうまくぬげなくなることも。体が白っぽくなったら、ぬぎおわるまでそっと見守ります。' },
-    meal: { t: '食後すぐはさわらない', d: '食べたものを消化しているあいだにさわると、吐きもどしてしまうことがあります。ごはんのあと1日くらいは、ふれあいはお休みにします。' },
+    meal: { t: '食後すぐはさわらない', d: '食べたものを消化しているあいだにさわると、吐きもどしてしまうことがあります。ごはんのあと30分くらいは、ふれあいはお休みにします。' },
     nap: { t: '昼はねかせてあげる', d: 'レオパは夕方から夜に活発になる生き物です。昼はかくれ家で休んでいることが多いので、起こさないようにします。' },
     newcomer: { t: 'おむかえ直後はそっと', d: '新しいおうちになれるまで、1週間ほどかかります。まずはごはんを食べてくれるのを待ってから、少しずつふれあいます。' },
     appetite: { t: '脱皮前は食欲が落ちる', d: '脱皮の前は食べないことがよくあります。病気ではないので、あわてずに脱皮が終わるのを待ちます。' },
@@ -597,7 +598,7 @@
   }
   const CARE_RULES = {
     shed: { title: '脱皮中は、そっと見守ろう', why: '脱皮中は皮がやわらかく、体もびんかんです。さわると皮がうまくぬげなくなることがあります。ぬぎおわるまで待ってあげよう。', tame: 3 },
-    meal: { title: 'ごはんのあとは、さわらないで', why: '食べたものを消化しているところです。食後すぐにさわると、吐きもどしてしまうことがあります。1日くらいはそっとしておこう。', tame: 2 },
+    meal: { title: 'ごはんのあとは、さわらないで', why: '食べたものを消化しているところです。食後すぐにさわると、吐きもどしてしまうことがあります。30分くらいはそっとしておこう。', tame: 2 },
     nap: { title: 'いまはお昼寝中', why: 'レオパは夕方から夜に活発になる生き物です。昼はかくれ家などで休む時間なので、起こさないであげよう。ふれあうなら夕方から。', tame: 1 },
     newcomer: { title: 'おむかえしたばかり', why: '新しいおうちになれるまで、1週間ほどかかります。まずはごはんを食べてくれるまで、さわらずに見守ろう。', tame: 2 },
   };
@@ -615,7 +616,7 @@
     if (tutStep() >= 0) return then();
     if (g.shedUntil) return careWarn(g, 'shed', then);
     if (now - (g.adopted || 0) < realDays(7) && !g.newOk && !g.starter) return careWarn(g, 'newcomer', then);
-    if (g.fedAt && now - g.fedAt < realDays(1)) return careWarn(g, 'meal', then);
+    if (g.fedAt && now - g.fedAt < realDays(30 / 1440)) return careWarn(g, 'meal', then);
     if (tank && tank._st && tank._st.sleeping && !isNight()) return careWarn(g, 'nap', () => { tank.wake(); then(); });
     then();
   }
@@ -630,7 +631,8 @@
     const cond = { mouth: g.clean < 25 || g.poop >= 3, bone: boneOf(g) < 20, tummy: heatOf(g) <= 29 || (g.wormRun || 0) >= 4 };
     for (const k in cond) g.bad[k] = cond[k] ? (g.bad[k] || 0) + dms : Math.max(0, (g.bad[k] || 0) - dms);
     if (g.sick) return;
-    const k = Object.keys(cond).find(x => g.bad[x] > realDays(1.5));
+    // 実時間3日つづくと体調をくずす。ゲームの速さは√で少しだけ効く（おなかと同じ）
+    const k = Object.keys(cond).find(x => g.bad[x] > 3 * DAYMS / Math.sqrt(speedX()));
     if (!k) return;
     g.sick = { type: k, at: now };
     g.bad[k] = 0;
@@ -1345,7 +1347,7 @@
     },
     buyCalc() {
       if (S.coins < 15) { toast('コインが足りません'); return; }
-      S.coins -= 15; S.calc = (S.calc || 0) + 20; S.dust = true;
+      S.coins -= 15; S.calc = (S.calc || 0) + 50; S.dust = true;
       toast('カルシウムパウダーを買いました');
       renderView(); save();
     },
@@ -1929,7 +1931,7 @@
           <span class="row-side price">${F.price}</span>
         </button>`).join('')}
         <button class="row" data-action="buyCalc" ${S.coins < 15 ? 'disabled' : ''}>
-          <span class="row-main"><b>カルシウムパウダー 20回分</b><small>いま ${S.calc || 0}回分 ・ ごはんにまぶして骨を強く。足りないと骨が弱くなります</small></span>
+          <span class="row-main"><b>カルシウムパウダー 50回分</b><small>いま ${S.calc || 0}回分 ・ ごはんにまぶして骨を強く。足りないと骨が弱くなります</small></span>
           <span class="row-side price">15</span>
         </button></div>`,
       interior: () => `${cageShop()}${interiorShop()}`,
@@ -2066,7 +2068,7 @@
   const DAILY = [
     { key: 'fed', label: 'ごはんをあげる', need: 3 },
     { key: 'cleaned', label: 'おそうじ（フンひろいも）', need: 1 },
-    { key: 'handled', label: 'ふれあう', need: 2 },
+    { key: 'handled', label: 'ふれあう', need: 1 },
   ];
   function dailyState() {
     if (!S.daily || S.daily.day !== todayKey()) {
