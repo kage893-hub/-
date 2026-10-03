@@ -1,0 +1,33 @@
+const { chromium } = require(process.env.PLAYWRIGHT || '/opt/node22/lib/node_modules/playwright');
+const SP = process.argv[2];
+(async () => {
+  const b = await chromium.launch({ executablePath: process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' });
+  const p = await ctx.newPage();
+  const errs = []; p.on('pageerror', e => errs.push(String(e)));
+  const has = s => p.evaluate(s => !!document.querySelector(s), s);
+  await p.goto((process.env.BASE || 'http://localhost:8123') + '/index.html');
+  await p.waitForSelector('[data-action=firstInstallDone]', { state: 'attached' });
+  await p.screenshot({ path: SP + '/first-1.png', fullPage: false });
+  await p.evaluate(() => document.querySelector('[data-action=firstInstallDone]').click());
+  await p.waitForTimeout(300);
+  await p.screenshot({ path: SP + '/first-1b.png' });
+  await p.reload(); await p.waitForTimeout(2500);
+  console.log('reload→①', await has('[data-action=firstInstallDone],[data-action=firstInstallBack]'));
+  await p.evaluate(() => document.querySelector('[data-action=firstInstallSkip]').click());
+  await p.waitForTimeout(300);
+  console.log('②', await has('[data-action=firstModePick]'));
+  await p.screenshot({ path: SP + '/first-2.png' });
+  await p.reload(); await p.waitForTimeout(2500);
+  console.log('reload→②', await has('[data-action=firstModePick]'));
+  await p.evaluate(() => document.querySelector('[data-action=firstModePick][data-v="1"]').click());
+  await p.waitForTimeout(600);
+  console.log('welcome', await has('.welcome'), await p.evaluate(() => document.querySelector('.welcome p:nth-of-type(2)').textContent.slice(0, 40)));
+  await p.screenshot({ path: SP + '/first-3.png' });
+  // standalone
+  const p2 = await (await b.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  await p2.addInitScript(() => { const mm = window.matchMedia.bind(window); window.matchMedia = q => q.includes('standalone') ? { matches: true, addListener() {}, addEventListener() {} } : mm(q); });
+  await p2.goto((process.env.BASE || 'http://localhost:8123') + '/index.html'); await p2.waitForTimeout(2500);
+  console.log('standalone', await p2.evaluate(() => [!!document.querySelector('[data-action=firstInstallDone]'), !!document.querySelector('[data-action=firstModePick]')]));
+  console.log(JSON.stringify(errs)); await b.close();
+})();

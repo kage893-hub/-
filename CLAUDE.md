@@ -19,7 +19,9 @@
 | js/kids.js | ひらがなモード（画面の文字を MutationObserver で変換） |
 | js/music.js / js/photo-save.js | 音楽／写真の保存・共有 |
 | assets/ | gecko.glb、decor-kit.bin、expo/*.webp（ショー）、img/*.webp（部屋の背景・限定ケース・ライセンス証） |
+| tools/ | `bundle.py`（試遊版の1枚 HTML）、`add_decor.py`（家具を足す）、`pack_decor.py`、`tests/`（回帰テスト） |
 | preview/codex/ | Codex が作った確認版のコピー。公開版とは別。**公開版の作業では触らない** |
+| AGENTS.md | Codex 向けの引き継ぎメモ。決まりごとはこのファイルと同じにする |
 
 ## 決まりごと
 - セーブは localStorage の `leopa-together-v1`。新しい項目を足したら `migrate()` で古いデータを直す。保存キーは変えない。
@@ -36,6 +38,7 @@
 - Playwright と Chromium（`/opt/pw-browsers`）。swiftshader なので 3D はとても遅い。
   - 起動の引数：`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`
   - 画面サイズ：390×844
+- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img）。最後の行が `[]` ならエラーなし。
 - テスト用の入り口：`window.__leopaState()`（状態 S）、`window.__leopaTank()`（3D ケース。`_st` が内部状態）
 - 時間を進めるテストは、`Date` を差しかえる（`addInitScript` で偽の Date クラスを入れる）。
 - はじめの流れを進めるヘルパー（start.js）：
@@ -58,26 +61,7 @@ module.exports = async function start(p) {
 ```
 
 ## 試遊版の更新
-アーティファクトでは相対パスのファイルを読めないため、すべてを1枚の HTML にまとめて、`url` を指定して publish する。
-
-```python
-import re, base64, glob, os
-R = './'  # リポジトリのルート
-b64 = lambda f: base64.b64encode(open(R + f, 'rb').read()).decode()
-h = open(R + 'index.html').read()
-h = h.replace('<link rel="stylesheet" href="style.css">', '<style>' + open(R + 'style.css').read() + '</style>')
-h = re.sub(r'<link rel="(manifest|icon|apple-touch-icon)"[^>]*>\n?', '', h)
-h = re.sub(r'<picture>.*?</picture>', '<img src="data:image/webp;base64,%s" alt="レオパといっしょ" width="720" height="178">' % b64('assets/logo.webp'), h, flags=re.S)
-h = h.replace('<script src="js/vendor/three.min.js"></script>',
-              '<script>window.LEOPA_MODEL_B64="%s";window.LEOPA_KIT_B64="%s";</script>\n<script src="js/vendor/three.min.js"></script>' % (b64('assets/gecko.glb'), b64('assets/decor-kit.bin')))
-h = re.sub(r'<script src="([^"]+)"></script>', lambda m: '<script>' + open(R + m.group(1)).read().replace('</script>', '<\\/script>') + '</script>', h)
-for d in ('img', 'expo'):
-    for f in glob.glob(R + 'assets/%s/*.webp' % d):
-        h = h.replace('assets/%s/%s' % (d, os.path.basename(f)), 'data:image/webp;base64,' + b64('assets/%s/%s' % (d, os.path.basename(f))))
-h = h.replace('src="assets/expo/trophy${t.rank}.webp"', 'src="${EXPO_IMG[t.rank]}"').replace('src="assets/expo/trophy${rank}.webp"', 'src="${EXPO_IMG[rank]}"')
-h = h.replace('<script>window.LEOPA_MODEL_B64', '<script>window.EXPO_IMG=[0,' + ','.join('"data:image/webp;base64,%s"' % b64('assets/expo/trophy%d.webp' % i) for i in (1, 2, 3)) + '];</script>\n<script>window.LEOPA_MODEL_B64', 1)
-open('<スクラッチパッド>/leopa-together.html', 'w').write(h)
-```
+アーティファクトでは相対パスのファイルを読めないため、`python3 tools/bundle.py <スクラッチパッド>/leopa-together.html` で1枚の HTML にまとめる。
 
 - 書き出したファイルを、Artifact ツールで `url: https://claude.ai/artifact/35oMS3qN9wTf2JHpJaLzuM` を指定して publish する。
 - 試遊版はページの中で動くので、ホーム画面への追加の案内は出ない。また、写真の「ダウンロード」はうまく動かないことがある（共有・長押しで保存）。

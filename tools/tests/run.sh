@@ -1,0 +1,11 @@
+#!/bin/sh
+# 回帰テスト6本をまとめて流す。先にサーバーを立てておく： npx http-server -p 8123 -s -c-1 .
+# 使い方: sh tools/tests/run.sh [スクリーンショットの出力先]   （出力先の既定は /tmp/leopa-tests）
+# 環境変数: CHROME（Chromium のパス）、PLAYWRIGHT（playwright モジュールのパス）、BASE（既定 http://localhost:8123）
+OUT=${1:-/tmp/leopa-tests}
+mkdir -p "$OUT"
+cd "$(dirname "$0")"
+for t in first kids2 pairfast card expo3 img; do
+  echo "== $t"
+  node "$t.js" "$OUT" 2>&1 | tail -3
+done
