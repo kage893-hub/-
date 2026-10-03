@@ -2078,13 +2078,13 @@
     big: { name: 'ビッグ', hw: 9.5, hd: 6, price: 350, desc: '幅90cmクラス。のびのび歩き回れる' },
   };
   const CAGE_THEMES = {
-    glass: { name: 'ガラスケージ', price: 0, desc: 'シンプルな黒フレームのガラスケージ', floor: 'sand', tint: '#ffffff', frame: '#2F3431' },
-    white: { name: 'ホワイト＆ペーパー', price: 60, desc: '白いフレームにキッチンペーパー敷き。清潔感たっぷり', floor: 'paper', tint: '#ffffff', frame: '#F4F2ED' },
+    glass: { name: 'ガラスケージ', price: 0, desc: 'シンプルな黒フレームのガラスケージ', floor: 'sand', tint: '#ffffff', frame: '#2F3431', floorImg: 'assets/img/cage-glass-floor.webp' },
+    white: { name: 'ホワイト＆ペーパー', price: 60, desc: '白いフレームにキッチンペーパー敷き。清潔感たっぷり', floor: 'paper', tint: '#ffffff', frame: '#F4F2ED', floorImg: 'assets/img/cage-white-floor.webp', floorScale: 4 },
     // 背面・床の画像は Poly Haven（CC0）のテクスチャ
     wood: { name: '木製ビバリウム', price: 120, desc: 'あたたかみのある木のフレームと背面パネル', floor: 'sand', tint: '#F4E6D0', frame: '#8A5C34', back: 'wood', thick: true, backImg: 'assets/img/cage-wood-back.webp', floorImg: 'assets/img/cage-wood-floor.webp' },
     desert: { name: 'デザート', price: 120, desc: '赤い砂と岩の背景で、ふるさとの荒野ふうに', floor: 'sand', tint: '#E7AE7E', frame: '#3A2E26', back: 'rock', backImg: 'assets/img/cage-desert-back.webp', floorImg: 'assets/img/cage-desert-floor.webp' },
-    dino: { name: '恐竜時代', price: 150, desc: '火山の背景とシダの森、足あとの残る大地。太古の世界へタイムスリップ', floor: 'dinofloor', tint: '#ffffff', frame: '#5B4A3A', back: 'volcano', thick: true, dino: true },
-    candy: { name: 'おかしの家', price: 150, desc: 'クッキーの床、チョコの壁、キャンディの柱。あまーいおうち', floor: 'cookie', tint: '#ffffff', frame: '#F7A8C4', back: 'choco', thick: true, candy: true },
+    dino: { name: '恐竜時代', price: 150, desc: '火山の背景とシダの森、足あとの残る大地。太古の世界へタイムスリップ', floor: 'dinofloor', tint: '#ffffff', frame: '#5B4A3A', back: 'volcano', thick: true, dino: true, backFull: true, backImg: 'assets/img/cage-dino-back.webp', floorImg: 'assets/img/cage-dino-floor.webp' },
+    candy: { name: 'おかしの家', price: 150, desc: 'クッキーの床、チョコの壁、キャンディの柱。あまーいおうち', floor: 'cookie', tint: '#ffffff', frame: '#F7A8C4', back: 'choco', thick: true, candy: true, backImg: 'assets/img/cage-candy-back.webp', floorImg: 'assets/img/cage-candy-floor.webp', floorScale: 6 },
     // レプタイルズショーの会場でだけ買える
     expoGold: { name: 'ショー限定・ゴールド', price: 180, desc: 'チャンピオンの気分。金彩の岩壁とアールデコの飾り枠、黄金の砂と水晶のきらめき（レプタイルズショー限定）', floor: 'sand', tint: '#FFF1D2', frame: '#C9A13B', back: 'wood', thick: true, expo: true, backImg: 'assets/img/cage-gold-back.webp', floorImg: 'assets/img/cage-gold-floor.webp' },
     expoNight: { name: 'ショー限定・ミッドナイト', price: 180, desc: '星降る紫晶の洞窟と、星くずの黒い砂。夜空のような紺色のフレーム（レプタイルズショー限定）', floor: 'sand', tint: '#C8D2F0', frame: '#1F2C4C', back: 'rock', thick: true, expo: true, backImg: 'assets/img/cage-night-back.webp', floorImg: 'assets/img/cage-night-floor.webp' },
@@ -2246,16 +2246,19 @@
     // 画像のある限定ケース：読めたら床と背面を画像に差しかえる
     if (th.floorImg) imgTex(th.floorImg, t0 => {
       const t = t0.clone(); t.needsUpdate = true;
-      t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(hw / 1.7, hd / 1.7); t.anisotropy = 4;
+      t.wrapS = t.wrapT = T.RepeatWrapping; const fs = th.floorScale || 1.7; t.repeat.set(hw / fs, hd / fs); t.anisotropy = 4;
       floor.material.map = t; floor.material.bumpMap = t; floor.material.bumpScale = 0.02; floor.material.color.set('#ffffff'); floor.material.needsUpdate = true;
     });
     if (th.backImg) imgTex(th.backImg, t => {
       const back = g.children.find(m => m.userData.back);
       if (!back) return;
       // 横長のパネルに、絵をゆがめずに並べる（上下は少し切りとる）
-      const A = (hw * 2 + 0.2) / 2.2, n = Math.max(1, Math.round(A / 2.6)), ry = Math.min(1, 2 / (A / n));
+      const A = (hw * 2 + 0.2) / 2.2, im = t.image || {}, ia = im.width && im.height ? im.width / im.height : 2;
+      // backFull：1枚の横長の絵として貼る（くり返さない）
+      const n = th.backFull ? 1 : Math.max(1, Math.round(A / 2.6)), ry = Math.min(1, (th.backFull ? ia : 2) / (A / n));
       const bt = t.clone(); bt.needsUpdate = true;
-      bt.wrapS = T.RepeatWrapping; bt.repeat.set(n, ry); bt.offset.set(0, (1 - ry) / 2);
+      const rx = th.backFull ? Math.min(1, A / ia) : n;   // パネルより横長の絵は、左右を切る
+      bt.wrapS = T.RepeatWrapping; bt.repeat.set(rx, ry); bt.offset.set(th.backFull ? (1 - rx) / 2 : 0, (1 - ry) / 2);
       back.material.map = bt; back.material.color.set('#ffffff'); back.material.needsUpdate = true;
     });
     if (th.candy) g.add(candyBits(hw, hd));
