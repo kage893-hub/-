@@ -764,3 +764,7 @@ body.sheet-open { overflow: hidden; }
   #view-case > .tank { grid-row: 2 / 4; }
 }
 
+
+/* お世話ボタンの塗りのアイコン（Phosphor duotone） */
+.act.care svg.ic-fill, .ic.ic-fill { fill: currentColor; stroke: none; }
+.act.care svg.ic-fill { width: 24px; height: 24px; }

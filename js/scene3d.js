@@ -2080,8 +2080,9 @@
   const CAGE_THEMES = {
     glass: { name: 'ガラスケージ', price: 0, desc: 'シンプルな黒フレームのガラスケージ', floor: 'sand', tint: '#ffffff', frame: '#2F3431' },
     white: { name: 'ホワイト＆ペーパー', price: 60, desc: '白いフレームにキッチンペーパー敷き。清潔感たっぷり', floor: 'paper', tint: '#ffffff', frame: '#F4F2ED' },
-    wood: { name: '木製ビバリウム', price: 120, desc: 'あたたかみのある木のフレームと背面パネル', floor: 'sand', tint: '#F4E6D0', frame: '#7A4E2C', back: 'wood', thick: true },
-    desert: { name: 'デザート', price: 120, desc: '赤い砂と岩の背景で、ふるさとの荒野ふうに', floor: 'sand', tint: '#E7AE7E', frame: '#3A2E26', back: 'rock' },
+    // 背面・床の画像は Poly Haven（CC0）のテクスチャ
+    wood: { name: '木製ビバリウム', price: 120, desc: 'あたたかみのある木のフレームと背面パネル', floor: 'sand', tint: '#F4E6D0', frame: '#8A5C34', back: 'wood', thick: true, backImg: 'assets/img/cage-wood-back.webp', floorImg: 'assets/img/cage-wood-floor.webp' },
+    desert: { name: 'デザート', price: 120, desc: '赤い砂と岩の背景で、ふるさとの荒野ふうに', floor: 'sand', tint: '#E7AE7E', frame: '#3A2E26', back: 'rock', backImg: 'assets/img/cage-desert-back.webp', floorImg: 'assets/img/cage-desert-floor.webp' },
     dino: { name: '恐竜時代', price: 150, desc: '火山の背景とシダの森、足あとの残る大地。太古の世界へタイムスリップ', floor: 'dinofloor', tint: '#ffffff', frame: '#5B4A3A', back: 'volcano', thick: true, dino: true },
     candy: { name: 'おかしの家', price: 150, desc: 'クッキーの床、チョコの壁、キャンディの柱。あまーいおうち', floor: 'cookie', tint: '#ffffff', frame: '#F7A8C4', back: 'choco', thick: true, candy: true },
     // レプタイルズショーの会場でだけ買える
