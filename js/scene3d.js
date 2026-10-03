@@ -1728,6 +1728,11 @@
       for (let i = 0; i < 120; i++) { ctx.strokeStyle = `rgba(${r() < 0.6 ? '110,90,70' : '235,225,210'},${0.15 + r() * 0.3})`; ctx.lineWidth = 1 + r() * 3; const x = r() * 256; ctx.beginPath(); ctx.moveTo(x, 0); for (let y = 0; y <= 512; y += 32) ctx.lineTo(x + Math.sin(y / 50 + i) * 4, y); ctx.stroke(); }
       map = new T.CanvasTexture(c); map.encoding = T.sRGBEncoding; map.wrapS = map.wrapT = T.RepeatWrapping;
     }
+    if (m.glass) {
+      const mat = phys('#E8F0F4', { transparent: true, opacity: 0.18, roughness: 0.05, clearcoat: 1, depthWrite: false });
+      mat.userData.shared = true;
+      return (KIT.mats[name] = mat);
+    }
     if (m.color) {
       const mat = new T.MeshStandardMaterial({ roughness: 0.75, metalness: 0 });
       mat.color.setRGB(m.color[0], m.color[1], m.color[2]);
@@ -2068,6 +2073,81 @@
       build: () => stoneBasin('dish3'),
     },
   };
+  // Poly Haven（CC0）の家具を、別の色にぬりなおす（金の像など）
+  function kitTint(name, fit, opt, mat, fallback) {
+    const g = kitOr(name, fit, opt, fallback);
+    if (kitHas(name)) g.traverse(m => { if (m.isMesh) m.material = mat; });
+    return g;
+  }
+  function kitMetal(g, metal, rough) {
+    g.traverse(m => { if (m.isMesh && m.material.isMeshStandardMaterial) { m.material.metalness = metal; m.material.roughness = rough; m.material.needsUpdate = true; } });
+    return g;
+  }
+  let luxGold = null;
+  const goldMat = () => luxGold || (luxGold = Object.assign(phys('#C9971E', { metalness: 0.85, roughness: 0.28, clearcoat: 1 }), { userData: { shared: true } }));
+  // ショー限定（夜）：コードで作る天体・宝石の飾り
+  function amethystCluster() {
+    const g = new T.Group();
+    const rock = new T.Mesh(new T.DodecahedronGeometry(0.9, 0), phys('#3E3846', { roughness: 0.9 }));
+    rock.scale.set(1.3, 0.42, 1); rock.position.y = 0.12; g.add(rock);
+    const mat = phys('#6A1FC8', { roughness: 0.08, clearcoat: 1, emissive: '#4A0FA8', emissiveIntensity: 0.6, transparent: true, opacity: 0.92 });
+    for (const [x, h, rad, rz, rx] of [[0, 1.6, 0.32, 0, 0], [0.45, 1.2, 0.26, 0.35, 0.2], [-0.5, 1.1, 0.25, -0.4, -0.1], [0.2, 0.9, 0.22, 0.2, -0.5], [-0.2, 0.8, 0.2, -0.25, 0.5], [0.7, 0.7, 0.18, 0.6, -0.3]]) {
+      const c = new T.Group();
+      const body = new T.Mesh(new T.CylinderGeometry(rad, rad, h, 6), mat); body.position.y = h / 2;
+      const tip = new T.Mesh(new T.ConeGeometry(rad, rad * 1.6, 6), mat); tip.position.y = h + rad * 0.8;
+      c.add(body, tip); c.position.set(x, 0.2, rx * 0.6); c.rotation.set(rx, 0, -rz); g.add(c);
+    }
+    g.traverse(m => { if (m.isMesh) m.castShadow = true; });
+    return g;
+  }
+  function moonGlobe() {
+    const g = new T.Group();
+    const silver = phys('#C9CED8', { metalness: 0.9, roughness: 0.25 });
+    const moon = new T.Mesh(new T.SphereGeometry(0.9, 40, 28), phys('#ffffff', { roughness: 0.9, emissive: '#C8D4FF', emissiveIntensity: 0.12 }));
+    moon.position.y = 1.35; g.add(moon);
+    imgTex('assets/img/moon.webp', t => { moon.material.map = t; moon.material.needsUpdate = true; });
+    const ring = new T.Mesh(new T.TorusGeometry(1.0, 0.035, 8, 48, Math.PI * 1.3), silver);
+    ring.position.y = 1.35; ring.rotation.z = Math.PI * 0.35; g.add(ring);
+    const st = new T.Mesh(new T.CylinderGeometry(0.08, 0.35, 0.4, 24), silver); st.position.y = 0.2; g.add(st);
+    g.traverse(m => { if (m.isMesh) m.castShadow = true; });
+    return g;
+  }
+  function ringedPlanet() {
+    const g = new T.Group();
+    const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+    const x = c.getContext('2d'), bands = ['#E0A65A', '#B8692E', '#F0CC8E', '#A5582A', '#DDA25C', '#C98544'], r = prng(7);
+    for (let i = 0; i < 16; i++) { x.fillStyle = bands[i % 6]; x.fillRect(0, i * 8, 256, 8 + r() * 4); }
+    const t = new T.CanvasTexture(c); t.encoding = T.sRGBEncoding;
+    const p = new T.Mesh(new T.SphereGeometry(0.75, 40, 28), phys('#ffffff', { map: t, roughness: 0.5 }));
+    p.position.y = 1.3; g.add(p);
+    const ring = new T.Mesh(new T.RingGeometry(0.95, 1.45, 64), phys('#D9BE8C', { side: T.DoubleSide, transparent: true, opacity: 0.88, roughness: 0.4 }));
+    ring.position.y = 1.3; ring.rotation.x = -Math.PI / 2 + 0.45; g.add(ring);
+    const st = new T.Mesh(new T.CylinderGeometry(0.06, 0.3, 0.55, 24), phys('#2A2F45', { metalness: 0.6, roughness: 0.3 })); st.position.y = 0.27; g.add(st);
+    g.traverse(m => { if (m.isMesh) m.castShadow = true; });
+    return g;
+  }
+  // 新しい家具（Poly Haven・CC0）
+  Object.assign(DECOR, {
+    phTrunk: { name: '流木（ながい）', price: 30, r: 1.4, climb: true, desc: '長く横たわる流木。上をのんびり歩けます', build: () => kitOr('PH_Trunk', 5.2, null, () => OLD_DECOR.log.build()) },
+    phStump: { name: '切り株', price: 25, r: 1.4, climb: true, desc: '低い切り株。上に乗ってひと休み', build: () => kitOr('PH_Stump', 2.9, null, () => OLD_DECOR.log.build()) },
+    phBranch: { name: '流木（Y字）', price: 20, r: 0.7, desc: '白っぽいY字の流木。ケースのアクセントに', build: () => kitOr('PH_Branch', 1.5, null, () => OLD_DECOR.log.build()) },
+    phRock: { name: '砂岩', price: 25, r: 1.0, climb: true, desc: '砂にうもれた、ごつごつの砂岩', build: () => kitOr('PH_SandRock', 2.0, null, () => OLD_DECOR.rock.build()) },
+    phShrub: { name: '黄色い花の低木', price: 15, r: 0.9, soft: true, desc: '乾いた土地に咲く、黄色い花の低木', build: () => kitOr('PH_Didelta', 2.0, null, () => OLD_DECOR.plant.build()) },
+    phFern: { name: 'シダ（大）', price: 15, r: 0.9, soft: true, desc: '大きく葉を広げるシダ', build: () => kitOr('PH_Fern', 2.2, null, () => OLD_DECOR.plant.build()) },
+    phShell: { name: '巻き貝', price: 15, r: 0.7, desc: 'トゲのある大きな巻き貝（飾りです）', build: () => kitOr('PH_Shell', 1.6, null, () => OLD_DECOR.stone.build()) },
+    phGnome: { name: '小人の置物', price: 20, r: 0.55, desc: 'ランタンを持った庭の小人', build: () => kitOr('PH_Gnome', 1.0, null, () => OLD_DECOR.stone.build()) },
+    phCat: { name: 'ねこの置物', price: 20, r: 0.6, desc: '石でできた、すわったねこ', build: () => kitOr('PH_Cat', 1.1, null, () => OLD_DECOR.stone.build()) },
+    phDuck: { name: 'アヒル', price: 15, r: 0.65, desc: 'おふろでおなじみの黄色いアヒル', build: () => kitOr('PH_Duck', 1.3, null, () => OLD_DECOR.stone.build()) },
+    // ショー限定（金）
+    phChest: { name: '宝箱', price: 150, r: 1.2, climb: true, expo: 'gold', desc: '金具のついた古い宝箱。上に乗れます（レプタイルズショー限定）', build: () => kitOr('PH_Chest', 2.6, null, () => OLD_DECOR.stone.build()) },
+    phVase: { name: '真ちゅうの花びん', price: 120, r: 0.45, expo: 'gold', desc: '細かい彫りもようの真ちゅうの花びん（レプタイルズショー限定）', build: () => kitMetal(kitOr('PH_Vase', 0.75, null, () => OLD_DECOR.stone.build()), 0.75, 0.32) },
+    phHorse: { name: '金の馬の像', price: 150, r: 0.6, expo: 'gold', desc: '前足を上げた金色の馬（レプタイルズショー限定）', build: () => kitTint('PH_Horse', 1.2, null, goldMat(), () => OLD_DECOR.stone.build()) },
+    // ショー限定（夜）
+    phClock: { name: '置き時計', price: 120, r: 0.95, expo: 'night', desc: '木のアンティーク置き時計（レプタイルズショー限定）', build: () => kitOr('PH_Clock', 1.8, null, () => OLD_DECOR.stone.build()) },
+    amethyst: { name: '光る紫の結晶', price: 150, r: 0.9, expo: 'night', desc: 'ほのかに光るアメジストの結晶（レプタイルズショー限定）', build: () => amethystCluster() },
+    moonGlobe: { name: '月の地球儀', price: 150, r: 0.8, expo: 'night', imgs: ['assets/img/moon.webp'], desc: '本物の月の写真でできた地球儀（レプタイルズショー限定）', build: () => moonGlobe() },
+    planet: { name: '輪のある惑星', price: 150, r: 0.9, expo: 'night', desc: '土星のような輪のある惑星の置物（レプタイルズショー限定）', build: () => ringedPlanet() },
+  });
   const DEFAULT_DECOR = [{ t: 'wet', x: -4.4, z: -2.6, rot: 0 }, { t: 'dish', x: -5.0, z: 3.2, rot: 0 }, { t: 'plant', x: 1.8, z: -3.8, rot: 0 }];
   // ケースの広さ（床の半分の幅・奥行き）
   const TANK = { hw: 6.5, hd: 4.5 };
@@ -2334,7 +2414,7 @@
     if (itemCache.has(key)) return itemCache.get(key);
     if (!supported) return '';
     // 画像を使うケースは、画像が読めてから撮る（まだなら null を返して、あとでもう一度）
-    const th = kind === 'theme' && CAGE_THEMES[id], us = th ? [th.backImg, th.floorImg, th.frameImg].filter(Boolean) : [];
+    const th = kind === 'theme' && CAGE_THEMES[id], us = th ? [th.backImg, th.floorImg, th.frameImg].filter(Boolean) : kind === 'decor' && DECOR[id] && DECOR[id].imgs || [];
     if (us.length && !imgTexReady(us)) { us.forEach(u => imgTex(u, () => {})); return null; }
     if (!ir) {
       const renderer = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });

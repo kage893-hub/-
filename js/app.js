@@ -1023,6 +1023,8 @@
           <li>手のモデル："Hand Topology (CC0)" by <a href="https://sketchfab.com/nanoglyph" target="_blank" rel="noopener">Nanoglyph</a>（<a href="https://sketchfab.com/3d-models/hand-topology-cc0-acdc0137ee6246ffbdebb88b69c6fff7" target="_blank" rel="noopener">Sketchfab</a>）／ <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>。軽くするために形を簡単にしています</li>
           <li>家具・植物：Quaternius「Stylized Nature MegaKit」（CC0）</li>
           <li>恐竜フィギュア：Quaternius「Animated Dinosaur Pack」（CC0）</li>
+          <li>流木・岩・植物・置物など：Poly Haven（CC0）</li>
+          <li>月の地球儀の月の画像：NASA Scientific Visualization Studio（パブリックドメイン）</li>
           <li>おかしの飾り：Kenney「Food Kit」（CC0）</li>
           <li>レオパ・ウェットシェルター・水入れ・ピンセット：Meshy AI で作成</li>
           <li>3D表示：three.js（MIT License）</li>
@@ -2433,7 +2435,7 @@
   const decorPriceNow = id => (view === 'expo' && S.expo && S.expo.decor.includes(id) ? expoDecorPrice(id) : L3.DECOR[id].price);
   function interiorShop() {
     return `<h3 class="h3">家具 <small class="muted">買った家具は「もようがえ」で置けます</small></h3>
-      <div class="item-grid">${Object.entries(L3.DECOR).map(([t, d]) => itemCard('decor', t, d, String(d.price))).join('')}</div>`;
+      <div class="item-grid">${Object.entries(L3.DECOR).filter(([, d]) => !d.expo).map(([t, d]) => itemCard('decor', t, d, String(d.price))).join('')}</div>`;
   }
   Object.assign(ACTIONS, {
     editStart() { if (selected()) setEditing({ sel: null, place: null }); },
@@ -3404,7 +3406,7 @@
         return o;
       });
       // 用品：家具10種類がいつもの半額
-      const ids = Object.keys(L3.DECOR).sort((a, b) => strHash(info.key + a) - strHash(info.key + b)).slice(0, 10);
+      const ids = Object.keys(L3.DECOR).filter(t => !L3.DECOR[t].expo).sort((a, b) => strHash(info.key + a) - strHash(info.key + b)).slice(0, 10);
       // ほかのお客さんがおむかえしていく順番
       const order = [0, 1, 2, 3, 4, 5].sort((a, b) => strHash(info.key + 'o' + a) - strHash(info.key + 'o' + b));
       S.expo = { day: info.key, ticket: false, stock, order, others: 0, decor: ids, theme: EXPO_THEMES[strHash(info.key) % EXPO_THEMES.length], booth: [], sold: [], champ: false, seminar: false, noticed: false, done: false };
@@ -3622,6 +3624,8 @@
       body = `<h3 class="h3">ショー限定のケース</h3>
         <div class="item-grid">${itemCard('theme', E.theme, th, has ? '持っている' : String(th.price))}</div>
         <p class="muted small">ショーの会場でしか買えない見た目です。買ったあとは「もようがえ」からいつでも使えます。</p>
+        <h3 class="h3">ショー限定の家具</h3>
+        <div class="item-grid">${Object.entries(L3.DECOR).filter(([, d]) => d.expo === (E.theme === 'expoNight' ? 'night' : 'gold')).map(([t, d]) => itemCard('decor', t, d, String(d.price))).join('')}</div>
         <h3 class="h3">ごはんのまとめ買い <small class="muted">${Math.round((1 - BULK_OFF) * 100)}%おトク</small></h3>
         <div class="list">${Object.entries(FOODS).map(([k, F]) => {
           const price = Math.round(F.price * BULK * BULK_OFF);
