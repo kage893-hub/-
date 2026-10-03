@@ -23,20 +23,33 @@
 
   function colors(genes, tang, stage, poly) {
     const s = genes.snow || 0, a = genes.alb === 2, e = genes.ecl === 2, b = genes.bliz === 2;
-    let base = mix('#E9C64C', '#EE7A2A', Math.max(0, tang - 15) / 85);
+    // 黄色み（タンジェリン度）：ノーマルのくすんだ黄 → ハイイエローのあざやかな黄 → タンジェリンの濃いオレンジ
+    let base = tang <= 55 ? mix('#DDAE40', '#EDC22C', Math.max(0, tang - 15) / 40) : mix('#EDC22C', '#EE7C08', Math.min(1, (tang - 55) / 20));
     if (stage === 'baby' && !s && !b) base = mix(base, '#F2D34E', 0.3);
-    let tail = mix(base, '#EDE3D6', 0.5);
+    let tail = mix(base, '#E9E6E0', 0.72);
     let spot = '#2A2521';
     let eye = '#77705F', pupil = '#16130F', solid = false;
 
-    if (a) { spot = '#A0704A'; base = mix(base, '#F5E6BE', 0.25); tail = mix(tail, '#F5E6BE', 0.25); }
-    // ベルアルビノ：トレンパーより明るく、ピンクがかった色
+    // トレンパーアルビノ：黄色〜オレンジの地に、ピンクがかった茶色の模様。しっぽはピンクがかる
+    if (a) { spot = '#9A6450'; base = mix(base, '#F5E6BE', 0.1); tail = mix(tail, '#EBCBC6', 0.45); }
+    // ベルアルビノ（本物の写真にあわせて）：黄色〜オレンジの地に、こげ茶のはっきりした模様。しっぽはピンクがかる
     const bl = genes.bell === 2 && !a;
-    if (bl) { spot = '#B98068'; base = mix(base, '#F7DCCB', 0.35); tail = mix(tail, '#F4DDD6', 0.35); }
-    if (s === 1) { base = mix(base, '#F3F0E6', 0.62); tail = mix(tail, '#F2F0EC', 0.6); }
-    if (s === 2) { base = '#F2F1EC'; tail = '#EDEDE9'; }
-    if (b) { base = s ? mix(base, '#F4F2EC', 0.5) : mix(base, '#EFE7CF', 0.55); tail = mix(base, '#F2EEE6', 0.3); }
-    if (b && a && e) { base = '#F6F4EE'; tail = '#F4F2EC'; }
+    if (bl) { spot = '#6A3626'; base = mix(base, '#F7DCCB', 0.08); tail = mix(tail, '#F0D2CC', 0.45); }
+    // マックスノー：黄色がうすく、白〜ラベンダーがかる（おとなは少し黄色が戻る）
+    if (s === 1) { base = mix(base, '#F0ECEE', 0.5); tail = mix(tail, '#ECE8EE', 0.6); }
+    // スーパーマックスノー：ピンク〜ラベンダーがかった灰色の地に、細かい黒い点がびっしり
+    if (s === 2) { base = '#B6A3A4'; tail = '#BBA9AB'; spot = '#251A1A'; }
+    // スノー＋アルビノ：黄色がぬけて、ピンク〜ラベンダーがかった白。模様はうすいピンクがかった茶
+    if (a && s === 1) { base = mix(base, '#EFD8D6', 0.6); tail = mix(tail, '#EED5D5', 0.6); spot = '#B98A7E'; }
+    if (a && s === 2) { base = '#F1DFE0'; tail = '#F0DDDF'; spot = '#D8B4B0'; }
+    // ブリザード：模様がなく、灰色がかったラベンダー〜白。背中にほんのり黄色が残る子もいる
+    if (b) { base = s ? mix(base, '#ECE8EA', 0.75) : mix(mix(base, '#9C909E', 0.92), '#D8CC9C', 0.05); tail = mix(base, '#E4DEE2', 0.4); }
+    // ブレイジングブリザード：ピンクがかった白に、背中へうっすら黄色
+    if (b && a) { base = s ? '#F3E6E8' : mix('#E4C6CE', '#EED9A6', 0.22); tail = mix(base, '#EFDDE0', 0.5); }
+    // ディアブロブランコ：ほぼ真っ白（ほんのりピンク）、目は赤い
+    if (b && a && e) { base = '#F4ECEC'; tail = '#F2E8EA'; }
+    // レッドアイアルビノ（ラプターより色がうすい子）：黄色にラベンダーがかる
+    if (a && e && !b && !s && tang < 70) { base = mix(base, '#E3D2DC', 0.4); tail = mix(tail, '#E6D3DA', 0.4); }
     // ギャラクシー：ピンク・ラベンダーがかった白い地に、細かい黒い点がびっしり
     const galaxy = !!(root.LeopaGenetics && root.LeopaGenetics.isGalaxy(genes, poly));
     if (galaxy && stage !== 'baby') { base = stage === 'young' ? '#CFB2C0' : '#D6B6C4'; tail = '#D2B3C1'; spot = '#221B21'; }
@@ -45,10 +58,10 @@
     const mel = poly && poly.mel != null ? poly.mel : 0;
     if (mel > 30 && !a) {
       const k = Math.min(1, (mel - 30) / 55), m = k * k * (3 - 2 * k) * 0.97;
-      base = mix(base, '#141210', m); tail = mix(tail, '#1C1917', m * 0.95); spot = mix(spot, '#050404', m);
+      base = mix(base, '#100E0D', m); eye = mix(eye, '#2A2622', m); tail = mix(tail, '#121010', m); spot = mix(spot, '#050404', m);
     }
     if (e) { solid = true; eye = a || bl ? (bl ? '#A3283A' : '#8E2231') : '#151515'; }
-    else if (s === 2) { solid = true; eye = '#161616'; }
+    else if (s === 2) { solid = true; eye = a ? '#B97A86' : '#161616'; }
     else if (a) { eye = '#E2C1BC'; pupil = '#B4535A'; }
     else if (bl) { eye = '#E5B3B3'; pupil = '#C0505E'; }
     else if (b) { eye = '#4A4540'; }
@@ -90,9 +103,9 @@
     }
     const spotOp = stage === 'baby' ? 0 : stage === 'young' ? 0.75 : 1;
     if (spotOp > 0) {
-      const n = c.galaxy ? 210 : genes.snow === 2 ? 72 : 54;
+      const n = c.galaxy ? 210 : genes.snow === 2 ? 170 : 90;
       for (let i = 0; i < n; i++) {
-        const x = 28 + r() * 44, y = 14 + r() * 178, rr = c.galaxy ? 0.8 + r() * 0.6 : 1.2 + r() * 2.3;
+        const x = 28 + r() * 44, y = 14 + r() * 178, rr = c.galaxy || genes.snow === 2 ? 0.8 + r() * 0.7 : 1.1 + r() * 1.9;
         out += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${rr.toFixed(1)}" fill="${c.spot}" opacity="${spotOp}"/>`;
       }
     }

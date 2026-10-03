@@ -298,7 +298,7 @@
     const scale = W / 1024;
     const melK = Math.min(1, Math.max(0, ((look.poly && look.poly.mel) || 0) - 30) / 60);
     const belly = A.mix(pal.base, '#FFF9EF', 0.74 * (1 - melK * 0.7));
-    const lavCol = '#A898B8';
+    const lavCol = '#9C86B8';
     // 3D モデルでは、モデルの実際のまわりの長さで丸の横幅を決める（丸が丸く見えるように）
     const circ = look.model && MODEL.perimAt ? MODEL.perimAt : circumference;
 
@@ -330,16 +330,18 @@
     // ギャラクシー（本物の写真にあわせて）：ピンク・ラベンダーがかった地に、小さな黒い点がびっしり。手足と鼻先は白っぽいピンクに抜ける
     const galaxy = !!pal.galaxy && st !== 'baby';
     // ---- 地の色（背中は少し濃く、横は明るく、おなかは白）
-    ctx.fillStyle = around([belly, pal.base, A.mix(pal.base, galaxy ? '#6E5A68' : '#7A4A08', 0.1)]);
+    const ssnow = look.genes && look.genes.snow === 2 && !galaxy;
+    ctx.fillStyle = around([belly, pal.base, A.mix(pal.base, galaxy || ssnow ? '#6E5A68' : '#7A4A08', ssnow ? 0.22 : 0.1)]);
     ctx.fillRect(0, 0, W, H);
-    const tailCol = galaxy ? pal.tail : A.mix(st === 'baby' ? A.mix(pal.tail, '#FFFFFF', 0.35) : A.mix(pal.base, '#8A8790', 0.4), lavCol, poly.lav / 100 * 0.45);
-    vertFade(-0.8, -1.25, around([A.mix(tailCol, '#FFFFFF', 0.6), tailCol, A.mix(tailCol, '#6E6070', 0.08)]));
+    const tailCol = galaxy ? pal.tail : A.mix(st === 'baby' ? A.mix(pal.tail, '#FFFFFF', 0.35) : pal.tail, lavCol, poly.lav / 100 * 0.45);
+    const tailC = A.mix(tailCol, '#100E0D', melK);
+    vertFade(-0.8, -1.25, around([A.mix(tailC, '#FFFFFF', 0.6 * (1 - melK * 0.7)), tailC, A.mix(tailC, '#6E6070', 0.08)]));
     // キャロットテール：しっぽの付け根からオレンジ
     if (poly.carrot > 8) {
       const len = 0.25 + poly.carrot / 100 * 1.7;
       const a = Math.min(1, poly.carrot / 45);
       const cg = ctx.createLinearGradient(0, Y(Z_TAILBASE + 0.1), 0, Y(Z_TAILBASE - len));
-      const orange = A.mix('#F07A1E', pal.base, 0.15);
+      const orange = A.mix('#EC5512', pal.base, 0.12);
       cg.addColorStop(0, rgba(orange, 0));
       cg.addColorStop(0.12, rgba(orange, 0.95 * a));
       cg.addColorStop(0.7, rgba(orange, 0.75 * a));
@@ -381,6 +383,7 @@
         ctx.fill();
       }
     };
+    const superSnow = look.genes && look.genes.snow === 2 && !galaxy;
     const jungle = poly.aberrant >= 60 && !galaxy, stripe = poly.aberrant >= 82 && !galaxy;
     if (pal.pattern) {
       const bandA = st === 'baby' ? 0.95 : st === 'young' && !galaxy ? 0.42 : 0;
@@ -401,8 +404,10 @@
       }
       // おとなに残る、ラベンダーがかった帯
       if (st !== 'baby' && !galaxy) {
-        const la = 0.12 + poly.lav / 100 * 0.45;
-        for (const [z0, z1] of bandZ) band(z0 + 0.03, z1 - 0.03, A.mix(pal.base, lavCol, 0.75), la * (z1 > Z_TAILBASE ? 1 : 0.8), jungle);
+        // ラベンダーが強いほど、帯がはっきり紫に残る。黒い子（ブラックナイト）では見えない
+        const la = (0.12 + Math.pow(poly.lav / 100, 1.5) * 0.75) * (1 - melK);
+        const albB = look.genes && (look.genes.alb === 2 || look.genes.bell === 2);
+        for (const [z0, z1] of bandZ) band(z0 + 0.03 - poly.lav / 1500, z1 - 0.03 + poly.lav / 1500, A.mix(pal.base, albB ? '#C8928E' : lavCol, albB ? 0.6 : 0.85), (albB ? Math.max(la, 0.4) : la) * (z1 > Z_TAILBASE ? 1 : 0.8), jungle || poly.lav > 60);
       }
     } else if (poly.lav > 30) {
       ctx.globalAlpha = poly.lav / 100 * 0.35;
@@ -415,7 +420,8 @@
     // 背中は大きめ・わき腹は小さくまばら・頭は細かい点。ジャングル／ストライプだけはつながる。
     const spotA = !pal.pattern ? 0 : st === 'baby' ? 0 : st === 'young' ? 0.72 : 1;
     if (spotA > 0) {
-      const sizeMul = 0.6 + poly.blotch / 100 * 0.9;
+      const albSpot = look.genes && (look.genes.alb === 2 || look.genes.bell === 2);
+      const sizeMul = (0.6 + poly.blotch / 100 * 0.9) * (albSpot ? 1.3 : 1);
       const alpha = spotA * (pal.spot === '#A0704A' ? 0.85 : 0.96);
       const placed = [];
       const fits = (u, z, rw, gap) => {
@@ -463,32 +469,72 @@
         }
       };
       if (jungle || stripe) {
-        // ジャングル・ストライプ：斑点が不規則につながる
-        const bodyN = poly.spots < 8 ? 0 : Math.round(220 * Math.pow(poly.spots / 60, 1.3) * scale);
-        for (let i = 0; i < bodyN; i++) {
-          const z = 1.25 - r() * (1.25 - Z_TAILBASE + 1.6);
-          let u = 0.5 + (r() + r() - 1) * 0.36;
-          if (stripe) u = (r() < 0.5 ? 0.42 : 0.58) + (r() - 0.5) * 0.05;
-          blob(u, z, (0.03 + r() * 0.04) * sizeMul, pal.spot, alpha, (r() - 0.5) * 0.6, stripe ? 1.4 : 2.2 + r() * 1.6);
+        // ジャングル・ストライプ（本物の写真にあわせて）：模様は真っ黒ではなく、こげ茶〜紫がかった色。
+        // ジャングルは帯がくずれて不規則にうねり、ストライプは背中の両わきに太いすじが通って、まん中が明るく抜ける。
+        const jc = A.mix(pal.spot, '#6B4A5C', 0.38), ja = alpha * 0.92;
+        const wav = (u0, z0, z1, w, col, a, wob) => {
+          // 縦方向（鼻→尾）に流れる、ふちのゆらいだすじ
+          const pts = [], step = 0.04;
+          let du = 0, dw = 0;
+          for (let z = z0; z > z1; z -= step) { du += (r() - 0.5) * wob; du *= 0.9; dw += (r() - 0.5) * 0.25; dw *= 0.85; pts.push([z, u0 + du, w * (1 + dw)]); }
+          ctx.globalAlpha = a; ctx.fillStyle = col; ctx.beginPath();
+          pts.forEach(([z, u, ww], i) => { const C = Math.max(0.35, circ(z)); const x = X(u - ww / C); i ? ctx.lineTo(x, Y(z)) : ctx.moveTo(x, Y(z)); });
+          for (let i = pts.length - 1; i >= 0; i--) { const [z, u, ww] = pts[i]; const C = Math.max(0.35, circ(z)); ctx.lineTo(X(u + ww / C), Y(z)); }
+          ctx.closePath(); ctx.fill();
+        };
+        if (stripe) {
+          // まん中の明るいすじ
+          wav(0.5, 1.15, -2.9, 0.07, A.mix(pal.base, '#FFF6DC', 0.45), 0.7, 0.004);
+          // 両わきの太いすじ（尾ではとぎれとぎれ）
+          for (const sd of [-1, 1]) {
+            wav(0.5 + sd * 0.075, 1.2, Z_TAILBASE - 0.1, 0.085 * sizeMul, jc, ja, 0.012);
+            for (let z = Z_TAILBASE - 0.2; z > -3.0; z -= 0.35 + r() * 0.2) wav(0.5 + sd * 0.07, z, z - 0.18 - r() * 0.15, 0.06, jc, ja, 0.01);
+          }
+          // 頭のうしろは帯がつながる
+          band(1.32, 1.15, jc, ja * 0.8, true);
+        } else {
+          // ジャングル：くずれた帯が不規則につながり、ところどころで縦にうねる
+          for (const [z0, z1] of bandZ) {
+            const segs = 2 + Math.floor(r() * 3);
+            for (let k = 0; k < segs; k++) {
+              const u = 0.5 + (r() - 0.5) * 0.7, zc = (z0 + z1) / 2 + (r() - 0.5) * 0.25;
+              blob(u, zc, (0.07 + r() * 0.08) * sizeMul, jc, ja, (r() - 0.5) * 0.9, 1.6 + r() * 2.2);
+            }
+            if (r() < 0.6) wav(0.5 + (r() - 0.5) * 0.4, z0 + 0.1, z1 - 0.25 - r() * 0.3, 0.05 + r() * 0.04, jc, ja, 0.03);
+          }
+          const nB = poly.spots < 8 ? 0 : Math.round(40 * Math.pow(poly.spots / 60, 1.2));
+          for (let i = 0; i < nB; i++) blob(0.5 + (r() + r() - 1) * 0.36, 1.2 - r() * (1.2 - Z_TAILBASE), (0.025 + r() * 0.03) * sizeMul, jc, ja, (r() - 0.5) * 0.8, 1 + r() * 1.5);
         }
-      } else if (galaxy) {
+      } else if (galaxy || superSnow) {
         // ギャラクシー：小さな丸い点が、背中からわき腹・しっぽの先まで、すきまなく並ぶ（ゴマ模様）
-        scatter(950, 1.24, Z_TAILBASE, 0.44, () => 0.03, 1.12, false);
-        scatter(650, Z_TAILBASE - 0.05, -3.1, 0.46, z => 0.03 * clamp(circ(z) / 2.4, 0.45, 1.1), 1.12, false);
+        const ds = superSnow ? 0.048 : 0.03, gp = superSnow ? 1.04 : 1.12;
+        scatter(950, 1.24, Z_TAILBASE, 0.44, () => ds, gp, false);
+        scatter(650, Z_TAILBASE - 0.05, -3.1, 0.46, z => ds * clamp(circ(z) / 2.4, 0.45, 1.1), gp, false);
       } else {
         // 胴：背中を中心に
-        const bodyN = poly.spots < 8 ? 0 : Math.round(165 * Math.pow(poly.spots / 60, 1.25));
-        scatter(bodyN, 1.22, Z_TAILBASE, 0.36, () => 0.05 * sizeMul, 1.35, true);
+        // タンジェリンの血統は、胴の斑点が少なく小さくなる（頭としっぽには残る）
+        const tangK = clamp(((look.tang || 0) - 55) / 35, 0, 1);
+        const bodyN = poly.spots < 8 ? 0 : Math.round(300 * Math.pow(poly.spots / 60, 2.2) * (1 - 0.6 * tangK));
+        scatter(bodyN, 1.22, Z_TAILBASE, 0.4, () => 0.046 * sizeMul * (1 - 0.3 * tangK), 1.22, true);
         // しっぽ：太さに合わせて小さくなる。ハイポでも少し残る
-        const tailN = Math.round(70 * (0.3 + 0.7 * poly.spots / 100));
-        scatter(tailN, Z_TAILBASE - 0.05, Z_TAILBASE - 2.3, 0.4, z => 0.036 * sizeMul * clamp(circ(z) / 2.4, 0.45, 1.1), 1.6, true);
+        const tailN = Math.round(240 * (0.12 + 0.88 * poly.spots / 100));
+        scatter(tailN, Z_TAILBASE - 0.05, Z_TAILBASE - 2.35, 0.46, z => 0.09 * sizeMul * clamp(circ(z) / 2.2, 0.55, 1.1), 1.15, true);
       }
       // 頭：細かい点（少ないとボールディ）。ギャラクシーは鼻先をあけて、細かい点をびっしり
       if (galaxy) scatter(240, 1.95, 1.3, 0.35, z => 0.014 + (1.95 - z) * 0.011, 1.2, false);
+      else if (superSnow) scatter(320, 2.1, 1.3, 0.38, z => 0.018 + (2.1 - z) * 0.012, 1.1, false);
       else {
-        const headN = poly.head < 10 ? 0 : Math.round(70 * Math.pow(poly.head / 60, 1.2));
-        scatter(headN, 2.1, 1.3, 0.3, z => (0.014 + (2.1 - z) * 0.012) * (0.75 + poly.blotch / 220), 1.7, false);
+        // 胴の斑点が少ない子（ハイポ）は、頭の点も少なめ
+        const headN = poly.head < 10 ? 0 : Math.round(160 * Math.pow(poly.head / 60, 1.2) * (0.5 + 0.5 * Math.min(1, poly.spots / 40)));
+        scatter(headN, 2.1, 1.3, 0.36, z => (0.016 + (2.1 - z) * 0.014) * (0.75 + poly.blotch / 220), 1.35, false);
       }
+    }
+    // エクリプスの鼻先は白っぽく抜ける
+    if (look.genes && look.genes.ecl === 2 && !galaxy && st !== 'baby' && pal.pattern) {
+      const ng = ctx.createLinearGradient(0, Y(2.3), 0, Y(1.98));
+      ng.addColorStop(0, rgba('#F3E0DA', 1)); ng.addColorStop(0.5, rgba('#F3E0DA', 0.75)); ng.addColorStop(1, rgba('#F3E0DA', 0));
+      ctx.globalAlpha = 1; ctx.fillStyle = ng;
+      ctx.fillRect(0, 0, W, Y(1.98));
     }
     // ギャラクシーの鼻先は、ピンクがかった白に抜ける
     if (galaxy) {
@@ -1214,7 +1260,7 @@
 
   // 形の曲げ方（描画側 GLSL と、眼球などの位置合わせ用 JS で同じ式を使う）
   const DEFORM_GLSL = `
-    uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop, uTailFat, uTailLift, uBend, uJaw, uWag, uWhiteFeet;
+    uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop, uTailFat, uTailLift, uBend, uJaw, uWag, uWhiteFeet, uFeetFrom;
     // 実物のレオパにあわせたしっぽ：長さは頭からお尻までの約0.8倍、いちばん太いところは首くらいの太さ
     #define TAIL_V -1.55
     #define TAIL_STRETCH 1.6
@@ -1301,7 +1347,7 @@
       Object.assign(sh.uniforms, U);
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\n' + DEFORM_GLSL)
-        .replace('#include <begin_vertex>', 'vLeoZ = position.z;\n// 手足（付け根から先）だけを白くする目印（ギャラクシー）\nvLeoFeet = uWhiteFeet * step(0.5, aLeg) * smoothstep(0.06, 0.24, length(position.xz - aPivot.xz));\nvec3 transformed = leoDeform(vec3(position));');
+        .replace('#include <begin_vertex>', 'vLeoZ = position.z;\n// 手足（付け根から先）だけを白くする目印（ギャラクシー）\nvLeoFeet = uWhiteFeet * step(0.5, aLeg) * smoothstep(uFeetFrom, uFeetFrom + 0.18, length(position.xz - aPivot.xz));\nvec3 transformed = leoDeform(vec3(position));');
       // 脱皮：まだ脱いでいない古い皮を白っぽく。頭から少しずつ脱いでいく（境目は皮がめくれて明るく）
       if (sh.fragmentShader.includes('#include <dithering_fragment>')) {
         sh.fragmentShader = sh.fragmentShader
@@ -1331,6 +1377,7 @@
     const hi = quality !== 'photo';
     const W = hi ? 1024 : 768, H = hi ? 1536 : 1152;
     // 描いた模様は覚えておき、同じ子に切りかえたときは描き直さない
+    const melK = Math.min(1, Math.max(0, ((look.poly && look.poly.mel) || 0) - 30) / 60);
     const colorTex = cachedTex(skinCache, 'skin|' + W + '|' + lookKey(look), () => canvasTexture(skinCanvas(pal, Object.assign({}, look, { model: true }), W, H), { srgb: true }), 8);
     colorTex.wrapS = T.RepeatWrapping;
     const bump = bumpTexture(W, H);
@@ -1339,17 +1386,22 @@
     rough.wrapS = T.RepeatWrapping;
     const shed = false;
     const U = {};
-    for (const k of ['uT', 'uPhase', 'uWalk', 'uLook', 'uPitch', 'uTilt', 'uCurl', 'uStalk', 'uHappy', 'uBreathe', 'uDrop', 'uTailFat', 'uTailLift', 'uBend', 'uJaw', 'uWag', 'uShedOn', 'uShedEdge', 'uWhiteFeet']) U[k] = { value: 0 };
+    for (const k of ['uT', 'uPhase', 'uWalk', 'uLook', 'uPitch', 'uTilt', 'uCurl', 'uStalk', 'uHappy', 'uBreathe', 'uDrop', 'uTailFat', 'uTailLift', 'uBend', 'uJaw', 'uWag', 'uShedOn', 'uShedEdge', 'uWhiteFeet', 'uFeetFrom']) U[k] = { value: 0 };
     // 脱皮中は古い皮で全体が白っぽい（ケースの中では少しずつ脱いでいく）
     U.uShedOn.value = look.shed ? 1 : 0; U.uShedEdge.value = 9;
-    U.uWhiteFeet.value = pal.galaxy && look.stage !== 'baby' ? 1 : 0;
+    // ギャラクシーは手足ぜんぶ、エクリプスは指先だけ白く抜ける
+    const eclFeet = look.genes && look.genes.ecl === 2 && !pal.galaxy && look.stage !== 'baby' && pal.pattern;
+    U.uWhiteFeet.value = pal.galaxy && look.stage !== 'baby' ? 1 : eclFeet ? 0.85 : 0;
+    U.uFeetFrom.value = pal.galaxy ? 0.06 : look.genes.snow === 2 ? 0.14 : 0.3;
     U.uTailFat.value = look.fat || 0;
     const skinMat = deformMaterial(phys('#ffffff', {
       map: colorTex, bumpMap: bump, bumpScale: 0.006, roughnessMap: rough, roughness: shed ? 0.95 : 0.6,
       clearcoat: shed ? 0 : 0.12, clearcoatRoughness: 0.6,
       emissive: new T.Color('#ffffff'), emissiveMap: shed ? null : colorTex, emissiveIntensity: shed ? 0.22 : 0.07,
-      sheen: new T.Color('#3a2a18'),
+      sheen: new T.Color('#3a2a18'), envMapIntensity: 0.3,
     }), U);
+    skinMat.color.setScalar(0.78);
+    if (melK > 0) skinMat.sheen = new T.Color('#3a2a18').multiplyScalar(1 - melK);
     const mesh = new T.Mesh(MODEL.geo, skinMat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
