@@ -122,6 +122,14 @@
     s.learned = s.learned || {};
     // 最初にお店からおむかえした2匹（アルバムに「ヤモリ堂」の記録がある子）にしるしをつける
     if (!s.starterFlag) { s.starterFlag = true; for (const g of s.geckos) if (((s.albums || {})[g.id] || { entries: [] }).entries.some(e => (e.text || '').includes('「ヤモリ堂」からおむかえした'))) g.starter = true; }
+    // 過去の受取済み実績とチャンピオン優勝を記念品に引き継ぐ
+    s.achievementMedals = s.achievementMedals || {};
+    for (const id of ['dall', 'gen5', 'streak7']) if ((s.ach || {})[id]) s.achievementMedals[id] = true;
+    if (G.DEX.every(d => (s.dex || {})[d.id])) s.achievementMedals.dall = true;
+    if ((s.geckos || []).some(g => g.gen >= 5)) s.achievementMedals.gen5 = true;
+    if (s.daily && s.daily.streak >= 7) s.achievementMedals.streak7 = true;
+    s.showRec = s.showRec || {};
+    s.showRec.champ = Math.max(s.showRec.champ || 0, (s.trophies || []).filter(t => t.rank === 1).length);
     return s;
   }
   // 保存は操作が落ちついてからまとめて1回（アプリを閉じるときはすぐ保存）
@@ -1028,6 +1036,7 @@
           <li>おかしの飾り：Kenney「Food Kit」（CC0）</li>
           <li>レオパ・ウェットシェルター・水入れ・ピンセット：Meshy AI で作成</li>
           <li>岩ウェットシェルター：ユーザー作成・生成の提供モデル。スマホ向けに形を軽量化し、3色に調整</li>
+          <li>品評会の1位トロフィー3種類・追加の記念品3種類：ユーザーの依頼によりOpenAIの画像生成で作成</li>
           <li>3D表示：three.js（MIT License）</li>
         </ul>
         <button class="act" data-action="closeSheet">とじる</button>`);
@@ -1272,6 +1281,7 @@
         openSheet(`<div class="show-result">
           <p class="eyebrow">${lv.name} ・ ${th.name}</p>
           <h3 class="morph big">${rank === 1 ? '優勝！' : `${rank}位`}</h3>
+          ${!champ && rank === 1 ? `<img class="champ-prize" src="${SHOW_TROPHY_IMAGES[lv.id]}" alt="${lv.mark}の1位トロフィー">` : ''}
           ${champ && rank <= 3 ? `<img class="champ-prize" src="assets/expo/trophy${rank}.webp" alt="${rank === 1 ? 'トロフィー' : 'リボン'}">` : ''}
           <div class="reveal-art">${portrait(g, stageOf(g), nameOf(g))}</div>
           <ol class="show-rank">${all.map((x, i) => `<li class="${x.me ? 'me' : ''}"><span>${i + 1}位</span><b>${esc(x.name)}</b><small>${x.total}点</small></li>`).join('')}</ol>
@@ -1563,6 +1573,9 @@
     const badge = $('#eggBadge');
     badge.hidden = !ready;
     badge.textContent = ready;
+    const achCount = claimableAch().length, dexBadge = $('#dexBadge');
+    dexBadge.hidden = !achCount; dexBadge.textContent = achCount;
+    dexBadge.setAttribute('aria-label', `報酬を受け取れる実績 ${achCount}件`);
     if (view === 'case') renderCase();
     else if (view === 'expo') renderExpo();
     else if (view === 'eggs') renderEggs();
@@ -1574,6 +1587,7 @@
   const openTraits = {};
   document.addEventListener('toggle', e => {
     const d = e.target;
+    if (d.id === 'achievementFold' && d.isConnected) achievementsOpen = d.open;
     if (d.classList && d.classList.contains('traits')) openTraits[d.id.slice(7)] = d.open;
   }, true);
   function traitRows(x) {
@@ -1740,7 +1754,8 @@
       ${S.eggs.some(e => now >= e.hatchAt) && S.geckos.length >= S.cases ? '<p class="notice">ケースがいっぱいです。ショップでケースを増やすか、里親に出してからふ化させよう。</p>' : ''}`);
   }
 
-  let dexHTML = '';
+  let dexHTML = '', achievementsOpen = false;
+  const SHOW_TROPHY_IMAGES = { local: 'assets/expo/show-local.webp', region: 'assets/expo/show-region.webp', nation: 'assets/expo/show-nation.webp' };
 
   // ======================================================
   // 品評会：その日の部門で審査。1匹につき1日1回まで
@@ -1798,7 +1813,7 @@
     return `<p class="muted small">毎日、大会ごとに審査される部門がかわります。育てた子の「らしさ」と、ふだんのお世話（おなか・きれい・なれ度・体の大きさ）で審査されます。同じ子が出られるのは1日1回まで。</p>
       ${cards}
       <h3 class="h3">これまでの成績</h3>
-      <div class="show-rec">${SHOW_LEVELS.map(lv => `<div><small>${lv.name}</small><b>${(rec[lv.id] || 0)}</b><small>回優勝</small></div>`).join('')}</div>
+      <div class="show-rec">${[...SHOW_LEVELS, { id: 'champ', name: 'チャンピオン大会' }].map(lv => `<div><small>${lv.name}</small><b>${(rec[lv.id] || 0)}</b><small>回優勝</small></div>`).join('')}</div>
       ${hist.length ? `<div class="list">${hist.map(h => `<div class="row static"><span class="row-main"><b>${esc(h.name)} ・ ${h.rank}位</b><small>${esc(h.lv)} ${esc(h.theme)} ・ ${h.score}点 ・ ${esc(h.date)}</small></span><span class="row-side">${h.rank === 1 ? '<span class="pill good">優勝</span>' : h.coins ? '+' + h.coins : ''}</span></div>`).join('')}</div>` : '<p class="muted small">まだ出場していません。</p>'}
       <div class="card guide"><h3 class="h3">品評会のコツ</h3>
         <p>部門ごとに見られる特徴がちがいます。オレンジ部門ならタンジェリン度としっぽのオレンジが高い子、すっきり部門なら斑点の少ない子が有利です。</p>
@@ -1878,9 +1893,9 @@
       return `<button type="button" class="dex-card${got ? '' : ' locked'}" data-action="dexDetail" data-id="${esc(d.id)}" data-found="${got}" aria-label="${esc(d.name)}・${got ? '登録済み' : '未登録'}の詳細"><span class="dex-art">${art}</span><b>${esc(d.name)}</b><span class="dex-state">${got ? '✓ 登録済み' : '未登録 · 作り方を見る'}</span></button>`;
     }).join('');
     const dtab = S.dexTab || 'dex';
-    const dtabs = `<div class="shop-tabs three" role="tablist">${[['dex', '図鑑'], ['show', '品評会'], ['rec', '実績']].map(([k, n]) => `<button role="tab" aria-selected="${dtab === k}" class="${dtab === k ? 'on' : ''}" data-action="dexTab" data-tab="${k}">${n}</button>`).join('')}</div>`;
+    const dtabs = `<div class="shop-tabs three" role="tablist">${[['dex', '図鑑'], ['show', '品評会'], ['rec', '実績']].map(([k, n]) => `<button role="tab" aria-selected="${dtab === k}" class="${dtab === k ? 'on' : ''}" data-action="dexTab" data-tab="${k}">${n}${k === 'rec' ? achBadge() : ''}</button>`).join('')}</div>`;
     if (dtab === 'rec') {
-      const html = `<h2 class="h2">実績・アルバム</h2>${dtabs}${albumList()}${achSection()}`;
+      const html = `<h2 class="h2">実績・アルバム</h2>${dtabs}${albumList()}<details class="achievement-fold" id="achievementFold" ${achievementsOpen ? 'open' : ''}><summary>実績 ${achBadge()}<small class="muted"><span class="fold-closed">押して見る</span><span class="fold-open">押して閉じる</span></small></summary>${achSection()}</details>${achievementSection()}${learnSection()}`;
       if (html !== dexHTML) { setHTML($('#view-dex'), html); dexHTML = html; }
       return;
     }
@@ -2202,22 +2217,39 @@
     { id: 'streak7', label: '7日連続で今日のおせわ', reward: 200, test: () => (S.daily && S.daily.streak >= 7) },
   ];
   const dexCount = () => G.DEX.filter(d => S.dex[d.id]).length;
-  function claimableAch() { S.ach = S.ach || {}; return ACH.filter(a => !S.ach[a.id] && a.test()); }
+  function claimableAch() { S.ach = S.ach || {}; return ACH.filter(a => !S.ach[a.id] && achReady(a)); }
   function checkAch() {
+    S.achievementMedals = S.achievementMedals || {};
+    for (const id of ['dall', 'gen5', 'streak7']) if ((S.ach || {})[id] || ACH.find(a => a.id === id).test()) S.achievementMedals[id] = true;
     S.achSeen = S.achSeen || {};
     for (const a of claimableAch()) if (!S.achSeen[a.id]) { S.achSeen[a.id] = true; toast(`実績「${a.label}」達成！図鑑で受け取れます`); }
+  }
+  function achReady(a) { return !!(S.achievementMedals || {})[a.id] || a.test(); }
+  function achBadge() { const n = claimableAch().length; return n ? `<span class="record-badge" aria-label="報酬を受け取れる実績 ${n}件">${n}</span>` : ''; }
+  function achievementSection() {
+    const rec = S.showRec || {};
+    const awards = SHOW_LEVELS.map(lv => ({ label: `${lv.mark}の1位トロフィー`, img: SHOW_TROPHY_IMAGES[lv.id], ok: !!rec[lv.id], note: `${lv.name}で優勝` }));
+    awards.push({ label: 'チャンピオンの1位トロフィー', img: 'assets/expo/trophy1.webp', ok: !!rec.champ, note: 'チャンピオン大会で優勝' });
+    const medals = [['dall', '図鑑コンプリート', '全モルフを図鑑に登録', 'assets/expo/achievement-dex.webp'], ['gen5', '第5世代の繁殖', '第5世代の子が生まれる', 'assets/expo/achievement-generation.webp'], ['streak7', '7日連続のお世話', '今日のおせわを7日連続で達成', 'assets/expo/achievement-care.webp']];
+    for (const [id, label, note, img] of medals) awards.push({ label, note, img, ok: !!(S.achievementMedals || {})[id] || !!(S.ach || {})[id] || ACH.find(a => a.id === id).test() });
+    const count = awards.filter(a => a.ok).length + (S.license ? 1 : 0);
+    return `<h3 class="h3">アチーブメント <small class="muted">${count} / ${awards.length + 1}</small></h3><p class="muted small">がんばった記念品のコレクション。達成すると色がつきます。</p><div class="achievement-grid">
+      <button class="achievement-card license-award ${S.license ? 'earned' : 'locked'}" data-action="${S.license ? 'licenseView' : 'licenseStart'}">${S.license ? licenseCard() : '<img src="assets/img/license.webp" alt="レオパ販売ライセンス証">'}<b>レオパ販売ライセンス</b><small>${S.license ? '✓ 獲得済み · 証を見る' : 'クイズに合格して獲得'}</small></button>
+      ${awards.map(a => `<div class="achievement-card ${a.ok ? 'earned' : 'locked'}"><img src="${a.img}" alt="${a.label}"><b>${a.label}</b><small>${a.ok ? '✓ 獲得済み' : a.note}</small></div>`).join('')}</div>`;
   }
   function achSection() {
     S.ach = S.ach || {};
     const got = ACH.filter(a => S.ach[a.id]).length;
     return `<h3 class="h3">実績 <small class="muted">${got} / ${ACH.length}</small></h3>
       <div class="ach-list">${ACH.map(a => {
-        const done = !!S.ach[a.id], ok = !done && a.test();
-        return `<div class="ach${done ? ' done' : ''}"><span>${esc(a.label)}</span>${done ? '<small class="muted">受け取りずみ</small>'
-          : `<button class="act ${ok ? 'primary' : ''} sm" data-action="claimAch" data-id="${a.id}" ${ok ? '' : 'disabled'}>${a.reward}</button>`}</div>`;
+        const done = !!S.ach[a.id], ok = !done && achReady(a);
+        return `<div class="ach${done ? ' done' : ''}"><span>${esc(a.label)}</span>${done ? '<small class="muted">✓ 受け取りずみ</small>'
+          : `<button class="act ${ok ? 'primary' : ''} sm" data-action="claimAch" data-id="${a.id}" ${ok ? '' : 'disabled'}>${ok ? '受け取る · ' : ''}${a.reward}</button>`}</div>`;
       }).join('')}</div>
-      ${(S.trophies || []).length ? `<h3 class="h3">レプタイルズショーのトロフィー</h3><div class="trophies">${S.trophies.slice().reverse().map(t => `<div class="trophy r${t.rank}"><img src="assets/expo/trophy${t.rank}.webp" alt=""><b>${t.rank}位</b><small>${esc(t.name)} ・ ${esc(t.date)}</small></div>`).join('')}</div>` : ''}
-      <h3 class="h3">おぼえた飼育のポイント <small class="muted">${Object.keys(LEARN).filter(k => (S.learned || {})[k]).length} / ${Object.keys(LEARN).length}</small></h3>
+      <p class="muted small">達成した実績の報酬を受け取れます。記念品は下のアチーブメントで見られます。</p>`;
+  }
+  function learnSection() {
+    return `      <h3 class="h3">おぼえた飼育のポイント <small class="muted">${Object.keys(LEARN).filter(k => (S.learned || {})[k]).length} / ${Object.keys(LEARN).length}</small></h3>
       <div class="learn-list">${Object.entries(LEARN).filter(([k]) => (S.learned || {})[k]).map(([k, L]) => `<div class="learn on"><b>✓ ${L.t}</b><p>${L.d}</p></div>`).join('')}
         ${Object.keys(LEARN).some(k => !(S.learned || {})[k]) ? `<div class="learn"><b>？？？ あと ${Object.keys(LEARN).filter(k => !(S.learned || {})[k]).length}こ</b><p>毎日のお世話の中で、少しずつおぼえていきます</p></div>` : ''}</div>
       <p class="muted small">お世話をしていると、本物のレオパの飼い方で大切なことをおぼえていきます。</p>`;
@@ -2273,7 +2305,7 @@
     claimAch(t) {
       const a = ACH.find(x => x.id === t.dataset.id);
       S.ach = S.ach || {};
-      if (!a || S.ach[a.id] || !a.test()) return;
+      if (!a || S.ach[a.id] || !achReady(a)) return;
       S.ach[a.id] = true;
       S.coins += a.reward;
       sfx('coin');
@@ -3638,7 +3670,7 @@
           <p class="muted small">全国のトップブリーダーが集まる、週に1回だけの大会。エントリーは1週間に1匹まで。優勝 ${CHAMP.reward}コインとトロフィー、2位・3位はリボンがもらえます。</p>
           ${E.champ ? '<p class="notice">今週はもうエントリーしました。また来週！</p>' : '<button class="act primary sm" data-action="showMenu" data-lv="champ">エントリーする</button>'}
         </div>
-        ${(S.trophies || []).length ? `<h3 class="h3">トロフィーとリボン</h3><div class="trophies">${S.trophies.slice().reverse().map(t => `<div class="trophy r${t.rank}"><img src="assets/expo/trophy${t.rank}.webp" alt=""><b>${t.rank}位</b><small>${esc(t.name)} ・ ${esc(t.date)}</small></div>`).join('')}</div>` : ''}`;
+        ${(S.trophies || []).length ? `<h3 class="h3">アチーブメント</h3><div class="trophies">${S.trophies.slice().reverse().map(t => `<div class="trophy r${t.rank}"><img src="assets/expo/trophy${t.rank}.webp" alt=""><b>${t.rank}位</b><small>${esc(t.name)} ・ ${esc(t.date)}</small></div>`).join('')}</div>` : ''}`;
     } else if (tab === 'goods') {
       const th = L3.CAGE_THEMES[E.theme], has = cageOwn()[E.theme];
       body = `<h3 class="h3">ショー限定のケース</h3>

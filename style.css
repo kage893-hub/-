@@ -510,7 +510,7 @@ button { font: inherit; color: inherit; }
 .show-head .row-side { margin-left: auto; }
 .show-theme { font-size: 14px; margin: 2px 0; }
 .show-card .act { justify-self: start; margin-top: 4px; }
-.show-rec { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+.show-rec { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 10px; }
 .show-rec > div { display: grid; text-align: center; padding: 10px 4px; border-radius: 14px; background: var(--surface-2); }
 .show-rec b { font-size: 22px; } .show-rec small { font-size: 11px; color: var(--muted); }
 .row.static { cursor: default; }
@@ -777,3 +777,29 @@ body.sheet-open { overflow: hidden; }
 
 .interior-switch { position: static; }
 .interior-switch button { min-height: 44px; }
+
+/* 実績の分類と記念品 */
+.record-badge { display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; margin-left:5px; padding:0 4px; border-radius:20px; background:#c94838; color:#fff; font-size:11px; }
+.achievement-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.achievement-card { display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; padding:12px 8px; border:1px solid var(--line); border-radius:18px; background:var(--surface-2); color:var(--ink); font:inherit; }
+.achievement-card img { width:100%; height:150px; object-fit:contain; }
+.achievement-card b { font-size:13px; line-height:1.5; }
+.achievement-card small { color:var(--muted); font-size:11px; }
+.achievement-card.locked img { filter:grayscale(1); opacity:.45; }
+.achievement-card.earned { border-color:#b6c996; }
+.license-award { grid-column:1 / -1; cursor:pointer; }
+.license-award img { height:auto; max-height:210px; }
+.ach > span { flex:1; min-width:0; }
+.ach button { flex-shrink:0; }
+
+.license-award .license-card { width:100%; margin:0; }
+.license-award .license-card img { max-height:none; }
+.license-award .license-card .lic-title { font-size:5.2cqw; }
+
+.achievement-fold { margin:20px 0; padding:0 12px 12px; border:1px solid var(--line); border-radius:16px; background:var(--surface); }
+.achievement-fold > summary { min-height:48px; padding:12px 0; cursor:pointer; font-weight:700; }
+.achievement-fold > summary small { float:right; font-size:12px; font-weight:400; }
+.achievement-fold:not([open]) { padding-bottom:0; }
+
+.achievement-fold .fold-open, .achievement-fold[open] .fold-closed { display:none; }
+.achievement-fold[open] .fold-open { display:inline; }
