@@ -1,6 +1,6 @@
 /* オフラインでも遊べるように、アプリ本体をキャッシュする。
  * ファイルを変えたら VERSION を上げること。 */
-const VERSION = 'leopa-v98';
+const VERSION = 'leopa-v100';
 const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
   'js/vendor/three.min.js', 'js/genetics.js', 'js/art.js', 'js/scene3d.js', 'js/music.js', 'js/kids.js', 'js/photo-save.js', 'js/app.js',
@@ -9,7 +9,7 @@ const FILES = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES.map(url => new Request(url, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()

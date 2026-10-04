@@ -1024,6 +1024,13 @@
       save();
       if (c.fn) c.fn();
     },
+    usageTerms() {
+      openSheet(`<h3 class="sheet-title">利用条件</h3>
+        <h4 class="h3">独自のコード・素材について</h4><p class="small">「レオパといっしょ」独自のコード・画像・3Dモデルなどの素材ファイルを、制作者の許可なく転載・再配布・別作品へ流用することを禁止します。公開ページやリポジトリで閲覧できることは、再利用の許可を意味しません。</p>
+        <h4 class="h3">ゲームを遊ぶための保存について</h4><p class="small">ゲームを遊ぶために必要なファイルの読み込み・端末への保存や、セーブデータの控えの作成は、この禁止の対象ではありません。</p>
+        <h4 class="h3">外部素材・法令で認められる利用について</h4><p class="small">外部のコード・素材には、それぞれのライセンスが適用されます。CC0・MIT・CC BY 4.0などで認められる利用を、この利用条件で制限するものではありません。法令で認められる利用も、この禁止の対象ではありません。外部素材の提供元とライセンスは「素材のクレジット」で確認できます。</p>
+        <div class="actions"><button class="act" data-action="credits">素材のクレジット</button><button class="act primary" data-action="closeSheet">とじる</button></div>`);
+    },
     credits() {
       openSheet(`<h3 class="sheet-title">素材のクレジット</h3>
         <ul class="credits">
@@ -1969,7 +1976,7 @@
         </button>
       </div>
       <h3 class="h3">せってい</h3>
-      <div class="danger-zone">${isStandalone() || inFrame ? '' : '<button class="act ghost sm" data-action="installMenu">ホーム画面に追加</button>'}<button class="act ghost sm" data-action="giftMenu">ギフトコード</button><button class="act ghost sm" data-action="credits">素材のクレジット</button><button class="act ghost sm" data-action="notifyMenu">おしらせ通知</button><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`,
+      <div class="danger-zone">${isStandalone() || inFrame ? '' : '<button class="act ghost sm" data-action="installMenu">ホーム画面に追加</button>'}<button class="act ghost sm" data-action="giftMenu">ギフトコード</button><button class="act ghost sm" data-action="usageTerms">利用条件</button><button class="act ghost sm" data-action="credits">素材のクレジット</button><button class="act ghost sm" data-action="notifyMenu">おしらせ通知</button><button class="act ghost sm" data-action="backup">セーブデータの控え</button><button class="act ghost sm" data-action="resetMenu">はじめからあそぶ</button></div>`,
     };
     setHTML($('#view-shop'), `<h2 class="h2">ショップ</h2>${tabs}${(sec[tab] || sec.leopa)()}`);
     if (tab === 'interior') fillThumbs();
@@ -3220,7 +3227,40 @@
       lay: () => tone(420, 0.25, 'sine', 0.12, 0, 640),
     })[kind]?.();
   }
+  let updatingGame = false;
   Object.assign(ACTIONS, {
+    async updateGame(t) {
+      if (updatingGame) return;
+      if (navigator.onLine === false) { toast('ネットにつないでから更新してください。今のゲームはそのまま遊べます'); return; }
+      saveNow();
+      if (saveLocked || saveFailShown) return;
+      updatingGame = true;
+      t.disabled = true; t.textContent = '更新を確認しています…';
+      try {
+        const registration = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+        if (registration) {
+          await registration.update();
+          const worker = registration.installing || registration.waiting;
+          if (worker && worker.state !== 'activated') await new Promise((resolve, reject) => {
+            const done = error => { clearTimeout(timer); worker.removeEventListener('statechange', changed); error ? reject(error) : resolve(); };
+            const changed = () => { if (worker.state === 'activated') done(); else if (worker.state === 'redundant') done(new Error('更新失敗')); };
+            const timer = setTimeout(() => done(new Error('更新待ち時間超過')), 30000);
+            worker.addEventListener('statechange', changed); changed();
+          });
+        } else {
+          const response = await fetch(location.href, { cache: 'reload' });
+          if (!response.ok) throw new Error('読み込み失敗');
+        }
+        saveNow();
+        if (saveLocked || saveFailShown) return;
+        location.reload();
+      } catch (e) {
+        toast('更新できませんでした。ネット接続を確認して、もう一度お試しください。今のゲームはそのまま遊べます');
+      } finally {
+        updatingGame = false;
+        for (const button of document.querySelectorAll('[data-action=updateGame]')) { button.disabled = false; button.textContent = 'ゲームを更新する'; }
+      }
+    },
     settings() {
       const k = !!S.kids;
       openSheet(`<h3 class="sheet-title">${ic('gear')}設定</h3>
@@ -3233,6 +3273,11 @@
         <p class="set-label">販売ライセンス</p>
         <p class="small">${S.license ? '取得ずみ。里親・ブリーダー依頼・ショーのブースが使えます。' : 'まだ持っていません。里親・ブリーダー依頼・ショーのブースに必要です。'}飼い方クイズ ${LQ_N}問中${LQ_PASS}問以上で合格。何度でも挑戦できます。</p>
         ${S.license ? '<button class="act" data-action="licenseView">ライセンス証を見る</button>' : ''}<button class="act" data-action="licenseStart">${S.license ? 'クイズで腕だめし' : 'ライセンスのクイズに挑戦'}</button>
+        <p class="set-label">ゲームの更新</p>
+        <p class="small">ネットにつないで、最新版を読み込みます。育てた子・コイン・アルバムなどのセーブデータは残ります。</p>
+        <button class="act" data-action="updateGame" ${updatingGame ? 'disabled' : ''}>${updatingGame ? '更新を確認しています…' : 'ゲームを更新する'}</button>
+        <p class="set-label">ゲームについて</p>
+        <div class="actions"><button class="act" data-action="usageTerms">利用条件</button><button class="act" data-action="credits">素材のクレジット</button></div>
         <button class="act ghost" data-action="closeSheet">とじる</button>`);
     },
     setKids(t) {
