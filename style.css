@@ -768,3 +768,12 @@ body.sheet-open { overflow: hidden; }
 /* お世話ボタンの塗りのアイコン（Phosphor duotone） */
 .act.care svg.ic-fill, .ic.ic-fill { fill: currentColor; stroke: none; }
 .act.care svg.ic-fill { width: 24px; height: 24px; }
+
+/* 家具は用途で選ぶ。スマホでも横スクロールなしで押せる。 */
+.decor-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0 0 12px; }
+.decor-tabs button { min-height: 44px; padding: 8px 5px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--muted); font: inherit; font-size: 12px; font-weight: 700; }
+.decor-tabs button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+.decor-tabs small { margin-left: 5px; font-size: 11px; font-weight: 500; }
+
+.interior-switch { position: static; }
+.interior-switch button { min-height: 44px; }

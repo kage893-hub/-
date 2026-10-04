@@ -1027,6 +1027,7 @@
           <li>月の地球儀の月の画像：NASA Scientific Visualization Studio（パブリックドメイン）</li>
           <li>おかしの飾り：Kenney「Food Kit」（CC0）</li>
           <li>レオパ・ウェットシェルター・水入れ・ピンセット：Meshy AI で作成</li>
+          <li>岩ウェットシェルター：ユーザー作成・生成の提供モデル。スマホ向けに形を軽量化し、3色に調整</li>
           <li>3D表示：three.js（MIT License）</li>
         </ul>
         <button class="act" data-action="closeSheet">とじる</button>`);
@@ -1943,7 +1944,7 @@
           <span class="row-main"><b>カルシウムパウダー 50回分</b><small>いま ${S.calc || 0}回分 ・ ごはんにまぶして骨を強く。足りないと骨が弱くなります</small></span>
           <span class="row-side price">15</span>
         </button></div>`,
-      interior: () => `${cageShop()}${interiorShop()}`,
+      interior: () => `<div class="shop-tabs two interior-switch" role="group" aria-label="インテリアの種類"><button class="${interiorSection === 'decor' ? 'on' : ''}" data-action="interiorSection" data-section="decor" aria-pressed="${interiorSection === 'decor'}">家具</button><button class="${interiorSection === 'cage' ? 'on' : ''}" data-action="interiorSection" data-section="cage" aria-pressed="${interiorSection === 'cage'}">ケース</button></div>${interiorSection === 'cage' ? cageShop() : interiorShop()}`,
       other: () => `${speedShop()}
       <h3 class="h3">ケース <small class="muted">${S.geckos.length} / ${S.cases} 使用中</small></h3>
       <div class="list">
@@ -2433,11 +2434,30 @@
   }
   // ショーの用品ブースでは、その週の10種類が半額
   const decorPriceNow = id => (view === 'expo' && S.expo && S.expo.decor.includes(id) ? expoDecorPrice(id) : L3.DECOR[id].price);
+  const DECOR_CATEGORIES = [['all', 'すべて'], ['care', 'お世話用品'], ['plant', '植物'], ['climb', '登れる家具'], ['ornament', '飾り']];
+  let interiorSection = 'decor';
+  let decorCategory = 'all'; // 表示用の選択。セーブの項目は増やさない。
+  const decorCategoryOf = (id, d) => (d.shelter || d.drink) ? 'care' : (d.soft || /^(plant|grass|flower|mushroom)/.test(id)) ? 'plant' : d.climb ? 'climb' : 'ornament';
   function interiorShop() {
+    const items = Object.entries(L3.DECOR).filter(([, d]) => !d.expo);
+    const filtered = items.filter(([id, d]) => decorCategory === 'all' || decorCategoryOf(id, d) === decorCategory);
     return `<h3 class="h3">家具 <small class="muted">買った家具は「もようがえ」で置けます</small></h3>
-      <div class="item-grid">${Object.entries(L3.DECOR).filter(([, d]) => !d.expo).map(([t, d]) => itemCard('decor', t, d, String(d.price))).join('')}</div>`;
+      <div class="decor-tabs" role="group" aria-label="家具の用途">${DECOR_CATEGORIES.map(([key, label]) => `<button type="button" aria-pressed="${decorCategory === key}" aria-controls="decorItems" class="${decorCategory === key ? 'on' : ''}" data-action="decorCategory" data-category="${key}">${label}<small>${items.filter(([id, d]) => key === 'all' || decorCategoryOf(id, d) === key).length}</small></button>`).join('')}</div>
+      <div id="decorItems" class="item-grid" aria-label="${DECOR_CATEGORIES.find(([key]) => key === decorCategory)[1]}">${filtered.map(([t, d]) => itemCard('decor', t, d, String(d.price))).join('')}</div>`;
   }
   Object.assign(ACTIONS, {
+    interiorSection(t) {
+      if (!['decor', 'cage'].includes(t.dataset.section)) return;
+      interiorSection = t.dataset.section;
+      renderView();
+    },
+    decorCategory(t) {
+      if (!DECOR_CATEGORIES.some(([key]) => key === t.dataset.category)) return;
+      decorCategory = t.dataset.category;
+      renderView();
+      const button = document.querySelector(`.decor-tabs [data-category="${decorCategory}"]`);
+      if (button) button.focus({ preventScroll: true });
+    },
     editStart() { if (selected()) setEditing({ sel: null, place: null }); },
     editDone() { setEditing(null); save(); },
     pickDecor(t) { setEditing({ sel: null, place: editing && editing.place === t.dataset.t ? null : t.dataset.t }); },

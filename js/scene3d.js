@@ -1929,6 +1929,54 @@
     g.add(body, water);
     return g;
   }
+  // ユーザー作成の岩型。色ちがいも同じ形を使う。
+  const ROCK_WET_COLORS = { wetRockSand: '#B9A080', wetRockRed: '#995D45', wetRockGray: '#777B7A' };
+  let rockWetWaterGeo = null;
+  function rockWetWater(body) {
+    if (!rockWetWaterGeo) {
+      // くぼみの内側に収まる水面。縁の形に合わせ、岩の外にはみ出さない。
+      body.updateMatrixWorld(true);
+      const cx = -0.28, cz = -0.02, y = 1.55, count = 64;
+      const points = [cx, y, cz], indices = [];
+      const ray = new T.Raycaster(), down = V(0, -1, 0);
+      for (let i = 0; i < count; i++) {
+        const angle = i / count * Math.PI * 2, dx = Math.cos(angle), dz = Math.sin(angle);
+        let lo = 0, hi = 1.8;
+        for (let n = 0; n < 10; n++) {
+          const r = (lo + hi) / 2;
+          ray.set(V(cx + dx * r, 3, cz + dz * r), down);
+          const hit = ray.intersectObject(body, true)[0];
+          if (hit && hit.point.y < y - 0.01) lo = r; else hi = r;
+        }
+        points.push(cx + dx * lo, y, cz + dz * lo);
+        indices.push(0, (i + 1) % count + 1, i + 1);
+      }
+      rockWetWaterGeo = new T.BufferGeometry();
+      rockWetWaterGeo.setAttribute('position', new T.Float32BufferAttribute(points, 3));
+      rockWetWaterGeo.setIndex(indices);
+      rockWetWaterGeo.computeVertexNormals();
+      rockWetWaterGeo.userData.shared = true;
+    }
+    const mat = phys('#5D9CB6', { roughness: 0.04, clearcoat: 1, transparent: true, opacity: 0.8, depthWrite: false });
+    mat.color.convertSRGBToLinear();
+    const water = new T.Mesh(rockWetWaterGeo, mat);
+    water.name = 'wetWater';
+    return water;
+  }
+  function rockWetShelter(t) {
+    const key = 'rockWet-' + t;
+    if (!variantMats[key]) {
+      // このモデルの色はsRGBで指定。線形に直して白飛びを抑える。
+      const mat = variantMat(key, ROCK_WET_COLORS[t], { roughness: 0.96, bumpScale: 0.035 });
+      mat.color.convertSRGBToLinear();
+    }
+    const body = paint(kitOr('UserRockWet', 3.4, null, () => OLD_DECOR.wet.build()), variantMats[key]);
+    if (kitHas('UserRockWet')) body.rotation.y = Math.PI / 2; // 入口をケースの正面にそろえる
+    const g = new T.Group(); // 配置時の回転とは別に、モデルの向きを保つ
+    g.add(body);
+    if (kitHas('UserRockWet')) g.add(rockWetWater(body));
+    return g;
+  }
   const DECOR = {
     rock: {
       name: '岩（赤茶）', price: 30, r: 1.45, climb: true,
@@ -1954,6 +2002,21 @@
       name: 'ウェットシェルター（炭焼き）', price: 45, r: 1.3, shelter: { x: 0, z: 0 }, tunnel: true,
       desc: '黒い炭焼きの素焼き。落ち着いた大人っぽい雰囲気に',
       build: () => wetShelter('wet3'),
+    },
+    wetRockSand: {
+      name: '岩ウェットシェルター（砂色）', price: 50, r: 1.55, shelter: { x: 0, z: 0 }, photoElevation: 0.8,
+      desc: '砂色の岩の隠れ家。くぼみに水をためて中をしっとり。中にもぐって眠れます',
+      build: () => rockWetShelter('wetRockSand'),
+    },
+    wetRockRed: {
+      name: '岩ウェットシェルター（赤茶）', price: 50, r: 1.55, shelter: { x: 0, z: 0 }, photoElevation: 0.8,
+      desc: '赤茶色の岩の隠れ家。くぼみに水をためて中をしっとり。中にもぐって眠れます',
+      build: () => rockWetShelter('wetRockRed'),
+    },
+    wetRockGray: {
+      name: '岩ウェットシェルター（灰色）', price: 50, r: 1.55, shelter: { x: 0, z: 0 }, photoElevation: 0.8,
+      desc: '灰色の岩の隠れ家。くぼみに水をためて中をしっとり。中にもぐって眠れます',
+      build: () => rockWetShelter('wetRockGray'),
     },
     log: {
       name: '枯れ木（ひろがり）', price: 20, r: 0.9,
@@ -2468,7 +2531,7 @@
       ir.scene.add(g);
       const box = new T.Box3().setFromObject(o), c = box.getCenter(new T.Vector3()), sz = box.getSize(new T.Vector3());
       const D = Math.max(sz.x, sz.z, sz.y * 1.4, 1.2) * 2.3;
-      cam.position.set(c.x + D * 0.3, c.y + D * 0.42, c.z + D * 0.95);
+      cam.position.set(c.x + D * 0.3, c.y + D * (def.photoElevation || 0.42), c.z + D * 0.95);
       cam.lookAt(c.x, c.y * 0.6, c.z);
       ir.scene.background.set('#F1E9DA');
     } else {
