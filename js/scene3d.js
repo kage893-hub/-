@@ -2917,6 +2917,7 @@
       const key = JSON.stringify(list || []);
       if (key === decorKey) return;
       decorKey = key;
+      if (st.hidePeek) wake();
       while (decorG.children.length) { const c = decorG.children.pop(); disposeTree(c); }
       obstacles = []; placed = []; climbs = [];
       HIDE = null;
@@ -2953,7 +2954,7 @@
         if (def.shelter && !HIDE) {
           const sp = local(def.shelter.x, def.shelter.z);
           HIDE = def.tunnel
-            ? { x: sp.x, z: sp.z, face: (d.rot || 0) + Math.PI, ob, tunnel: true, door: local(0, B.hz + 1.6) }
+            ? { x: sp.x, z: sp.z, face: (d.rot || 0) + Math.PI, ob, tunnel: true, door: local(0, B.hz + 1.6), backDoor: local(0, -B.hz - 1.6) }
             : { x: sp.x, z: sp.z, face: (d.rot || 0) + Math.PI, ob };
         }
       });
@@ -2974,7 +2975,7 @@
       const pts = [[2.0, 0.22], [1.4, 0.34], [0.6, 0.4], [-0.2, 0.4], [-1.0, 0.34], [-1.8, 0.3], [-2.6, 0.2], [-3.4, 0.12]];
       for (let it = 0; it < 4; it++) {
         for (const o of obstacles) {
-          if (HIDE && !HIDE.tunnel && o === HIDE.ob && (g.sleeping || g.mode === 'toHide')) continue;
+          if (HIDE && o.i === HIDE.ob.i && (g.mode === 'hidePeek' || !HIDE.tunnel && (g.sleeping || g.mode === 'toHide'))) continue;
           for (const [k, w] of pts) {
             const px = g.x + Math.sin(g.yaw) * k * S, pz = g.z + Math.cos(g.yaw) * k * S;
             const r = sdObstacle(o, px, pz), min = w * S;
@@ -3038,8 +3039,10 @@
       }
       const key = lookKey(look);
       if (look.id !== st.id) {
-        Object.assign(st, { x: rand(-1.5, 2), z: rand(-0.5, 1.5), yaw: rand(-1, 1), mode: 'idle', wait: 1, sleeping: false, stalk: 0 });
+        Object.assign(st, { x: rand(-1.5, 2), z: rand(-0.5, 1.5), yaw: rand(-1, 1), mode: 'idle', wait: 1, sleeping: false, stalk: 0, hidePeek: null, act: null, target: null });
       }
+      st.profile = behaviorProfile(look.seed);
+      st.tame = look.tame || 0;
       st.size = look.size;
       if (key !== st.key || look.id !== st.id) {
         if (st.gk) { scene.remove(st.gk.root); disposeGecko(st.gk); }
@@ -3076,7 +3079,7 @@
       if (opt.refuse) {
         // 気づいて見るけれど、ぷいっと向きを変える
         if (!opt.quiet && !st.sleeping) { st.peek = clamp(angleTo(st.yaw, Math.atan2(x - st.x, z - st.z)), -0.7, 0.7); st.peekT = 1.6; st.refuseT = 1.7; }
-      } else { if (st.sleeping) wake(); st.wagT = 1.6; if (st.act) endAct(); }
+      } else { if (st.sleeping || st.hidePeek) wake(); st.wagT = 1.6; if (st.act) endAct(); }
     }
     // 食べ残し：食べなかったえさの数を、保存されている数にそろえる
     function dropDish(f, later) {
@@ -3162,10 +3165,46 @@
     }
     function setDirty(on) { dirt.visible = on; }
     function wake() {
+      if (st.hidePeek) { st.hidePeek = null; st.mode = 'idle'; st.wait = 0.8; }
       if (!st.sleeping) return;
       st.sleeping = false;
       st.mode = 'idle';
       st.wait = 0.8;
+    }
+    // 眠りから覚めても、すぐ飛び出さず入口からそっと周囲を確かめる。
+    function peekFromHide() {
+      if (!HIDE || !st.gk || !st.sleeping || st.hand || st.pair || st.foods.some(f => !f.refuse)) return false;
+      // 両側に入口があるシェルターでは、寝ている向きの入口から顔を出す。
+      const yaw = HIDE.tunnel ? HIDE.face : HIDE.face + Math.PI, S = 0.95 * st.size;
+      const door = HIDE.backDoor || HIDE.door || { x: HIDE.x + Math.sin(yaw) * HIDE.ob.r, z: HIDE.z + Math.cos(yaw) * HIDE.ob.r };
+      const margin = 1.4 * st.size;
+      st.hidePeek = { phase: 'out', t: 0, origin: { x: st.x, z: st.z }, yaw,
+        goal: { x: clamp(door.x - Math.sin(yaw) * 2.2 * S, -BOUNDS.x + margin, BOUNDS.x - margin), z: clamp(door.z - Math.cos(yaw) * 2.2 * S, BOUNDS.zMin + margin, BOUNDS.zMax - margin) } };
+      st.sleeping = false; st.mode = 'hidePeek'; st.target = null;
+      return true;
+    }
+    function stepHidePeek(dt) {
+      const q = st.hidePeek;
+      if (!q || !HIDE) { wake(); return 0; }
+      q.t += dt;
+      let step = 0;
+      if (q.phase === 'out' || q.phase === 'back') {
+        const to = q.phase === 'back' ? q.origin : q.goal;
+        step = moveToward(to.x, to.z, 0.35, dt);
+        if (Math.hypot(to.x - st.x, to.z - st.z) < 0.16 || q.t > 8) {
+          if (q.phase === 'back') { st.hidePeek = null; st.sleeping = true; st.mode = 'idle'; st.wait = rand(12, 22) * st.profile.rest; st.zzz = 0.8; }
+          else { q.phase = 'look'; q.t = 0; st.peekT = 0; seen('look'); }
+        }
+      } else {
+        st.yaw += angleTo(st.yaw, q.yaw) * Math.min(1, dt * 2);
+        st.peek = Math.sin(q.t * 1.5) * 0.48; st.peekT = 0.3;
+        if (q.t > 3.5 * st.profile.rest) {
+          const goOut = Math.random() < (st.night ? 0.65 : 0.18) + st.tame / 500;
+          if (goOut) { st.hidePeek = null; st.mode = 'idle'; st.wait = 0.5; }
+          else { q.phase = 'back'; q.t = 0; }
+        }
+      }
+      return step;
     }
 
     function screenPos(obj) {
@@ -3614,7 +3653,7 @@
     function placeHand(h, cx, cz, yaw, y) { h.position.set(cx, y, cz); h.rotation.y = yaw - Math.PI / 2; }
     function startHandling(tame) {
       endHandling(true);
-      if (st.sleeping) wake();
+      if (st.sleeping || st.hidePeek) wake();
       const S = 0.95 * st.size, len = 5.4 * S;
       const h = buildHand(len);
       scene.add(h);
@@ -3782,7 +3821,7 @@
         phase: 0, walkW: 0, look: 0, pitch: 0, stalk: 0, happy: 0, lick: 0, tilt: 0, drop: 0.04, blinkT: 2, blinkV: 0, content: 0, onHand: true,
       };
       st.pair = { ph: 'enter', t: 0, all: 0, D, meet, hand, M, fLook: 0, fStill: false, heartT: 0, prevClose: st.close };
-      st.mode = 'idle'; st.wait = 999; st.meal = null; st.hunt = null; st.act = null;
+      st.mode = 'idle'; st.wait = 999; st.meal = null; st.hunt = null; st.act = null; st.hidePeek = null;
       setClose(false);
       pairSay('enter');
       return true;
@@ -4152,7 +4191,7 @@
       } else if (st.meal) {
         stepMeal(dt, S);
       } else if (food) {
-        if (st.sleeping) wake();
+        if (st.sleeping || st.hidePeek) wake();
         const fp = food.obj.position, mp = mouthWorld();
         const dMouth = Math.hypot(fp.x - mp.x, fp.z - mp.z);
         const aim = Math.atan2(fp.x - st.x, fp.z - st.z);
@@ -4197,6 +4236,9 @@
           else step = moveToward(fp.x - Math.sin(aim) * reach, fp.z - Math.cos(aim) * reach, (H.creep ? 0.7 : 1.9) * nf, dt);
         }
         st.stalk = H.ph === 'stalk' || H.creep ? 1 : 0;
+      } else if (st.hidePeek) {
+        st.stalk = 0; st.hunt = null;
+        step = stepHidePeek(dt);
       } else if (st.shedAct && !st.sleeping) {
         st.stalk = 0; st.hunt = null;
         stepShedAct(dt, S);
@@ -4209,7 +4251,9 @@
           st.wait -= dt;
           st.zzz -= dt;
           if (st.zzz <= 0) { fx('z', 'zzz'); st.zzz = 1.8; }
-          if (st.wait <= 0) { wake(); const r1 = Math.random(); if (r1 < 0.4) startAct('yawn'); else if (r1 < 0.75) startAct('stretch'); }
+          if (st.wait <= 0) {
+            if (!(Math.random() < st.profile.peek && peekFromHide())) { wake(); const r1 = Math.random(); if (r1 < 0.4) startAct('yawn'); else if (r1 < 0.75) startAct('stretch'); }
+          }
           if (HIDE) st.yaw += angleTo(st.yaw, HIDE.face) * Math.min(1, dt * 2);
         } else if (st.mode === 'drink' || st.mode === 'bask') {
           // 水をぺろぺろ飲む／石の横でじっとひなたぼっこ
@@ -4227,7 +4271,7 @@
             st.pauseT -= dt;
             st.yaw += angleTo(st.yaw, Math.atan2(st.target.x - st.x, st.target.z - st.z)) * Math.min(1, dt * 0.8);
           } else {
-            step = moveToward(st.target.x, st.target.z, 0.85 * nf, dt);
+            step = moveToward(st.target.x, st.target.z, 0.85 * nf * st.profile.walk, dt);
             st.burst = (st.burst == null ? rand(3, 6) : st.burst) - dt;
             if (st.burst <= 0 && Math.hypot(st.target.x - st.x, st.target.z - st.z) > 1.2) {
               st.burst = st.night ? rand(4, 8) : rand(3, 6);
@@ -4241,10 +4285,10 @@
           }
           if (Math.hypot(st.target.x - st.x, st.target.z - st.z) < 0.15) {
             if (st.mode === 'toHide' && st.target.next) st.target = st.target.next;
-            else if (st.mode === 'toHide') { st.sleeping = true; st.wait = rand(18, 35); st.zzz = 0.8; st.mode = 'idle'; seen('hide'); }
+            else if (st.mode === 'toHide') { st.sleeping = true; st.wait = rand(18, 35) * st.profile.rest; st.zzz = 0.8; st.mode = 'idle'; seen('hide'); }
             else if (st.mode === 'toDrink') { st.mode = 'drink'; st.wait = rand(3, 5); st.lickT = 0.2; seen('drink'); }
             else if (st.mode === 'toBask') { st.mode = 'bask'; st.wait = rand(8, 16); seen('bask'); }
-            else { st.mode = 'idle'; st.wait = st.night ? rand(0.8, 2.5) : rand(2.5, 6); }
+            else { st.mode = 'idle'; st.wait = (st.night ? rand(0.8, 2.5) : rand(2.5, 6)) * st.profile.rest; }
           }
         } else {
           st.wait -= dt;
@@ -4268,7 +4312,7 @@
               st.mode = 'toDrink'; st.target = { x, z, face: Math.atan2(w.x - x, w.z - z), water: w };
             }
             else if (stone && !st.night && r0 < 0.28) { st.mode = 'toBask'; st.target = { x: stone.x + rand(-0.3, 0.3), z: stone.z + rand(-0.3, 0.3), face: rand(0, 6.28) }; }
-            else if ((!st.night || st.heatPref < 0) && Math.random() < (st.heatPref < 0 ? 0.5 : 0.3) && HIDE) { st.mode = 'toHide'; st.target = HIDE.tunnel ? { x: HIDE.door.x, z: HIDE.door.z, next: { x: HIDE.x, z: HIDE.z } } : { x: HIDE.x, z: HIDE.z }; }
+            else if ((!st.night || st.heatPref < 0) && Math.random() < (st.heatPref < 0 ? 0.5 : st.profile.hide) && HIDE) { st.mode = 'toHide'; st.target = HIDE.tunnel ? { x: HIDE.door.x, z: HIDE.door.z, next: { x: HIDE.x, z: HIDE.z } } : { x: HIDE.x, z: HIDE.z }; }
             else if (!st.night && Math.random() < 0.12) { st.sleeping = true; st.wait = rand(12, 25); st.zzz = 0.8; seen('nap'); }
             else if (st.night && Math.random() < 0.3 && startWalkAct('patrol')) { /* 夜はケースのふちをパトロール */ }
             else if (Math.random() < 0.1 && startWalkAct('glass')) { /* ガラスをぺろぺろ */ }
@@ -4338,7 +4382,7 @@
         wantLook = clamp(angleTo(st.yaw, Math.atan2(food.obj.position.x - st.x, food.obj.position.z - st.z)), -0.6, 0.6);
       }
       st.look = lerp(st.look, wantLook, Math.min(1, dt * 2.5));
-      if (!(st.pair && (st.pair.ph === 'woo' || st.pair.ph === 'snuggle'))) st.drop = lerp(st.drop, st.sleeping || st.mode === 'bask' ? 0.13 : st.hunt && st.hunt.ph === 'strike' ? -0.02 : st.stalk ? 0.11 : moving ? 0 : 0.06, Math.min(1, dt * 2));
+      if (!(st.pair && (st.pair.ph === 'woo' || st.pair.ph === 'snuggle'))) st.drop = lerp(st.drop, st.sleeping || st.mode === 'bask' || st.hidePeek ? 0.13 : st.hunt && st.hunt.ph === 'strike' ? -0.02 : st.stalk ? 0.11 : moving ? 0 : 0.06, Math.min(1, dt * 2));
       st.curl = lerp(st.curl, st.sleeping ? 1 : 0, Math.min(1, dt * 1.5));
       st.pitch = lerp(st.pitch, st.sleeping ? 0.22 : (st.stalk > 0 ? -0.08 : 0), Math.min(1, dt * 3));
       if (st.lick > 0) st.lick -= dt;
@@ -4482,7 +4526,7 @@
       },
       setShed(p) { st.shedP = p; },
       setStuck(on) { st.stuck = !!on; },
-      toilet, startAct, startWalkAct,
+      toilet, startAct, startWalkAct, peekFromHide,
       setLeftovers,
       // 水のよごれ（0：きれい 〜 1：よごれ）
       setWaterDirty(k) {
@@ -4814,5 +4858,13 @@
   }
   function photoReady(look, opts) { return photoCache.get(photoKey(look, opts)) || null; }
 
-  root.Leopa3D = { _buildKit: (n, f) => buildKit(n, f), loadKit, CAGE_SIZES, CAGE_THEMES, itemPhoto, itemPhotoReady, supported, createTank, createViewer, hatchScene, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR, TANK };
+  function behaviorProfile(seed) {
+    const n = (Math.imul((Number(seed) || 0) ^ 0x9e3779b9, 1664525) >>> 0) % 3;
+    return [
+      { name: '探検好き', note: '休憩は短め。ケースの中をよく歩きます。', walk: 1.12, rest: 0.8, hide: 0.22, peek: 0.55 },
+      { name: 'のんびり', note: 'ゆっくり歩いて、休む時間を長めにとります。', walk: 0.82, rest: 1.35, hide: 0.35, peek: 0.45 },
+      { name: '慎重', note: '隠れ家で休み、顔を出して周りを確かめます。', walk: 0.95, rest: 1.1, hide: 0.48, peek: 0.75 },
+    ][n];
+  }
+  root.Leopa3D = { behaviorProfile, _buildKit: (n, f) => buildKit(n, f), loadKit, CAGE_SIZES, CAGE_THEMES, itemPhoto, itemPhotoReady, supported, createTank, createViewer, hatchScene, photo, photoReady, photoKey, loadModel, DECOR, DEFAULT_DECOR, TANK };
 })(typeof window !== 'undefined' ? window : globalThis);

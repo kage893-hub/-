@@ -40,6 +40,23 @@
 }
 
 * { box-sizing: border-box; }
+.lineage-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.lineage-node { display: grid; gap: 5px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); text-align: left; overflow-wrap: anywhere; }
+button.lineage-node { cursor: pointer; }
+.lineage-node b { display: flex; align-items: center; gap: 5px; font-size: 16px; }
+.lineage-node .swatch { width: 16px; height: 16px; flex: none; }
+.lineage-node span { font-size: 12px; }
+.lineage-node small { color: var(--muted); font-size: 11px; }
+.lineage-node.focus { border: 2px solid var(--accent); background: var(--accent-soft); padding: 16px; }
+.lineage-node.focus b { font-size: 21px; }
+.lineage-node.unknown { opacity: .6; }
+.lineage-node .lineage-link { color: var(--good); }
+.lineage-join { text-align: center; color: var(--muted); font-size: 24px; }
+.lineage-ancestors { margin: 20px 0; }
+.lineage-ancestors summary { margin-bottom: 12px; padding: 10px; cursor: pointer; }
+.behavior-note { display: grid; gap: 4px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.behavior-note b { font-size: 13px; }
+.behavior-note small { color: var(--muted); font-size: 12px; }
 .study-entry { display: grid; gap: 12px; margin-top: 12px; }
 .study-entry p { margin: 4px 0; }
 .study-entry .act { width: 100%; }

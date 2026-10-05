@@ -16,6 +16,7 @@
 | js/scene3d.js | 3D（`createTank`・`createViewer`・`hatchScene`・`photo`、変形シェーダー、行動 `startAct` など） |
 | js/genetics.js | 遺伝（`DEX` 図鑑30種、ライン遺伝のポリジェニック値） |
 | js/art.js | 2D の絵と体の色（`colors`） |
+| js/family.js | 家系の記録・親子孫のつながり（個体ごとに1件保存） |
 | js/study.js | 小学1年生向けの自作問題（さんすう・こくご） |
 | js/kids.js | ひらがなモード（画面の文字を MutationObserver で変換） |
 | js/music.js / js/photo-save.js | 音楽／写真の保存・共有 |
@@ -37,12 +38,15 @@
 
 - 勉強モードは `S.kids` がオンのときだけ。1回5問、正解1問2コイン、日付ごとに20コインまで。報酬と正解数は `S.study` に保存し、古いセーブは `migrate()` で初期化する。漢字を読む問題の文字は `data-raw` でひらがな変換を止める。
 
+- 家系の記録は `S.familyRecords` に個体ごとに保存し、親のIDでつなぐ。古い親の写しは `seed` で同じ個体を識別し、名前だけでは結び付けない。里親・販売の前にも記録を保存する。新しい親の写しには `id` を含める。
+- 行動の傾向は `Leopa3D.behaviorProfile(seed)` で決め、同じ個体では変わらない。行動の傾向の説明は「くわしく見る」の中だけに表示し、ケース画面には表示しない。隠れ家のぞきは捕食・ふれあい・ペアリング・家具変更・個体切り替えで中断できるようにする。
+
 ## 動作確認
 - サーバー：`npx http-server -p 8123 -s -c-1 .`（つながらなくなったら起動しなおす）
 - Playwright と Chromium（`/opt/pw-browsers`）。swiftshader なので 3D はとても遅い。
   - 起動の引数：`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`
   - 画面サイズ：390×844
-- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition・study）。最後の行が `[]` ならエラーなし。
+- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition・study・family・behavior）。最後の行が `[]` ならエラーなし。
 - テスト用の入り口：`window.__leopaState()`（状態 S）、`window.__leopaTank()`（3D ケース。`_st` が内部状態）
 - 時間を進めるテストは、`Date` を差しかえる（`addInitScript` で偽の Date クラスを入れる）。
 - はじめの流れを進めるヘルパー（start.js）：

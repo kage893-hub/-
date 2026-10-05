@@ -133,6 +133,7 @@
     if (s.daily && s.daily.streak >= 7) s.achievementMedals.streak7 = true;
     s.showRec = s.showRec || {};
     s.showRec.champ = Math.max(s.showRec.champ || 0, (s.trophies || []).filter(t => t.rank === 1).length);
+    window.LeopaFamily.sync(s);
     return s;
   }
   // 保存は操作が落ちついてからまとめて1回（アプリを閉じるときはすぐ保存）
@@ -159,6 +160,7 @@
     if (saveLocked || !S) return;
     if (otherSavedNewer()) { reloadForNewer(); return; }
     try {
+      window.LeopaFamily.sync(S);
       localStorage.setItem(SAVE_KEY, JSON.stringify(S));
       lastStamp = Date.now();
       localStorage.setItem(STAMP_KEY, JSON.stringify({ id: INSTANCE, at: lastStamp }));
@@ -228,7 +230,7 @@
   function snap(g, depth) {
     if (!g) return null;
     return {
-      name: g.name, sex: g.sex, genes: Object.assign({}, g.genes), tang: g.tang, poly: Object.assign({}, g.poly), seed: g.seed, gen: g.gen,
+      id: g.id, name: g.name, sex: g.sex, genes: Object.assign({}, g.genes), tang: g.tang, poly: Object.assign({}, g.poly), seed: g.seed, gen: g.gen,
       parents: depth > 0 && g.parents ? { mom: trimSnap(g.parents.mom, depth - 1), dad: trimSnap(g.parents.dad, depth - 1) } : null,
     };
   }
@@ -508,7 +510,7 @@
   function lookOf(g) {
     // ペアリングの演出中は、まだおなかをふくらませない
     const gravid = !!g.gravid && !(pairScene && pairScene.mom === g.id);
-    return { id: g.id, genes: g.genes, tang: g.tang, poly: g.poly, seed: g.seed, stage: stageOf(g), gravid, shed: !!g.shedUntil, size: sizeOf(g) };
+    return { id: g.id, genes: g.genes, tang: g.tang, poly: g.poly, seed: g.seed, tame: g.tame, stage: stageOf(g), gravid, shed: !!g.shedUntil, size: sizeOf(g) };
   }
   function initTank() {
     const box = $('#tank3d');
@@ -1238,6 +1240,7 @@
       const reward = Math.round(valueOf(g) * 0.8);
       memo(g, 'やさしい飼い主さんのもとへ旅立った。元気でね');
       const back = returnDecor(g);
+      window.LeopaFamily.sync(S);
       S.geckos = S.geckos.filter(x => x !== g);
       S.coins += reward;
       S.stats.rehomed++;
@@ -1462,9 +1465,11 @@
         ${L3.supported ? `<div class="viewer-btns">${[['face', '顔'], ['body', '全身'], ['side', '横'], ['top', '上']].map(([k, n]) => `<button class="chip" data-action="viewAngle" data-v="${k}">${n}</button>`).join('')}</div><p class="muted tiny">ドラッグで回転・ピンチで拡大</p>` : ''}
         <p class="muted">${STAGE_LABEL[st]} ・ ${ageDays(g)}日目 ・ 体重 ${weightOf(g)}g ・ 第${g.gen}世代</p>
         ${hets.length ? `<p class="het-line">${hets.map(h => 'het ' + h).join(' / ')}</p>` : ''}
+        <p class="behavior-note"><b>動きの傾向：${L3.behaviorProfile(g.seed).name}</b><small>${L3.behaviorProfile(g.seed).note}</small></p>
         ${traitTable(g)}
         <h4 class="h4">家系図</h4>
         ${familyTree(g)}
+        <button class="act primary wide" data-action="family" data-id="${g.id}">親・子・孫をたどる</button>
         <div class="sheet-actions"><button class="act" data-action="closeSheet">とじる</button></div></div>`);
       const el = $('#offerViewer');
       if (L3.supported && el) viewer = L3.createViewer(el, { genes: G.normGenes(g.genes), tang: g.tang, poly: g.poly, seed: g.seed || 1, stage: st, gravid: !!g.gravid });
@@ -1752,6 +1757,7 @@
 
       <div class="actions sub">
         <button class="act ghost" data-action="viewGecko" data-id="${g.id}">${ic('look')}くわしく見る</button>
+        <button class="act ghost" data-action="family" data-id="${g.id}">家系図を見る</button>
         <button class="act ghost" data-action="pairMenu">${ic('heart')}ペアリング${block ? '' : ' OK'}</button>
         <button class="act ghost" data-action="editStart">${ic('sofa')}もようがえ</button>
         <button class="act ghost" data-action="rehomeMenu">${ic('home')}里親に出す</button>
@@ -2527,14 +2533,34 @@
     return `<div class="fam-node ${cls}"><small>${role}</small><b>${known ? A.swatch(x) : ''}${esc(x.name)}</b><small>${known ? esc(nameOf(x)) : ''}</small></div>`;
   }
   function familyTree(g) {
-    if (!g.parents) return `<p class="muted small">${g.hatched ? '親の記録がありません（記録を始める前に生まれた子です）' : 'ショップからおむかえした子なので、親はわかりません。この子から新しい家系が始まります'}</p>`;
-    const { mom, dad } = g.parents, gp = p => (p && p.parents) || {};
+    const all = window.LeopaFamily.sync(S), f = window.LeopaFamily.relatives(S, g.id);
+    if (!f || !f.mom && !f.dad) return `<p class="muted small">${g.hatched ? '親の記録がありません（記録を始める前に生まれた子です）' : 'ショップからおむかえした子なので、親はわかりません。この子から新しい家系が始まります'}</p>`;
+    const { mom, dad } = f, gp = p => p ? { mom: all[p.parents.mom], dad: all[p.parents.dad] } : {};
     return `<div class="family">
       ${famNode(g, 'この子', 'me')}
       ${famNode(dad, '父 ♂', 'p1')}${famNode(mom, '母 ♀', 'p2')}
       ${famNode(gp(dad).dad, '父方の祖父', 'g1')}${famNode(gp(dad).mom, '父方の祖母', 'g2')}${famNode(gp(mom).dad, '母方の祖父', 'g3')}${famNode(gp(mom).mom, '母方の祖母', 'g4')}
     </div>`;
   }
+  function familyCard(g, role, focus) {
+    if (!g) return `<div class="lineage-node unknown"><small>${role}</small><b>？</b><small>親の記録なし</small></div>`;
+    const live = S.geckos.some(x => x.id === g.id), known = !!g.genes;
+    const inner = `<small>${role}</small><b>${known ? A.swatch(g) : ''}${esc(g.name)} ${g.sex ? sexMark(g) : ''}</b><span>${known ? esc(nameOf(g)) : 'モルフの記録なし'}</span><small>${g.gen ? `第${g.gen}世代 ・ ` : ''}${live ? 'いっしょに暮らしています' : '家系の記録'}</small>`;
+    return focus ? `<div class="lineage-node focus">${inner}</div>` : `<button class="lineage-node" data-action="family" data-id="${esc(g.id)}">${inner}<small class="lineage-link">この子の家系を見る →</small></button>`;
+  }
+  ACTIONS.family = function (t) {
+    const all = window.LeopaFamily.sync(S), id = t && t.dataset.id || (selected() || {}).id, f = window.LeopaFamily.relatives(S, id);
+    if (!f) return;
+    const grandparents = [['父方の祖父', f.dad && all[f.dad.parents.dad]], ['父方の祖母', f.dad && all[f.dad.parents.mom]], ['母方の祖父', f.mom && all[f.mom.parents.dad]], ['母方の祖母', f.mom && all[f.mom.parents.mom]]];
+    openSheet(`<div class="lineage"><p class="eyebrow">家系図</p><h3 class="sheet-title">${esc(f.g.name)}の家族</h3><p class="muted small">名前を押すと、その子の親・子・孫を見られます。</p>
+      <div class="lineage-grid">${familyCard(f.dad, '父 ♂')}${familyCard(f.mom, '母 ♀')}</div><div class="lineage-join" aria-hidden="true">↓</div>${familyCard(f.g, 'いま見ている子', true)}
+      <h4 class="h4">子 ${f.children.length}匹</h4>${f.children.length ? `<div class="lineage-grid">${f.children.map(x => familyCard(x, '子')).join('')}</div>` : '<p class="muted small">子の記録はまだありません。</p>'}
+      <h4 class="h4">孫 ${f.grandchildren.length}匹</h4>${f.grandchildren.length ? `<div class="lineage-grid">${f.grandchildren.map(x => familyCard(x, '孫')).join('')}</div>` : '<p class="muted small">孫の記録はまだありません。</p>'}
+      <details class="lineage-ancestors"><summary>祖父母も見る</summary><div class="lineage-grid">${grandparents.map(([label, x]) => familyCard(x, label)).join('')}</div></details>
+      <p class="muted small">記録が残っている家族を表示しています。里親に出した子の家系も残ります。</p>
+      <div class="actions">${selected() && selected().id !== id ? `<button class="act" data-action="family" data-id="${selected().id}">育てている子に戻る</button>` : ''}<button class="act primary" data-action="closeSheet">とじる</button></div></div>`);
+    save();
+  };
   function speedShop() {
     return `<h3 class="h3">せいちょうの速さ <small class="muted">ごはん・抱卵・ふ化の進み方もかわります</small></h3>
       <div class="list">${SPEEDS.map(v => {
@@ -3690,6 +3716,7 @@
     memo(g, text);
     const back = returnDecor(g);
     if (back) setTimeout(() => toast(`${g.name}のケースの家具${back}個は、手持ちにもどしました`), 2600);
+    window.LeopaFamily.sync(S);
     S.geckos = S.geckos.filter(x => x !== g);
     S.coins += reward;
     S.stats.rehomed++;
