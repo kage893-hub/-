@@ -40,6 +40,38 @@
 }
 
 * { box-sizing: border-box; }
+.study-entry { display: grid; gap: 12px; margin-top: 12px; }
+.study-entry p { margin: 4px 0; }
+.study-entry .act { width: 100%; }
+.study-panel { text-align: center; }
+.study-panel > .act { margin-top: 10px; }
+.study-subjects { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
+.study-subject { display: grid; gap: 8px; padding: 20px 8px; border: 2px solid var(--line); border-radius: 18px; background: var(--surface-2); cursor: pointer; }
+.study-subject span { font-size: 26px; color: var(--good); font-weight: 800; }
+.study-subject b { font-size: 20px; }
+.study-subject small { font-size: 12px; }
+.study-reward-note { padding: 14px; border-radius: 16px; background: var(--accent-soft); font-weight: 700; }
+.study-progress { display: flex; justify-content: center; gap: 8px; margin: 16px 0 24px; }
+.study-progress i { width: 28px; height: 8px; border-radius: 8px; background: var(--line); }
+.study-progress i.current { background: var(--accent); }
+.study-progress i.done { background: var(--good); }
+.study-prompt { font-size: 21px; line-height: 1.8; overflow-wrap: anywhere; }
+.study-expression { margin: 20px 0; padding: 18px 8px; border-radius: 18px; background: var(--surface-2); font-size: clamp(28px, 8vw, 38px); font-weight: 800; }
+.study-expression[data-raw] { font-size: 56px; }
+.study-answers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 24px 0 18px; }
+.study-answers.words { grid-template-columns: 1fr; }
+.study-answer { min-height: 68px; padding: 12px 5px; border: 2px solid var(--line); border-radius: 16px; background: var(--surface); font-size: 21px; font-weight: 700; overflow-wrap: anywhere; cursor: pointer; }
+.study-answer:disabled { opacity: .5; cursor: default; }
+.study-answer.correct { border-color: var(--good); background: var(--surface-2); opacity: 1; }
+.study-feedback { min-height: 58px; margin: 16px 0; padding: 12px; border-radius: 16px; background: var(--surface-2); }
+.study-feedback p { margin: 8px 0; }
+.study-feedback.success b { color: var(--good); font-size: 23px; }
+.study-feedback strong { display: block; }
+.study-dots { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 12px; }
+.study-dot-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 132px; }
+.study-dot-group i { width: 18px; height: 18px; border-radius: 50%; background: var(--good); }
+.study-dot-group.second i { background: var(--accent); }
+.study-stars { margin: 24px 0; font-size: 36px; color: var(--accent); letter-spacing: 6px; }
 html, body { margin: 0; min-height: 100%; }
 body {
   background: var(--bg);

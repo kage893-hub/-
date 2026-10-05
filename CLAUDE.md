@@ -16,6 +16,7 @@
 | js/scene3d.js | 3D（`createTank`・`createViewer`・`hatchScene`・`photo`、変形シェーダー、行動 `startAct` など） |
 | js/genetics.js | 遺伝（`DEX` 図鑑30種、ライン遺伝のポリジェニック値） |
 | js/art.js | 2D の絵と体の色（`colors`） |
+| js/study.js | 小学1年生向けの自作問題（さんすう・こくご） |
 | js/kids.js | ひらがなモード（画面の文字を MutationObserver で変換） |
 | js/music.js / js/photo-save.js | 音楽／写真の保存・共有 |
 | assets/ | gecko.glb、decor-kit.bin、expo/*.webp（ショー）、img/*.webp（部屋の背景・限定ケース・ライセンス証） |
@@ -34,12 +35,14 @@
 - **コミットしたら、プッシュと公開版（GitHub Pages）への反映まで続けて行う。** 画面確認で OK をもらった変更について、プッシュ・公開反映の許可を別途聞き直さない。ユーザーが「公開しない」などと指定した場合は、その指示を優先する。公開完了は実際に確認できた場合のみ報告し、接続制限などで確認できない場合は、GitHub への送信済みと公開確認の未完了を分けて伝える。
 - コミットメッセージは日本語。
 
+- 勉強モードは `S.kids` がオンのときだけ。1回5問、正解1問2コイン、日付ごとに20コインまで。報酬と正解数は `S.study` に保存し、古いセーブは `migrate()` で初期化する。漢字を読む問題の文字は `data-raw` でひらがな変換を止める。
+
 ## 動作確認
 - サーバー：`npx http-server -p 8123 -s -c-1 .`（つながらなくなったら起動しなおす）
 - Playwright と Chromium（`/opt/pw-browsers`）。swiftshader なので 3D はとても遅い。
   - 起動の引数：`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`
   - 画面サイズ：390×844
-- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition）。最後の行が `[]` ならエラーなし。
+- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition・study）。最後の行が `[]` ならエラーなし。
 - テスト用の入り口：`window.__leopaState()`（状態 S）、`window.__leopaTank()`（3D ケース。`_st` が内部状態）
 - 時間を進めるテストは、`Date` を差しかえる（`addInitScript` で偽の Date クラスを入れる）。
 - はじめの流れを進めるヘルパー（start.js）：

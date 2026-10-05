@@ -121,6 +121,8 @@
     for (const g of s.geckos) if (g.gravid && g.gravid.dad && g.gravid.dad.poly && g.gravid.dad.poly.mel == null) g.gravid.dad.poly.mel = 8;
     s.learned = s.learned || {};
     for (const g of s.geckos) if (!Number.isFinite(g.emptyH) || g.emptyH < 0) g.emptyH = 0;
+    const study = s.study || {};
+    s.study = { day: typeof study.day === 'string' ? study.day : '', rewarded: Number.isInteger(study.rewarded) ? clamp(study.rewarded, 0, 10) : 0, total: Number.isInteger(study.total) ? Math.max(0, study.total) : 0 };
     // 最初にお店からおむかえした2匹（アルバムに「ヤモリ堂」の記録がある子）にしるしをつける
     if (!s.starterFlag) { s.starterFlag = true; for (const g of s.geckos) if (((s.albums || {})[g.id] || { entries: [] }).entries.some(e => (e.text || '').includes('「ヤモリ堂」からおむかえした'))) g.starter = true; }
     // 過去の受取済み実績とチャンピオン優勝を記念品に引き継ぐ
@@ -1746,6 +1748,7 @@
         <p class="muted small">${st === 'adult' ? (g.growth >= GROWTH.max ? 'りっぱなおとなです' : 'おとなになりました。ペアリングできます') : `${STAGE_LABEL[st === 'baby' ? 'young' : 'adult']}まで あと${fmtLeft((next - g.growth) / (GROWTH.perHour * speedX() * heatInfo(heatOf(g)).growth) * HOUR)}ほど（ごはんを食べていれば）`}${g.hunger === 0 ? ' ・ おなか0が続くと、しっぽの栄養を使って少しずつ体重が減ります' : g.hunger < 60 ? ' ・ 空腹になるにつれて成長がゆっくりになります' : ''}</p>
       </div>
       ${dailyCard()}
+      ${studyCard()}
 
       <div class="actions sub">
         <button class="act ghost" data-action="viewGecko" data-id="${g.id}">${ic('look')}くわしく見る</button>
@@ -2003,7 +2006,7 @@
           <span class="row-side price">15</span>
         </button></div>`,
       interior: () => `<div class="shop-tabs two interior-switch" role="group" aria-label="インテリアの種類"><button class="${interiorSection === 'decor' ? 'on' : ''}" data-action="interiorSection" data-section="decor" aria-pressed="${interiorSection === 'decor'}">家具</button><button class="${interiorSection === 'cage' ? 'on' : ''}" data-action="interiorSection" data-section="cage" aria-pressed="${interiorSection === 'cage'}">ケース</button></div>${interiorSection === 'cage' ? cageShop() : interiorShop()}`,
-      other: () => `${speedShop()}
+      other: () => `${studyCard()}${speedShop()}
       <h3 class="h3">ケース <small class="muted">${S.geckos.length} / ${S.cases} 使用中</small></h3>
       <div class="list">
         <button class="row" data-action="buyCase" ${S.cases >= CASE_MAX || S.coins < casePrice() ? 'disabled' : ''}>
@@ -2017,6 +2020,72 @@
     setHTML($('#view-shop'), `<h2 class="h2">ショップ</h2>${tabs}${(sec[tab] || sec.leopa)()}`);
     if (tab === 'interior') fillThumbs();
   }
+
+  // ---- ちいさな子向け：小学1年生のさんすう・こくご
+  const STUDY_REWARD = 2, STUDY_DAILY_MAX = 10;
+  let studyRun = null, studySerial = 0;
+  function studyState() {
+    if (!S.study) S.study = { day: '', rewarded: 0, total: 0 };
+    if (S.study.day !== todayKey()) { S.study.day = todayKey(); S.study.rewarded = 0; }
+    return S.study;
+  }
+  function studyCard() {
+    if (!S.kids) return '';
+    const s = studyState();
+    return `<div class="card study-entry"><div><b>レオパと おべんきょう</b><p class="muted small">しょうがく1ねんせいの さんすう・こくご</p><small>きょうの ごほうび ${s.rewarded * STUDY_REWARD} / 20 コイン</small></div><button class="act primary" data-action="studyMenu">べんきょうする</button></div>`;
+  }
+  function studyMenu() {
+    if (!S.kids) return;
+    studyRun = null;
+    const s = studyState();
+    openSheet(`<div class="study-panel"><p class="eyebrow">ちいさな こむけ</p><h3 class="sheet-title">レオパと おべんきょう</h3><p>どちらを やってみる？ 1かい 5もんだよ。</p>
+      <div class="study-subjects"><button class="study-subject" data-action="studyStart" data-subject="math"><span aria-hidden="true">1＋2</span><b>さんすう</b><small>たしざん・ひきざん<br>かずの じゅんばん</small></button><button class="study-subject" data-action="studyStart" data-subject="language"><span aria-hidden="true">あいう</span><b>こくご</b><small>ひらがな・カタカナ<br>かんじの よみかた</small></button></div>
+      <p class="study-reward-note">1もん せいかいで 2コイン！<br>きょうは あと ${(STUDY_DAILY_MAX - s.rewarded) * STUDY_REWARD}コイン もらえるよ。</p>
+      <p class="muted small">ごほうびは 1にち 20コインまで。あとも なんかいでも れんしゅうできるよ。まちがえても だいじょうぶ。じかんの せいげんは ないよ。</p><button class="act ghost wide" data-action="closeSheet">ゲームに もどる</button></div>`);
+  }
+  function showStudyQuestion() {
+    if (!S.kids || !studyRun) return;
+    const r = studyRun, q = r.questions[r.index];
+    const dots = q.dots ? `<div class="study-dots" aria-hidden="true">${q.dots.map((n, i) => `<span class="study-dot-group ${i ? 'second' : ''}">${'<i></i>'.repeat(n)}</span>`).join('<b>＋</b>')}</div>` : '';
+    const message = r.solved ? `<b>せいかい！</b><p ${q.raw ? 'data-raw' : ''}>${esc(q.explanation)}</p><strong>${r.lastReward ? '＋2 コイン もらったよ！' : 'きょうの ごほうびは おしまい。れんしゅう できたね！'}</strong>` : r.wrong.length ? `<b>おしい！ もういちど やってみよう。</b><p>${esc(q.hint)}</p>` : 'こたえを 1つ えらんでね。';
+    openSheet(`<div class="study-panel"><p class="eyebrow">${r.subject === 'math' ? 'さんすう' : 'こくご'} ・ ${r.index + 1} / 5 もん</p><div class="study-progress" aria-label="${r.index + 1}もんめ">${r.questions.map((_, i) => `<i class="${i < r.index || i === r.index && r.solved ? 'done' : i === r.index ? 'current' : ''}"></i>`).join('')}</div>
+      <h3 class="study-prompt">${esc(q.prompt)}</h3>${q.expression ? `<div class="study-expression" ${q.raw ? 'data-raw' : ''}>${esc(q.expression)}</div>` : ''}${dots}
+      <div class="study-answers ${r.subject === 'language' ? 'words' : ''}" aria-label="こたえ">${q.choices.map((answer, i) => `<button class="study-answer ${r.solved && answer === q.answer ? 'correct' : ''}" data-action="studyAnswer" data-token="${r.token}" data-index="${i}" ${r.solved || r.wrong.includes(i) ? 'disabled' : ''}>${esc(answer)}</button>`).join('')}</div>
+      <div class="study-feedback ${r.solved ? 'success' : ''}" role="status" aria-live="polite">${message}</div>
+      ${r.solved ? `<button class="act primary wide" data-action="studyNext" data-token="${r.token}">${r.index === 4 ? 'けっかを みる' : 'つぎの もんだいへ'}</button>` : ''}
+      <button class="act ghost wide" data-action="studyMenu">べんきょうメニューに もどる</button></div>`);
+    const focus = $('#sheetBody .study-answer:not(:disabled), #sheetBody [data-action=studyNext]');
+    if (focus) focus.focus({ preventScroll: true });
+  }
+  Object.assign(ACTIONS, {
+    studyMenu,
+    studyStart(t) {
+      if (!S.kids) return;
+      const subject = t.dataset.subject, questions = window.LeopaStudy.makeRound(subject);
+      if (!questions.length) return;
+      studyRun = { subject, questions, index: 0, token: ++studySerial, solved: false, wrong: [], coins: 0, lastReward: 0 };
+      showStudyQuestion();
+    },
+    studyAnswer(t) {
+      const r = studyRun, i = Number(t.dataset.index);
+      if (!S.kids || saveLocked || !r || r.solved || Number(t.dataset.token) !== r.token || !Number.isInteger(i) || !r.questions[r.index].choices[i] || r.wrong.includes(i)) return;
+      const q = r.questions[r.index];
+      if (q.choices[i] !== q.answer) { r.wrong.push(i); showStudyQuestion(); return; }
+      r.solved = true;
+      const s = studyState();
+      r.lastReward = s.rewarded < STUDY_DAILY_MAX ? STUDY_REWARD : 0;
+      if (r.lastReward) { s.rewarded++; S.coins += r.lastReward; r.coins += r.lastReward; sfx('coin'); }
+      s.total++;
+      saveNow(); renderView(); showStudyQuestion();
+    },
+    studyNext(t) {
+      const r = studyRun;
+      if (!S.kids || !r || !r.solved || Number(t.dataset.token) !== r.token) return;
+      if (r.index < 4) { r.index++; r.token = ++studySerial; r.solved = false; r.wrong = []; r.lastReward = 0; showStudyQuestion(); return; }
+      const earned = r.coins; studyRun = null;
+      openSheet(`<div class="study-panel study-finish"><p class="eyebrow">おべんきょう おしまい</p><div class="study-stars" aria-hidden="true">★★★★★</div><h3 class="sheet-title">5もん とけたね！</h3><p>さいごまで よく がんばったね。</p><p class="study-reward-note">このかいで ${earned}コイン もらったよ！</p><p class="muted">おぼえたことを、また つかってみよう。</p><button class="act primary wide" data-action="studyMenu">ほかの もんだいも やってみる</button><button class="act ghost wide" data-action="closeSheet">レオパに あいにいく</button></div>`);
+    },
+  });
 
   // ---- はじめて開いたとき：①ホーム画面に追加 → ②文字モード → ようこそ
   function firstRun() {
