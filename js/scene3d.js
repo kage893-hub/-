@@ -1131,9 +1131,53 @@
     return { pos: acc(p.attributes.POSITION), idx: acc(p.indices) };
   }
 
+  // 模様の座標は変えず、鼻先の丸みと閉じた口の細い溝を形で表す。
+  function muzzleOutline(p) {
+    const front = smooth(clamp((p.z - 1.94) / 0.24, 0, 1));
+    p.x *= 1 + 0.18 * front;
+    p.z -= 0.075 * front;
+    p.y -= 0.012 * front * smooth(clamp((p.y - 0.45) / 0.11, 0, 1));
+    return p;
+  }
+  function sculptMuzzle(p, normal, nostrils) {
+    const original = p.clone();
+    const z = p.z;
+    muzzleOutline(p);
+    if (z < 1.63) return p;
+    const fade = smooth(clamp((z - 1.63) / 0.09, 0, 1));
+    const mouthY = 0.335 + 0.06 * smooth(clamp((2.1 - z) / 0.4, 0, 1));
+    const d = p.y - mouthY;
+    // 口の線を描き足さず、くぼみと控えめなくちびるの厚みで境界を作る。
+    let offset = fade * (-0.014 * Math.exp(-Math.pow(d / 0.011, 2))
+      + 0.004 * Math.exp(-Math.pow((d - 0.02) / 0.013, 2))
+      + 0.003 * Math.exp(-Math.pow((d + 0.018) / 0.013, 2)));
+    for (const n of nostrils) {
+      const r = original.distanceTo(n);
+      offset -= 0.019 * Math.exp(-Math.pow(r / 0.015, 2));
+      offset += 0.003 * Math.exp(-Math.pow((r - 0.023) / 0.008, 2));
+    }
+    return p.addScaledVector(normal, offset);
+  }
+
   function prepareModel(buf) {
     const { pos, idx } = parseGLB(buf);
     const n = pos.length / 3;
+    const base = new T.BufferGeometry();
+    base.setAttribute('position', new T.BufferAttribute(pos, 3));
+    base.setIndex(new T.BufferAttribute(idx, 1));
+    base.computeVertexNormals();
+    const normals = base.attributes.normal;
+    // 左右の鼻孔は、元のモデルの鼻先の表面に沿って位置を合わせる。
+    const nostrilPoints = [1, -1].map(side => {
+      const goal = toGame(side * 0.04, 0.018, 0.906);
+      let best = Infinity, nearest = goal;
+      for (let i = 0; i < n; i++) {
+        const q = toGame(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]);
+        const d = q.distanceToSquared(goal);
+        if (d < best) { best = d; nearest = q; }
+      }
+      return nearest;
+    });
     // 脚の見分け：前脚・後ろ脚のあたりで、体の外や下に出ている部分
     const legOf = (x, y, z) => {
       const out = Math.abs(x) > 0.135 || y < -0.085;
@@ -1210,7 +1254,8 @@
     for (let i = 0; i < n; i++) {
       const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
       const q = toGame(x, y, z);
-      P.set([q.x, q.y, q.z], i * 3);
+      const shaped = sculptMuzzle(q.clone(), V(normals.getX(i), normals.getY(i), normals.getZ(i)), nostrilPoints);
+      P.set([shaped.x, shaped.y, shaped.z], i * 3);
       const leg = legOf(x, y, z);
       // 脚は体の横と同じ色・模様にする（おなかの白にならないように）
       const th = leg ? (x > 0 ? 0.35 : Math.PI - 0.35) + (y + 0.05) * 3 * (x > 0 ? 1 : -1) : Math.atan2(y - centerY(z), x);
@@ -1220,6 +1265,7 @@
       CY[i] = toGame(0, centerY(z), z).y;
       if (leg) { const pv = toGame(...PIV[leg]); PV.set([pv.x, pv.y, pv.z], i * 3); }
     }
+    base.dispose();
     g.setAttribute('position', new T.BufferAttribute(P, 3));
     g.setAttribute('uv', new T.BufferAttribute(UV, 2));
     g.setAttribute('aLeg', new T.BufferAttribute(LEG, 1));
@@ -1251,7 +1297,7 @@
       return { side, C: toGame(side * (tip + EYE_OUT[side] - ER), cy, cz), dir: V(side, 0.25, 0.3).normalize() };
     });
     MODEL.eyeR = ER * MS;
-    MODEL.mouth = toGame(0, -0.03, 0.93);
+    MODEL.mouth = muzzleOutline(toGame(0, -0.03, 0.93));
     MODEL.head = toGame(0, 0.03, 0.78);
     MODEL.neck = toGame(0, 0.03, 0.58);
     MODEL.mid = toGame(0, 0.03, 0.1);
