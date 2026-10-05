@@ -30,7 +30,7 @@
 - セーブは localStorage の `leopa-together-v1`。**保存キーは変えない。** 新しい項目を足したら `migrate()` で古いデータを直す。
 - **モルフの見た目（art.js の色、scene3d.js の模様テクスチャ）は、ユーザーの確認なしに大きく変えない。** 30種は本物の写真（1体10枚）と見比べて調整ずみ（`08acbfc`）。以前の Codex の模様の作り直しは「採用しない」と決まっている。
 - 画面の文字は日本語。ひらがなモードは js/kids.js が自動で変換する。読みがおかしい・漢字が残るときは `D.w`（ことば → 読み）か `EASY` に足す。変換させない要素には `data-raw`。
-- おなかは「実時間 × 成長段階 × √（ゲームの速さ）」で減る。きれいさは実時間のみ。
+- おなかは「実時間 × 成長段階 × √（ゲームの速さ）」で減る。1倍速で90→30はベビー24時間・ヤング36時間・アダルト72時間。おなか60以下で成長が徐々に遅くなり、0で止まる。0の猶予は1倍速換算で12・24・48時間、その後しっぽの栄養がゆっくり減る。emptyH は空腹0の累積時間（√倍率で1倍速換算）。きれいさは実時間のみ。
 - 他人が撮った本物のレオパの写真（参考用）は、リポジトリにも試遊版にも入れない。
 - 素材はライセンスを確かめたものだけを使い、クレジット（app.js の `credits()`）に書く。いま使っているのは Quaternius・Kenney・Poly Haven（CC0）、Phosphor Icons（MIT）、Sketchfab の手（CC BY 4.0）、NASA の月の画像（パブリックドメイン）。
 
@@ -38,7 +38,7 @@
 - サーバー：`npx http-server -p 8123 -s -c-1 .`（つながらなくなったら起動しなおす）
 - Playwright ＋ Chromium、画面サイズ 390×844。swiftshader で 3D はとても遅い。
   - 起動の引数：`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`
-- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img）。最後の行が `[]` ならエラーなし。
+- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition）。最後の行が `[]` ならエラーなし。
   - 環境変数 `CHROME`（Chromium のパス）、`PLAYWRIGHT`（playwright モジュールのパス）、`BASE`（サーバーの URL）で、環境に合わせられる。
   - kids2 の `chip ghost:あきけーす 2` という出力は、いつも出るもので問題ない。
 - テスト用の入り口：`window.__leopaState()`（状態 S）、`window.__leopaTank()`（3D ケース。`_st` が内部状態）、`Leopa3D.itemPhoto(kind, id)`（ショップの見本写真。読みこみ中は null）。

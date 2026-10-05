@@ -10,7 +10,7 @@
 
   const SAVE_KEY = 'leopa-together-v1';
   const MIN = 60 * 1000, HOUR = 60 * MIN;
-  const RATE = { hunger: 5, clean: 3 }; // 1時間あたりに減る量
+  const RATE = { clean: 3 }; // 1時間あたりに減る量
   // 1倍速＝実際のレオパの成長（ベビーからアダルトまで約9か月）。速さはゲーム中に選べる
   const GROWTH = { perHour: 0.0216, young: 50, adult: 140, max: 260, shedEvery: 12 };
   const DAYMS = 24 * HOUR;
@@ -120,6 +120,7 @@
     for (const x of [...s.geckos, ...s.eggs, ...(s.offers || []), ...s.layBox, ...(s.special && s.special.offer ? [s.special.offer] : [])]) if (x.poly && x.poly.mel == null) x.poly.mel = Math.round(4 + Math.random() * 12);
     for (const g of s.geckos) if (g.gravid && g.gravid.dad && g.gravid.dad.poly && g.gravid.dad.poly.mel == null) g.gravid.dad.poly.mel = 8;
     s.learned = s.learned || {};
+    for (const g of s.geckos) if (!Number.isFinite(g.emptyH) || g.emptyH < 0) g.emptyH = 0;
     // 最初にお店からおむかえした2匹（アルバムに「ヤモリ堂」の記録がある子）にしるしをつける
     if (!s.starterFlag) { s.starterFlag = true; for (const g of s.geckos) if (((s.albums || {})[g.id] || { entries: [] }).entries.some(e => (e.text || '').includes('「ヤモリ堂」からおむかえした'))) g.starter = true; }
     // 過去の受取済み実績とチャンピオン優勝を記念品に引き継ぐ
@@ -191,7 +192,7 @@
     return {
       id: 'g' + (S.nextId++), name: o.name, sex: o.sex,
       genes: G.normGenes(o.genes || {}), tang: o.tang === undefined ? 20 : o.tang, poly: G.normPoly(o.poly),
-      growth: o.growth || 0, hunger: o.hunger === undefined ? 70 : o.hunger, clean: 100, tame: o.tame || 10,
+      growth: o.growth || 0, emptyH: 0, hunger: o.hunger === undefined ? 70 : o.hunger, clean: 100, tame: o.tame || 10,
       poop: 0, poopAt: 0, shedUntil: 0, gravid: null, restUntil: 0, handledAt: 0,
       seed: Math.floor(Math.random() * 1e9), gen: o.gen || 1, born: Date.now(), adopted: Date.now(), growth0: o.growth || 0,
       hatched: !!o.hatched, birthday: o.hatched ? Date.now() : Date.now() - estAgeDays(o.growth || 0) * 86400000, birthEst: !o.hatched,
@@ -255,15 +256,8 @@
     if (dtH < 0) S.lastTick = now;
     if (dtH > 0) {
       for (const g of S.geckos) {
-        // ベビーはおなかがすきやすく、おとなはゆっくり（ベビーは毎日、おとなは2〜3日に1回が目安）
-        const rh = RATE.hunger * HUNGER_K[stageOf(g)] * Math.sqrt(speedX()); // 速いほど、おなかも早くすく（速さの√倍）
-        const fedH = Math.max(0, Math.min(dtH, (g.hunger - 30) / rh));
-        g.hunger = clamp(g.hunger - rh * dtH);
+        advanceNutrition(g, dtH, now);
         g.clean = clamp(g.clean - RATE.clean * dtH);
-        // おなかが空いている時間が長いと、しっぽの栄養を使う
-        const hungryH = Math.max(0, dtH - fedH);
-        g.cond = clamp((g.cond == null ? 55 : g.cond) - hungryH * 0.6 * speedX() + (fedH > 0 && g.cond < 50 ? fedH * 0.1 * speedX() : 0));
-        if (fedH > 0) grow(g, fedH * GROWTH.perHour * speedX() * heatInfo(heatOf(g)).growth, now);
       }
       for (const g of S.geckos) checkSick(g, dtH * HOUR, now);
       S.lastTick = now;
@@ -290,6 +284,43 @@
         if (g.id === S.selected) toast(`${g.name}は、残ったえさが気になって落ちつかないみたい（なれ度 -2）。食べ残しは取り出そう`);
         learn('leftover');
       }
+    }
+  }
+  // 空腹の時間を区間で積分する。閉じていた間も、小刻みに遊んだ場合と同じ量を進める。
+  // emptyH は「おなか0」の時間を1倍速換算で保存する（空腹と同じ√倍率）。
+  const nutritionArea = h => h <= 60 ? h * h / 120 : h - 30;
+  const nutritionInverse = a => a <= 30 ? Math.sqrt(Math.max(0, a) * 120) : a + 30;
+  function advanceNutrition(g, hours, now) {
+    const pace = Math.sqrt(speedX());
+    let left = hours;
+    while (left > 1e-9) {
+      const stage = stageOf(g), rh = HUNGER_RATE[stage] * pace;
+      const start = g.hunger, end = Math.max(0, start - rh * left);
+      const effective = (nutritionArea(start) - nutritionArea(end)) / rh;
+      const growthRate = GROWTH.perHour * speedX() * heatInfo(heatOf(g)).growth * (g.sick ? 0.7 : 1) * (boneOf(g) < 30 ? 0.85 : 1);
+      const boundary = stage === 'baby' ? GROWTH.young : stage === 'young' ? GROWTH.adult : GROWTH.max;
+      let elapsed = left;
+      // 成長段階をまたぐ瞬間で区切り、その後は次の段階の空腹速度を使う。
+      if (g.growth < boundary && effective * growthRate > boundary - g.growth) {
+        const target = nutritionInverse(nutritionArea(start) - (boundary - g.growth) / growthRate * rh);
+        elapsed = Math.min(left, (start - target) / rh);
+      }
+      const hunger = Math.max(0, start - rh * elapsed);
+      const fed = (nutritionArea(start) - nutritionArea(hunger)) / rh;
+      const empty = Math.max(0, elapsed - start / rh);
+      const before = start > 0 ? 0 : (g.emptyH || 0);
+      const after = before + empty * pace;
+      const risk = Math.max(0, after - EMPTY_GRACE[stage]) - Math.max(0, before - EMPTY_GRACE[stage]);
+      g.emptyH = hunger > 0 ? 0 : after;
+      const reserve = g.cond == null ? 55 : g.cond;
+      g.cond = clamp(reserve - risk * RESERVE_LOSS[stage] + Math.min(Math.max(0, 55 - reserve), fed * 0.12 * pace));
+      g.hunger = hunger;
+      if (fed > 0 && g.growth < GROWTH.max) {
+        // 段階の境界に着いたときの浮動小数点の誤差を吸収する。
+        const atBoundary = elapsed < left;
+        grow(g, fed * GROWTH.perHour * speedX() * heatInfo(heatOf(g)).growth + (atBoundary ? 1e-10 : 0), now);
+      }
+      left -= elapsed;
     }
   }
   function grow(g, amt, now) {
@@ -568,7 +599,10 @@
   // ======================================================
   // 本物の飼育で大切なこと（まちがえても死なない。なぜダメかをやさしく教える）
   // ======================================================
-  const HUNGER_K = { baby: 1.2, young: 1, adult: 0.65 };
+  // 1倍速で90→30まで24時間・36時間・72時間。倍率の関係は従来どおり√倍。
+  const HUNGER_RATE = { baby: 60 / 24, young: 60 / 36, adult: 60 / 72 };
+  const EMPTY_GRACE = { baby: 12, young: 24, adult: 48 };
+  const RESERVE_LOSS = { baby: 0.06, young: 0.04, adult: 0.03 };
   const boneOf = g => (g.bone == null ? 50 : g.bone);
   // 体の大きさにくらべて大きすぎるえさ（ベビーにはコオロギS）
   const tooBig = (k, g) => stageOf(g) === 'baby' && (k === 'cricket' || k === 'dubia');
@@ -741,6 +775,7 @@
     g.wormRun = kind === 'worm' ? (g.wormRun || 0) + 1 : 0;
     const F = FOODS[kind];
     g.hunger = clamp(g.hunger + F.hunger);
+    if (g.hunger > 0) g.emptyH = 0;
     // しっぽの栄養：ミルワームは脂肪が多いので、たくさんあげるとぽっちゃりに
     g.cond = clamp((g.cond == null ? 55 : g.cond) + ({ cricketS: 0.8, cricket: 1.2, dubia: 1.6, worm: 3.2, paste: 1 })[kind] - (g.cond > 70 && kind !== 'worm' ? 0.6 : 0));
     grow(g, F.growth * (GROWTH.perHour / 6) * speedX() * heatInfo(heatOf(g)).growth, Date.now());
@@ -898,7 +933,8 @@
             <span class="row-main"><b>${F.name}${tooBig(k, g) ? ' <span class="tag warn">まだ大きい</span>' : ''}</b><small>${F.desc}</small></span>
             <span class="row-side">のこり ${S.food[k] || 0}</span>
           </button>`).join('')}</div>
-        <p class="muted small">${{ baby: 'ベビーは毎日', young: 'ヤングは1〜2日に1回', adult: 'おとなは2〜3日に1回' }[stageOf(g)]}が目安。えさは目と目の間の幅より小さいものを選ぼう。なくなったらショップで買えます。</p>`);
+        <p class="muted small">${{ baby: 'ベビーは毎日', young: 'ヤングは1〜2日に1回', adult: 'おとなは2〜3日に1回' }[stageOf(g)]}が目安。えさは目と目の間の幅より小さいものを選ぼう。なくなったらショップで買えます。</p>
+        <p class="muted small">いまは${speedX()}倍速。おなか90→30まで約${fmtLeft(60 / (HUNGER_RATE[stageOf(g)] * Math.sqrt(speedX())) * HOUR)}です。おなかを見て、空になりきる前にごはんをあげよう。</p>`);
     },
     dustToggle() { S.dust = !S.dust; if (S.dust && S.calc <= 0) toast('カルシウムがありません。ショップで買えます'); save(); ACTIONS.feedMenu(); },
     feedMode(t) { S.feedMode = t.dataset.m; save(); ACTIONS.feedMenu(); },
@@ -1707,7 +1743,7 @@
         ${weightCard(g)}
         ${healthCard(g)}
         ${datesCard(g)}
-        <p class="muted small">${st === 'adult' ? (g.growth >= GROWTH.max ? 'りっぱなおとなです' : 'おとなになりました。ペアリングできます') : `${STAGE_LABEL[st === 'baby' ? 'young' : 'adult']}まで あと${fmtLeft((next - g.growth) / (GROWTH.perHour * speedX() * heatInfo(heatOf(g)).growth) * HOUR)}ほど（ごはんを食べていれば）`}${g.hunger <= 30 ? ' ・ おなかが空いていると成長が止まります' : ''}</p>
+        <p class="muted small">${st === 'adult' ? (g.growth >= GROWTH.max ? 'りっぱなおとなです' : 'おとなになりました。ペアリングできます') : `${STAGE_LABEL[st === 'baby' ? 'young' : 'adult']}まで あと${fmtLeft((next - g.growth) / (GROWTH.perHour * speedX() * heatInfo(heatOf(g)).growth) * HOUR)}ほど（ごはんを食べていれば）`}${g.hunger === 0 ? ' ・ おなか0が続くと、しっぽの栄養を使って少しずつ体重が減ります' : g.hunger < 60 ? ' ・ 空腹になるにつれて成長がゆっくりになります' : ''}</p>
       </div>
       ${dailyCard()}
 
