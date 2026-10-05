@@ -1079,7 +1079,7 @@
 
   function disposeGecko(gk) {
     gk.root.traverse(o => {
-      if (o.geometry && o.geometry !== MODEL.geo) o.geometry.dispose();
+      if (o.geometry && o.geometry !== MODEL.geo && o.geometry !== MODEL.claws) o.geometry.dispose();
       if (o.material) o.material.dispose();
     });
     gk.owned.forEach(t => t.dispose());
@@ -1159,6 +1159,102 @@
     return p.addScaledVector(normal, offset);
   }
 
+  // 同じモデルの5本の指を使い、短い内側の指と長い中央の指を区別する。
+  const FOOT_SHAPE = {
+    front: { palm: [0.216, -0.123, 0.438], tips: [[0.146, 0.387, 0.72], [0.171, 0.499, 0.92], [0.245, 0.503, 1.14], [0.303, 0.449, 1.02], [0.241, 0.370, 0.80]] },
+    rear: { palm: [0.330, -0.133, -0.193], tips: [[0.305, -0.124, 0.80], [0.380, -0.130, 0.96], [0.417, -0.190, 1.03], [0.388, -0.259, 1.08], [0.311, -0.267, 0.86]] },
+  };
+  function prepareFeet(pos, legOf) {
+    const feet = {};
+    for (const leg of [1, 2, 3, 4]) {
+      const front = leg < 3, side = leg === 1 || leg === 3 ? -1 : 1;
+      const cfg = FOOT_SHAPE[front ? 'front' : 'rear'];
+      const points = [];
+      let minY = Infinity;
+      for (let i = 0; i < pos.length; i += 3) {
+        const x = pos[i], y = pos[i + 1], z = pos[i + 2];
+        if (legOf(x, y, z) !== leg || y > -0.10) continue;
+        points.push([x, y, z]); minY = Math.min(minY, y);
+      }
+      const palm = toGame(side * cfg.palm[0], cfg.palm[1], cfg.palm[2]);
+      const digits = cfg.tips.map(([x, z, length], i) => {
+        // モデルの左右差に合わせ、各指の先端位置を表面から求める。
+        const near = points.slice().sort((a, b) => Math.hypot(a[0] - side * x, a[2] - z) - Math.hypot(b[0] - side * x, b[2] - z)).slice(0, 8);
+        const center = near.reduce((sum, p) => sum.add(toGame(...p)), V(0, 0, 0)).multiplyScalar(1 / near.length);
+        const tip = center, dir = tip.clone().sub(palm).setY(0);
+        const span = dir.length(); dir.normalize();
+        return { tip, dir, span, length, bend: (i % 2 ? 1 : -1) * side * 0.012 };
+      });
+      feet[leg] = { front, side, palm, digits, floorShift: (minY + MY) * MS - 0.002 };
+    }
+    return feet;
+  }
+  function sculptLeg(p, normal, rawY, foot) {
+    // 前腕・足首を細くし、太ももや付け根の厚みは残す。
+    const ankle = Math.exp(-Math.pow((p.y - 0.21) / 0.13, 2));
+    p.addScaledVector(normal, -(foot.front ? 0.018 : 0.014) * ankle);
+    const grounded = smooth(clamp((-0.08 - rawY) / 0.04, 0, 1));
+    p.y -= foot.floorShift * grounded;
+    if (rawY < -0.105) {
+      const q = p.clone().sub(foot.palm).setY(0);
+      let nearest = null, best = Infinity, progress = 0;
+      for (const d of foot.digits) {
+        const t = q.dot(d.dir) / d.span;
+        if (t < 0.18 || t > 1.16) continue;
+        const distance = q.clone().addScaledVector(d.dir, -t * d.span).length();
+        if (distance < best) { best = distance; nearest = d; progress = t; }
+      }
+      if (nearest && best < 0.048) {
+        const d = nearest, t = clamp(progress, 0, 1);
+        const weight = (1 - smooth(clamp((best - 0.025) / 0.023, 0, 1))) * smooth(clamp((t - 0.18) / 0.82, 0, 1));
+        p.addScaledVector(d.dir, d.span * (d.length - 1) * weight);
+        const bend = d.bend * Math.sin(t * Math.PI) * weight;
+        p.x += d.dir.z * bend; p.z -= d.dir.x * bend;
+        // 指の腹は床に沿わせ、関節には控えめな丸みを付ける。
+        p.y += 0.006 * Math.pow(Math.sin(t * Math.PI * 2), 2) * weight;
+        const across = q.x * d.dir.z - q.z * d.dir.x;
+        p.x -= d.dir.z * across * 0.18 * weight;
+        p.z += d.dir.x * across * 0.18 * weight;
+      }
+    }
+    p.y = Math.max(0.002, p.y);
+    return p;
+  }
+  function makeClaws(feet, pivots) {
+    const positions = [], legs = [], pivotData = [], centers = [], indices = [];
+    for (const [key, foot] of Object.entries(feet)) {
+      const leg = Number(key), pv = toGame(...pivots[leg]);
+      for (const d of foot.digits) {
+        const rawY = d.tip.y / MS - MY;
+        const start = sculptLeg(d.tip.clone(), V(0, 0, 0), rawY, foot);
+        start.addScaledVector(d.dir, -0.006);
+        start.y += 0.006;
+        const length = foot.front ? 0.026 : 0.032, base = positions.length / 3;
+        for (let k = 0; k <= 5; k++) {
+          const t = k / 5, radius = 0.006 * Math.pow(1 - t, 0.8) + 0.0004;
+          const c = start.clone().addScaledVector(d.dir, length * t);
+          c.y = Math.max(0.003, start.y - 0.012 * t * t);
+          for (let j = 0; j <= 8; j++) {
+            const a = j / 8 * Math.PI * 2;
+            positions.push(c.x + d.dir.z * radius * Math.cos(a), c.y + radius * Math.sin(a), c.z - d.dir.x * radius * Math.cos(a));
+            legs.push(leg); pivotData.push(pv.x, pv.y, pv.z); centers.push(foot.palm.y);
+            if (k < 5 && j < 8) {
+              const at = base + k * 9 + j;
+              indices.push(at, at + 1, at + 9, at + 1, at + 10, at + 9);
+            }
+          }
+        }
+      }
+    }
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('aLeg', new T.Float32BufferAttribute(legs, 1));
+    geo.setAttribute('aPivot', new T.Float32BufferAttribute(pivotData, 3));
+    geo.setAttribute('aCy', new T.Float32BufferAttribute(centers, 1));
+    geo.setIndex(indices); geo.computeVertexNormals();
+    return geo;
+  }
+
   function prepareModel(buf) {
     const { pos, idx } = parseGLB(buf);
     const n = pos.length / 3;
@@ -1186,6 +1282,7 @@
       return 0;
     };
     const PIV = { 1: [-0.12, 0, 0.43], 2: [0.12, 0, 0.43], 3: [-0.13, -0.01, -0.18], 4: [0.13, -0.01, -0.18] };
+    const feet = prepareFeet(pos, legOf);
     // 体の中心の高さ（輪切りごと）
     const BIN = 0.025, bins = {};
     for (let i = 0; i < n; i++) {
@@ -1255,8 +1352,9 @@
       const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
       const q = toGame(x, y, z);
       const shaped = sculptMuzzle(q.clone(), V(normals.getX(i), normals.getY(i), normals.getZ(i)), nostrilPoints);
-      P.set([shaped.x, shaped.y, shaped.z], i * 3);
       const leg = legOf(x, y, z);
+      if (leg) sculptLeg(shaped, V(normals.getX(i), normals.getY(i), normals.getZ(i)), y, feet[leg]);
+      P.set([shaped.x, shaped.y, shaped.z], i * 3);
       // 脚は体の横と同じ色・模様にする（おなかの白にならないように）
       const th = leg ? (x > 0 ? 0.35 : Math.PI - 0.35) + (y + 0.05) * 3 * (x > 0 ? 1 : -1) : Math.atan2(y - centerY(z), x);
       UV[i * 2] = leg ? thToU(th) : uOf(th, z);
@@ -1281,6 +1379,7 @@
       if (Math.max(...u) - Math.min(...u) > 0.5) for (let k = 0; k < 3; k++) if (u[k] < 0.5) uv.setX(t + k, u[k] + 1);
     }
     MODEL.geo = geo;
+    MODEL.claws = makeClaws(feet, PIV);
     // 目：左右それぞれ、モデルの目の盛り上がりを測って眼球を合わせる（左右で形が少しちがうため）
     const ER = 0.034;
     // モデルの目の盛り上がりから、眼球をどれだけ外へ出すか（モデルの左右差に合わせて別々に）
@@ -1366,7 +1465,11 @@
       w += uBend * bz * bz * (bz > 0.0 ? 0.07 : 0.04);
       p.x += w;
       if (aLeg < 0.5) p.x *= 1.0 + uBreathe * 0.025 * smoothstep(1.2, 0.8, p.z) * smoothstep(-1.6, -1.1, p.z);
-      p.y -= uDrop;
+      // 体を低くして休むときも、指先は接地を保ち、足首側で曲がる。
+      float settle = aLeg > 0.5 ? smoothstep(0.035, 0.18, position.y) : 1.0;
+      p.y -= uDrop > 0.0 ? uDrop * settle : uDrop;
+      // 指先と爪は、休憩や歩行の姿勢でも床の下へ突き抜けない。
+      if (aLeg > 0.5) p.y = max(0.002, p.y);
       return p;
     }`;
   function deformPoint(p, U) {
@@ -1456,6 +1559,12 @@
     const rootG = new T.Group();
     rootG.add(mesh);
 
+    // 小さな爪。体の模様を変更せず、脚と同じ変形で追従させる。
+    const clawU = Object.assign({}, U, { uWhiteFeet: { value: 0 } });
+    const clawMesh = new T.Mesh(MODEL.claws, deformMaterial(phys('#E6DECE', { roughness: 0.38, clearcoat: 0.15 }), clawU));
+    clawMesh.frustumCulled = false;
+    rootG.add(clawMesh);
+
     // 目：虹彩＋濡れた角膜＋キャッチライト、まばたき用のまぶた
     const eyeKey = [pal.eye, pal.pupil, pal.solid, (look.seed || 0) % 7].join('|');
     const eyeTex = [false, true].map(d => cachedTex(irisCache, eyeKey + '|' + d, () => canvasTexture(irisCanvas(pal, d, (look.seed || 0) % 7), { srgb: true }), 24));
@@ -1492,7 +1601,7 @@
     rootG.add(mouthIn);
     rootG.traverse(o => { if (o.isMesh && o !== mesh) o.castShadow = false; });
     const gk = {
-      glb: true, root: rootG, mesh, U, eyes, lids, eyeMat, corneaMat, eyeTex, bones, mouth, legs: [],
+      glb: true, root: rootG, mesh, clawMesh, U, eyes, lids, eyeMat, corneaMat, eyeTex, bones, mouth, legs: [],
       owned: [], dilated: false, tongue, mouthIn,
     };
     pose(gk, restPose());
