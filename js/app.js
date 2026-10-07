@@ -792,6 +792,14 @@
     save();
   }
   function pendingHunger() { return tank ? tank.pendingFoods().reduce((s, k) => s + FOODS[k].hunger, 0) : 0; }
+  function bulkFeedLimit(g, kind) {
+    if (!g || !FOODS[kind] || tooBig(kind, g)) return 0;
+    const sp = g.shedUntil ? shedProgress(g, Date.now()) : -1;
+    if (sp >= 0 && sp < 0.6 || kind === 'paste' && !(g.pasteOk > 0)) return 0;
+    // 一匹ずつあげるときと同じ、おなか90で満腹。未捕食分を予約し、100を超える分も入れない。
+    const total = g.hunger + pendingHunger(), portion = FOODS[kind].hunger;
+    return Math.min(S.food[kind] || 0, Math.max(0, Math.min(Math.ceil((90 - total) / portion), Math.floor((100 - total) / portion))));
+  }
 
   function pairBlock(g, now) {
     if (stageOf(g) !== 'adult') return `まだアダルトではありません（せいちょう ${Math.floor(g.growth)} / ${GROWTH.adult}）`;
@@ -931,12 +939,24 @@
           <span class="row-main"><b>カルシウムをまぶす</b><small>${S.calc > 0 ? `のこり ${S.calc}回 ・ 骨を強くするために、ごはんに粉をまぶします` : 'カルシウムがありません。ショップの「ごはん」で買えます'}</small></span>
           <span class="switch" aria-hidden="true"><i></i></span>
         </button>
-        <div class="list">${Object.entries(FOODS).map(([k, F]) => `
+        ${!tw ? '<p class="muted small">まとめて入れる数は、おなか・ケースにあるごはん・のこりの数に合わせます。食べるか心配なときは、1つずつ様子をみよう。</p>' : ''}
+        <div class="list">${Object.entries(FOODS).map(([k, F]) => tw ? `
           <button class="row" data-action="feed" data-kind="${k}" ${full || !S.food[k] ? 'disabled' : ''}>
             <span class="row-art">${A.food(k)}</span>
             <span class="row-main"><b>${F.name}${tooBig(k, g) ? ' <span class="tag warn">まだ大きい</span>' : ''}</b><small>${F.desc}</small></span>
             <span class="row-side">のこり ${S.food[k] || 0}</span>
-          </button>`).join('')}</div>
+          </button>` : (() => {
+            const limit = bulkFeedLimit(g, k), unit = F.unit || '匹';
+            return `<div class="row static feed-row">
+              <span class="row-art">${A.food(k)}</span>
+              <span class="row-main"><b>${F.name}${tooBig(k, g) ? ' <span class="tag warn">まだ大きい</span>' : ''}</b><small>のこり ${S.food[k] || 0}${unit} ・ ${F.desc}</small></span>
+              <div class="feed-buttons">
+                <button class="act ghost" data-action="feed" data-kind="${k}" ${full || !S.food[k] ? 'disabled' : ''}>1${unit}</button>
+                <button class="act primary" data-action="feed" data-kind="${k}" data-bulk="1" ${limit < 2 ? 'disabled' : ''}>${limit > 0 ? `まとめて ${limit}${unit}` : 'まとめて入れる'}</button>
+              </div>
+              ${!full && S.food[k] > 0 && limit === 0 ? '<small class="feed-caution">1つずつ様子をみよう</small>' : ''}
+            </div>`;
+          })()).join('')}</div>
         <p class="muted small">${{ baby: 'ベビーは毎日', young: 'ヤングは1〜2日に1回', adult: 'おとなは2〜3日に1回' }[stageOf(g)]}が目安。えさは目と目の間の幅より小さいものを選ぼう。なくなったらショップで買えます。</p>
         <p class="muted small">いまは${speedX()}倍速。おなか90→30まで約${fmtLeft(60 / (HUNGER_RATE[stageOf(g)] * Math.sqrt(speedX())) * HOUR)}です。おなかを見て、空になりきる前にごはんをあげよう。</p>`);
     },
@@ -947,31 +967,37 @@
       const k = t.dataset.kind;
       if (!g || !S.food[k]) return;
       if (g.hunger + pendingHunger() >= 90) { toast('おなかいっぱいみたい'); return; }
-      S.food[k]--;
+      const bulk = t.dataset.bulk === '1' && S.feedMode !== 'tw';
+      const count = bulk ? bulkFeedLimit(g, k) : 1;
+      if (!count) { toast('このごはんは、1つずつ様子をみよう'); ACTIONS.feedMenu(); return; }
       closeSheet();
-      // 練り餌にはもともとカルシウムが入っているので、まぶさない
-      const dust = !!S.dust && S.calc > 0 && k !== 'paste';
-      if (dust) S.calc--;
-      // 食べないことがある：ベビーに大きすぎるえさ／脱皮の前
-      const sp = g.shedUntil ? shedProgress(g, Date.now()) : -1;
-      // 練り餌は、においになれるまで食べないことがある（ピンセットで目の前にゆらすと食べてくれる）
-      const pasteNo = k === 'paste' && !(g.pasteOk > 0) && S.feedMode !== 'tw' && Math.random() < 0.6;
-      const refuse = tooBig(k, g) ? 'size' : sp >= 0 && sp < 0.6 && Math.random() < 0.5 ? 'appetite' : pasteNo ? 'paste' : '';
-      if (refuse) {
-        g.left = (g.left || []).concat(k);
-        learn(refuse === 'paste' ? 'paste' : refuse);
-        if (tank) { tank.setLeftovers(g.left); }
-        toast(refuse === 'size' ? `${FOODS[k].name}は大きすぎて食べられないみたい。えさは目と目の間の幅より小さいものを。食べ残しはタップして取り出そう`
-          : refuse === 'paste' ? `${g.name}は練り餌のにおいに、まだなれていないみたい。ピンセットで目の前にゆらすと、食べてくれることがあるよ`
-          : `${g.name}は脱皮の前で、食欲がないみたい。食べ残しはタップして取り出そう`);
-        renderView(); save();
-        return;
+      for (let i = 0; i < count; i++) {
+        S.food[k]--;
+        // 練り餌にはもともとカルシウムが入っているので、まぶさない
+        const dust = !!S.dust && S.calc > 0 && k !== 'paste';
+        if (dust) S.calc--;
+        // 食べないことがある：ベビーに大きすぎるえさ／脱皮の前
+        const sp = g.shedUntil ? shedProgress(g, Date.now()) : -1;
+        // 練り餌は、においになれるまで食べないことがある（ピンセットで目の前にゆらすと食べてくれる）
+        const pasteNo = k === 'paste' && !(g.pasteOk > 0) && S.feedMode !== 'tw' && Math.random() < 0.6;
+        const refuse = tooBig(k, g) ? 'size' : sp >= 0 && sp < 0.6 && Math.random() < 0.5 ? 'appetite' : pasteNo ? 'paste' : '';
+        if (refuse) {
+          g.left = (g.left || []).concat(k);
+          learn(refuse === 'paste' ? 'paste' : refuse);
+          if (tank) { tank.setLeftovers(g.left); }
+          toast(refuse === 'size' ? `${FOODS[k].name}は大きすぎて食べられないみたい。えさは目と目の間の幅より小さいものを。食べ残しはタップして取り出そう`
+            : refuse === 'paste' ? `${g.name}は練り餌のにおいに、まだなれていないみたい。ピンセットで目の前にゆらすと、食べてくれることがあるよ`
+            : `${g.name}は脱皮の前で、食欲がないみたい。食べ残しはタップして取り出そう`);
+          renderView(); save();
+          return;
+        }
+        if (tank && S.feedMode === 'tw') {
+          tank.startTweezers(k, { dust });
+          if (!S.twHint) { S.twHint = true; toast('画面を指でこすると、ピンセットのエサがゆれます。ゆらして気づかせよう'); }
+        } else if (tank) tank.spawnFood(k, { dust });
+        else applyEat(g, k, dust);
       }
-      if (tank && S.feedMode === 'tw') {
-        tank.startTweezers(k, { dust });
-        if (!S.twHint) { S.twHint = true; toast('画面を指でこすると、ピンセットのエサがゆれます。ゆらして気づかせよう'); }
-      } else if (tank) tank.spawnFood(k, { dust });
-      else applyEat(g, k, dust);
+      if (bulk) toast(`${FOODS[k].name}を${count}${FOODS[k].unit || '匹'}、ケースに入れました`);
       save();
     },
     poop() {

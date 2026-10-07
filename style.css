@@ -231,6 +231,13 @@ button { font: inherit; color: inherit; }
 .row-side { flex: none; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .row-side.price, .item-side.price { font-weight: 700; color: var(--ink); display: inline-flex; align-items: center; gap: 4px; }
 .row-side.price::before, .item-side.price::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #FBE39A, #D9A12A 70%); }
+.feed-row { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px 12px; }
+.feed-row:active { transform: none; }
+.feed-buttons { grid-column: 1 / -1; display: flex; gap: 8px; }
+.feed-buttons .act { min-height: 44px; }
+.feed-buttons .ghost { flex: none; min-width: 72px; }
+.feed-buttons .primary { flex: 1; }
+.feed-caution { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px; }
 .rename { display: grid; gap: 8px; }
 .rename label { font-size: 13px; color: var(--muted); }
 .rename input { font: inherit; font-size: 17px; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); }
