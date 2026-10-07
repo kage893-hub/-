@@ -45,7 +45,8 @@
 - サーバー：`npx http-server -p 8123 -s -c-1 .`（つながらなくなったら起動しなおす）
 - Playwright ＋ Chromium、画面サイズ 390×844。swiftshader で 3D はとても遅い。
   - 起動の引数：`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`
-- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition・study・family・behavior）。最後の行が `[]` ならエラーなし。
+- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition・study・family・behavior・movement）。最後の行が `[]` ならエラーなし。
+  - movement は足の接地・旋回・後ずさり・前足だけの掘り動作・待機中のしぐさを検査する。接地情報は表示中だけの一時データで、セーブには足さない。
   - 環境変数 `CHROME`（Chromium のパス）、`PLAYWRIGHT`（playwright モジュールのパス）、`BASE`（サーバーの URL）で、環境に合わせられる。
   - kids2 の `chip ghost:あきけーす 2` という出力は、いつも出るもので問題ない。
 - テスト用の入り口：`window.__leopaState()`（状態 S）、`window.__leopaTank()`（3D ケース。`_st` が内部状態）、`Leopa3D.itemPhoto(kind, id)`（ショップの見本写真。読みこみ中は null）。

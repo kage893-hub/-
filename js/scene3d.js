@@ -1010,6 +1010,77 @@
     return { t: 0, phase: 0, walk: 0, look: 0, pitch: 0, tilt: 0, curl: 0, stalk: 0, happy: 0, drop: 0.04, blink: 0, tongue: 0, breathe: 0, sway: 0 };
   }
 
+  // 4本の足の接地を保ち、持ち上げた足だけを次の位置へ運ぶ。
+  // レオパの水平歩行の計測では、周期の約70〜78%を接地に使う。
+  // Jagnandan & Higham (2017), doi:10.1038/s41598-017-11484-7, Table 1。
+  // 数値をそのまま飼育中の速さに固定せず、ゆっくりした移動にも距離で同期させる。
+  const FOOT_TIMING = [{ off: 0, duty: 0.72 }, { off: 0.5, duty: 0.72 }, { off: 0.58, duty: 0.78 }, { off: 0.08, duty: 0.78 }];
+  function stepFeet(g, dt, motion, floorAt) {
+    const gk = g.gk;
+    if (!gk || !gk.glb) return;
+    const scale = gk.root.scale.x, distance = Math.hypot(motion.dx, motion.dz);
+    const travel = distance + Math.abs(motion.dyaw) * 0.55 * scale;
+    const moving = travel > 0.00001;
+    const reset = !g.gait || g.gait.model !== gk || distance > scale * 0.9;
+    gk.root.updateMatrixWorld(true);
+    if (reset) {
+      g.phase = 0.28 * Math.PI * 2;
+      g.gait = { model: gk, rate: 0, feet: MODEL.feet.map(home => {
+        const at = gk.root.localToWorld(home.clone());
+        at.y = floorAt(at.x, at.z) + home.y * scale;
+        return { at, from: at.clone(), to: at.clone(), air: false, progress: 0 };
+      }) };
+    }
+    const gait = g.gait;
+    const rate = travel / Math.max(dt, 0.001) / (0.88 * scale) * Math.PI * 2;
+    if (moving && !reset) gait.rate = Math.min(16, rate);
+    const settling = gait.feet.some(f => f.air);
+    g.phase += moving && !reset ? rate * dt : settling ? Math.max(3, gait.rate) * dt : 0;
+    g.walkW = lerp(g.walkW || 0, moving && !reset ? clamp(travel / dt / scale / 0.85, 0, 1) : 0, 1 - Math.exp(-dt * 9));
+    const direction = V(motion.dx, 0, motion.dz).normalize();
+    const forwardShare = travel > 0 ? distance / travel : 0;
+    const yawRate = clamp(motion.dyaw / dt, -2.5, 2.5);
+    const U = gk.U;
+    U.uPlant.value = 1;
+    for (let i = 0; i < 4; i++) {
+      const home = MODEL.feet[i], f = gait.feet[i], timing = FOOT_TIMING[i];
+      const q = ((g.phase / (Math.PI * 2) + timing.off) % 1 + 1) % 1;
+      const swing = q >= timing.duty;
+      const local = gk.root.worldToLocal(f.at.clone());
+      const overreach = Math.hypot(local.x - home.x, local.z - home.z) > (i < 2 ? 0.42 : 0.51);
+      if (!f.air && (swing || overreach) && moving && !reset && gait.feet.filter(f => f.air).length < 2) {
+        f.air = true; f.progress = 0; f.start = g.phase;
+        f.duration = (swing ? 1 - q : 0.20) * Math.PI * 2;
+        f.from.copy(f.at);
+        // 行き先には移動と旋回の両方を使う。後ずさりでも足が逆へ運ばれる。
+        f.to.copy(home).applyAxisAngle(V(0, 1, 0), yawRate * 0.22);
+        gk.root.localToWorld(f.to);
+        // 速さではなく残りの歩幅から予測する。ゆっくり歩く時にも足を後ろに置きすぎない。
+        const lead = direction.clone().multiplyScalar(0.88 * scale * ((swing ? 1 - q : 0.20) + timing.duty / 2) * forwardShare);
+        f.to.add(lead);
+        f.to.y = floorAt(f.to.x, f.to.z) + home.y * scale;
+      }
+      if (f.air) {
+        f.progress = clamp((g.phase - f.start) / Math.max(0.06, f.duration), 0, 1);
+        f.at.copy(f.from).lerp(f.to, smooth(f.progress));
+        f.at.y += Math.sin(f.progress * Math.PI) * (i < 2 ? 0.10 : 0.12) * scale;
+        if (f.progress >= 1) { f.at.copy(f.to); f.air = false; }
+      }
+      // 静止中は接地点を更新しない。家具や手の高さだけは追従する。
+      if (!f.air) f.at.y = floorAt(f.at.x, f.at.z) + home.y * scale;
+      const target = gk.root.worldToLocal(f.at.clone());
+      // ほるときは前足だけを交互に引く。後ろ足は体を支える。
+      const dig = g.ap && g.ap.churn || 0;
+      if (i < 2 && dig > 0.001) {
+        const ph = g.t * 8 + i * Math.PI;
+        const digging = home.clone();
+        digging.z += 0.15 * Math.cos(ph); digging.y += Math.max(0, Math.sin(ph)) * 0.09;
+        target.lerp(digging, dig);
+      }
+      U.uFootTarget.value[i].copy(target);
+    }
+  }
+
   // まぶた：開いているときは、ふちが皮ふの下にかくれる角度まで引っこむ
   const LID_OPEN = 1.1, LID_SHUT_UP = 0.06, LID_SHUT_LO = -0.02;
   const _p = new T.Vector3();
@@ -1380,6 +1451,8 @@
     }
     MODEL.geo = geo;
     MODEL.claws = makeClaws(feet, PIV);
+    // 手のひら・足のひらの中心。造形は変えず、接地位置の計算に使う。
+    MODEL.feet = [1, 2, 3, 4].map(leg => V(feet[leg].palm.x, 0.035, feet[leg].palm.z));
     // 目：左右それぞれ、モデルの目の盛り上がりを測って眼球を合わせる（左右で形が少しちがうため）
     const ER = 0.034;
     // モデルの目の盛り上がりから、眼球をどれだけ外へ出すか（モデルの左右差に合わせて別々に）
@@ -1406,6 +1479,8 @@
   // 形の曲げ方（描画側 GLSL と、眼球などの位置合わせ用 JS で同じ式を使う）
   const DEFORM_GLSL = `
     uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop, uTailFat, uTailLift, uBend, uJaw, uWag, uWhiteFeet, uFeetFrom;
+    uniform float uPlant;
+    uniform vec3 uFootHome[4], uFootTarget[4];
     // 実物のレオパにあわせたしっぽ：長さは頭からお尻までの約0.8倍、いちばん太いところは首くらいの太さ
     #define TAIL_V -1.55
     #define TAIL_STRETCH 1.6
@@ -1418,21 +1493,12 @@
     vec3 rotY(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(c * q.x + s * q.z, q.y, -s * q.x + c * q.z); }
     vec3 rotX(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(q.x, c * q.y - s * q.z, s * q.y + c * q.z); }
     vec3 rotZ(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(c * q.x - s * q.y, s * q.x + c * q.y, q.z); }
-    vec3 leoDeform(vec3 p) {
+    vec3 leoWarp(vec3 p, float leg, float cy) {
       if (p.z < TAIL_V) p.z = TAIL_V + (p.z - TAIL_V) * TAIL_STRETCH;
       // 坂をのぼるときは、しっぽが床にめりこまないように持ちあげる
       if (p.z < TAIL_V) p.y += (TAIL_V - p.z) / 2.93 * uTailLift;
-      if (aLeg > 0.5) {
-        float off = (aLeg < 1.5 || aLeg > 3.5) ? 0.0 : 3.14159;
-        float ph = uPhase + off;
-        float fr = aLeg < 2.5 ? 1.0 : -1.0;
-        vec3 q = rotY(p - aPivot, -0.45 * cos(ph) * uWalk * sign(aPivot.x) * fr);
-        float reach = clamp(length(q.xz) / 0.6, 0.0, 1.0);
-        q.y += max(0.0, -sin(ph)) * uWalk * 0.12 * reach;
-        p = aPivot + q;
-      }
       // あくび：下あごを下へひらく
-      if (uJaw > 0.001 && aLeg < 0.5) {
+      if (uJaw > 0.001 && leg < 0.5) {
         float jy = 0.335 + (2.15 - p.z) * 0.06;
         float jw = smoothstep(1.5, 1.78, p.z) * (1.0 - smoothstep(jy - 0.025, jy + 0.025, p.y));
         vec3 hinge = vec3(0.0, 0.36, 1.58);
@@ -1446,17 +1512,19 @@
       }
       // しっぽの付け根の太さ（栄養をためている具合）
       // レオパらしい、栄養をためたぶりっと太いしっぽ（付け根から先へ、にんじんのように細くなる）
-      if (aLeg < 0.5) {
+      if (leg < 0.5) {
         float tu = clamp((TAIL_V + 0.15 - p.z) / 3.0, 0.0, 1.0);
         float tf = smoothstep(0.0, 0.14, tu) * (1.0 - 0.92 * smoothstep(0.3, 1.0, tu));
         float tk = tf * (TAIL_BASE + uTailFat);
         p.x *= 1.0 + tk;
-        p.y = aCy + (p.y - aCy) * (1.0 + tk * 0.35);
+        p.y = cy + (p.y - cy) * (1.0 + tk * 0.35);
       }
       float body = 1.0 - smoothstep(0.8, 1.35, p.z);
-      float w = uWalk * 0.16 * sin(uPhase - p.z * 1.4) * (0.4 + 0.6 * smoothstep(1.2, -1.5, p.z)) * body;
+      // 胴は肩と腰が逆向きに振れる定常波。頭の振れは小さくする。
+      float w = uWalk * 0.095 * sin(uPhase) * clamp(-p.z * 0.8, -1.0, 1.0) * body;
       float tt = clamp((-1.4 - p.z) / 3.1, 0.0, 1.0);
-      w += tt * tt * (uCurl * 1.4 + 0.12 * sin(uT * 1.2 - p.z * 1.5) * (1.0 - uWalk) + uHappy * 0.3 * sin(uT * 9.0 - p.z * 2.0));
+      // 尾は歩行に遅れて動く。休憩中に絶えず振り続けない。
+      w += tt * tt * (uCurl * 1.4 + uWalk * 0.16 * sin(uPhase - tt * 2.6) + uHappy * 0.025 * sin(uT * 3.0 - p.z));
       w += step(0.55, tt) * uStalk * 0.06 * sin(uT * 28.0 - p.z * 4.0);
       // 興味があるときの、ゆっくりしたしっぽのゆらゆら
       w += tt * tt * uWag * 0.35 * sin(uT * 3.2 - p.z * 1.2);
@@ -1464,13 +1532,40 @@
       float bz = p.z - 0.3;
       w += uBend * bz * bz * (bz > 0.0 ? 0.07 : 0.04);
       p.x += w;
-      if (aLeg < 0.5) p.x *= 1.0 + uBreathe * 0.025 * smoothstep(1.2, 0.8, p.z) * smoothstep(-1.6, -1.1, p.z);
+      if (leg < 0.5) p.x *= 1.0 + uBreathe * 0.016 * (1.0 - smoothstep(0.8, 1.2, p.z)) * smoothstep(-1.6, -1.1, p.z);
       // 体を低くして休むときも、指先は接地を保ち、足首側で曲がる。
-      float settle = aLeg > 0.5 ? smoothstep(0.035, 0.18, position.y) : 1.0;
+      float settle = leg > 0.5 ? smoothstep(0.035, 0.18, p.y) : 1.0;
       p.y -= uDrop > 0.0 ? uDrop * settle : uDrop;
       // 指先と爪は、休憩や歩行の姿勢でも床の下へ突き抜けない。
-      if (aLeg > 0.5) p.y = max(0.002, p.y);
+      if (leg > 0.5) p.y = max(0.002, p.y);
       return p;
+    }
+    vec3 leoDeform(vec3 p) {
+      if (aLeg < 0.5) return leoWarp(p, aLeg, aCy);
+      // WebGL 1 でも使えるように、配列の添字は定数にする。
+      vec3 home = aLeg < 1.5 ? uFootHome[0] : aLeg < 2.5 ? uFootHome[1] : aLeg < 3.5 ? uFootHome[2] : uFootHome[3];
+      vec3 target = aLeg < 1.5 ? uFootTarget[0] : aLeg < 2.5 ? uFootTarget[1] : aLeg < 3.5 ? uFootTarget[2] : uFootTarget[3];
+      if (uPlant < 0.5) {
+        float off = aLeg < 1.5 ? 0.0 : aLeg < 2.5 ? 0.5 : aLeg < 3.5 ? 0.58 : 0.08;
+        float duty = aLeg < 2.5 ? 0.72 : 0.78;
+        float q = fract(uPhase / 6.283185 + off);
+        float swing = clamp((q - duty) / (1.0 - duty), 0.0, 1.0);
+        float travel = q < duty ? mix(0.24, -0.24, q / duty) : mix(-0.24, 0.24, smoothstep(0.0, 1.0, swing));
+        target = leoWarp(home, aLeg, aCy) + vec3(0.0, sin(swing * 3.14159) * 0.105, travel) * uWalk;
+      }
+      vec3 v0 = home - aPivot, v1 = target - aPivot;
+      // 左右の atan の境界をまたぐ場合も短い方へ曲げる。
+      float da = atan(sin(atan(v1.z, v1.x) - atan(v0.z, v0.x)), cos(atan(v1.z, v1.x) - atan(v0.z, v0.x)));
+      float angle = clamp(-da, -0.55, 0.55);
+      float joint = max(smoothstep(0.04, 0.22, length(p.xz - aPivot.xz)), 1.0 - smoothstep(0.06, 0.16, p.y));
+      vec3 limb = aPivot + rotY(p - aPivot, angle * joint);
+      vec3 palm = aPivot + rotY(home - aPivot, angle);
+      vec3 result = leoWarp(limb, aLeg, aCy);
+      vec3 palmWarp = leoWarp(palm, aLeg, aCy);
+      // 指先はまとめて動かし、前腕・すね側で曲げる。爪にも同じ式を使う。
+      float foot = (1.0 - smoothstep(0.10, 0.30, p.y)) * joint;
+      result += (target - palmWarp) * foot;
+      return result;
     }`;
   function deformPoint(p, U) {
     const q = p.clone();
@@ -1481,9 +1576,9 @@
       q.sub(pv).applyEuler(new T.Euler(U.uPitch.value * hz, U.uLook.value * 0.6 * hz, U.uTilt.value * hz, 'ZXY')).add(pv);
     }
     const body = 1 - smooth(clamp((q.z - 0.8) / 0.55, 0, 1));
-    let w = U.uWalk.value * 0.16 * Math.sin(U.uPhase.value - q.z * 1.4) * (0.4 + 0.6 * smooth(clamp((1.2 - q.z) / 2.7, 0, 1))) * body;
+    let w = U.uWalk.value * 0.095 * Math.sin(U.uPhase.value) * clamp(-q.z * 0.8, -1, 1) * body;
     const tt = clamp((-1.4 - q.z) / 3.1, 0, 1);
-    w += tt * tt * (U.uCurl.value * 1.4 + 0.12 * Math.sin(U.uT.value * 1.2 - q.z * 1.5) * (1 - U.uWalk.value) + U.uHappy.value * 0.3 * Math.sin(U.uT.value * 9 - q.z * 2));
+    w += tt * tt * (U.uCurl.value * 1.4 + U.uWalk.value * 0.16 * Math.sin(U.uPhase.value - tt * 2.6) + U.uHappy.value * 0.025 * Math.sin(U.uT.value * 3 - q.z));
     if (U.uWag) w += tt * tt * U.uWag.value * 0.35 * Math.sin(U.uT.value * 3.2 - q.z * 1.2);
     const bz = q.z - 0.3;
     w += (U.uBend ? U.uBend.value : 0) * bz * bz * (bz > 0 ? 0.07 : 0.04);
@@ -1536,6 +1631,9 @@
     const shed = false;
     const U = {};
     for (const k of ['uT', 'uPhase', 'uWalk', 'uLook', 'uPitch', 'uTilt', 'uCurl', 'uStalk', 'uHappy', 'uBreathe', 'uDrop', 'uTailFat', 'uTailLift', 'uBend', 'uJaw', 'uWag', 'uShedOn', 'uShedEdge', 'uWhiteFeet', 'uFeetFrom']) U[k] = { value: 0 };
+    U.uPlant = { value: 0 };
+    U.uFootHome = { value: MODEL.feet.map(p => p.clone()) };
+    U.uFootTarget = { value: MODEL.feet.map(p => p.clone()) };
     // 脱皮中は古い皮で全体が白っぽい（ケースの中では少しずつ脱いでいく）
     U.uShedOn.value = look.shed ? 1 : 0; U.uShedEdge.value = 9;
     // ギャラクシーは手足ぜんぶ、エクリプスは指先だけ白く抜ける
@@ -3073,6 +3171,7 @@
       if (key === decorKey) return;
       decorKey = key;
       if (st.hidePeek) wake();
+      st.gait = null;
       while (decorG.children.length) { const c = decorG.children.pop(); disposeTree(c); }
       obstacles = []; placed = []; climbs = [];
       HIDE = null;
@@ -3189,12 +3288,14 @@
       if (!look) {
         if (st.gk) { scene.remove(st.gk.root); disposeGecko(st.gk); }
         st.gk = null; st.id = null; st.key = '';
+        st.gait = null;
         blob.visible = false;
         return;
       }
       const key = lookKey(look);
       if (look.id !== st.id) {
         Object.assign(st, { x: rand(-1.5, 2), z: rand(-0.5, 1.5), yaw: rand(-1, 1), mode: 'idle', wait: 1, sleeping: false, stalk: 0, hidePeek: null, act: null, target: null });
+        st.gait = null; st.phase = 0; st.walkW = 0; st.spd = 0; st.prevYaw = null;
       }
       st.profile = behaviorProfile(look.seed);
       st.tame = look.tame || 0;
@@ -3485,21 +3586,22 @@
       const d = Math.hypot(dx, dz);
       if (d < 0.05) return 0;
       const diff = angleTo(g.yaw, Math.atan2(dx, dz));
-      g.yaw += diff * Math.min(1, dt * 3.5);
-      // 歩き出しはゆっくり加速して、着くまえは少しゆるめる
-      g.spd = Math.min(speed, (g.spd || 0) + speed * dt * 3);
-      const v = g.spd * clamp(d / 0.5, 0.4, 1);
-      const step = Math.min(d, v * dt * (Math.abs(diff) > 1.1 ? 0.3 : 1));
+      g.yaw += clamp(diff * (1 - Math.exp(-dt * 5)), -dt * 2.2, dt * 2.2);
+      // 大きな旋回では前進を控えて踏み替える。到着直前にも小さく減速する。
+      const alignment = Math.max(0.08, Math.pow(Math.max(0, Math.cos(diff)), 2));
+      const desired = speed * alignment * clamp(d / 0.65, 0.12, 1);
+      g.spd = lerp(g.spd || 0, desired, 1 - Math.exp(-dt * (desired > (g.spd || 0) ? 3 : 7)));
+      const step = Math.min(d, g.spd * dt);
       g.x += Math.sin(g.yaw) * step;
       g.z += Math.cos(g.yaw) * step;
       return step;
     }
-    function clampPos() {
+    function clampPos(dt) {
       if (st.hand && st.hand.phase !== 'offer' && st.hand.phase !== 'shy') return;
       resolveObstacles();
       // 家具にはばまれて進めないときは、行き先を変える
       if (st.mode === 'walk' || st.mode === 'toHide' || st.mode === 'toDrink' || st.mode === 'toBask') {
-        st.walkTime = (st.walkTime || 0) + 1 / 60;
+        st.walkTime = (st.walkTime || 0) + dt;
         if (st.walkTime > 9) { st.mode = 'idle'; st.wait = 0.5; st.walkTime = 0; }
       }
       const m = 1.4 * st.size;
@@ -4157,7 +4259,6 @@
       // オスの見た目
       if (!o.step) M.spd = (M.spd || 0) * Math.max(0, 1 - dt * 8);
       M.walkW = lerp(M.walkW, o.step > 0 ? 1 : 0, Math.min(1, dt * 6));
-      M.phase += o.step / SM * Math.PI;
       M.blinkT -= dt;
       if (M.blinkT <= 0) M.blinkT = rand(2.5, 6);
       const closing = M.blinkT < 0.13 || (M.content > 0 && Math.sin(R.all * 2.2) > 0.2);
@@ -4182,6 +4283,11 @@
       gk.root.position.set(M.x, M.y, M.z);
       gk.root.rotation.order = 'YXZ';
       gk.root.rotation.set(-M.slope, M.yaw, 0);
+      const previous = M.motionPrev || { x: M.x, z: M.z, yaw: M.yaw };
+      const motion = { dx: M.x - previous.x, dz: M.z - previous.z, dyaw: angleTo(previous.yaw, M.yaw) };
+      M.motionPrev = { x: M.x, z: M.z, yaw: M.yaw };
+      stepFeet(M, dt, motion, (x, z) => M.onHand && R.hand ? Math.max(surfaceAt(x, z), handHeightAt(R.hand, x, z)) : surfaceAt(x, z));
+      P2.phase = M.phase; P2.walk = M.walkW;
       pose(gk, P2);
       mateBlob.position.set(M.x, 0.012 + M.y, M.z);
       mateBlob.scale.set(2.2 * SM, 5.0 * SM, 1);
@@ -4224,6 +4330,18 @@
         const o = k(2.2);
         a.pitch = -0.22 * o; a.drop = 0.04 - 0.09 * o; a.blink = 0.4 * o;
         if (A.t > 2.2) endAct();
+      } else if (A.type === 'sniff') {
+        // 鼻先を近づけて確かめ、舌で化学情報を集めてから顔を戻す。
+        const o = k(3.0);
+        a.pitch = 0.28 * o; a.drop = 0.06 + 0.035 * o;
+        a.look = A.side * 0.15 * o;
+        if (A.t > 1.15 && !A.licked) { st.lick = 0.9; A.licked = true; seen('lick'); }
+        if (A.t > 3.0) endAct();
+      } else if (A.type === 'settle') {
+        // 体をゆっくり低くして休み、顔は床へ突き込まずに保つ。
+        a.drop = lerp(0.06, 0.14, smooth(clamp(A.t / 1.6, 0, 1)));
+        a.blink = 0.45 * smooth(clamp(A.t / 1.8, 0, 1)); a.pitch = 0.06;
+        if (A.t > (A.dur || 7)) endAct();
       } else if (A.type === 'wag') {
         a.wag = Math.min(1, A.t * 2) * (A.t < 2.4 ? 1 : 0); a.look = A.side * 0.3;
         if (A.t > 2.8) endAct();
@@ -4235,7 +4353,7 @@
       } else if (A.type === 'startle') {
         // びくっとかたまって、少しあとずさり
         a.pitch = -0.1; a.drop = 0.02;
-        if (A.t > 0.35 && A.t < 0.95) { const v = 1.1 * dt; st.x -= Math.sin(st.yaw) * v; st.z -= Math.cos(st.yaw) * v; step = 0; }
+        if (A.t > 0.35 && A.t < 0.95) { const v = 0.65 * dt; st.x -= Math.sin(st.yaw) * v; st.z -= Math.cos(st.yaw) * v; step = v; }
         if (A.t > 1.1) endAct();
       } else if (A.type === 'glass') {
         // ガラスの前で、舌でぺろぺろ確かめる
@@ -4308,7 +4426,7 @@
     }
 
     // 岩や石の上では、足もとの高さに合わせて体を持ちあげ、坂なら体をかたむける
-    function ground(g, dt, S, fast) {
+    function ground(g, dt, S, fast, poseDrop) {
       const sy = Math.sin(g.yaw), cy = Math.cos(g.yaw);
       const hf = surfaceAt(g.x + sy * 1.3 * S, g.z + cy * 1.3 * S), hm = surfaceAt(g.x, g.z), hb = surfaceAt(g.x - sy * 1.1 * S, g.z - cy * 1.1 * S);
       g.y = lerp(g.y || 0, Math.max(hm, (hf + hb) / 2), Math.min(1, dt * (fast ? 14 : 8)));
@@ -4316,7 +4434,7 @@
       // しっぽの途中と先が、足もとの床や岩より下にならない高さを計算して、しっぽを持ちあげる
       const cs = Math.cos(g.slope), sn = Math.sin(g.slope);
       let lift = 0;
-      const dropM = (g.drop || 0) - 0.04;
+      const dropM = (poseDrop == null ? g.drop || 0 : poseDrop) - 0.04;
       for (const [k, yb] of [[0.35, 0.03], [0.65, 0.005], [1, 0]]) {
         const zl = -1.55 - k * 2.93;
         const wx = g.x + sy * zl * S * cs, wz = g.z + cy * zl * S * cs;
@@ -4335,6 +4453,7 @@
       if (st.refuseT > 0) { st.refuseT -= dt; if (st.refuseT <= 0 && !st.sleeping && !food && st.mode === 'idle') { st.wait = 0; } }
       const nf = st.night ? 1.35 : 1;
       const S = 0.95 * st.size;
+      const before = { x: st.x, z: st.z, yaw: st.yaw };
 
       st.eatLook = 0; st.eatPitch = 0;
       if (st.hand) {
@@ -4483,13 +4602,17 @@
           }
         }
       }
-      clampPos();
+      clampPos(dt);
 
       // 歩いた距離で足を動かす（足がすべらないように）
-      const moving = step > 0;
+      const motion = { dx: st.x - before.x, dz: st.z - before.z, dyaw: angleTo(before.yaw, st.yaw) };
+      const moving = Math.hypot(motion.dx, motion.dz) > 0.00001;
       if (!moving) st.spd = (st.spd || 0) * Math.max(0, 1 - dt * 8);
-      st.walkW = lerp(st.walkW, moving ? clamp((st.spd || 0) / 0.6, 0.35, 1) : 0, Math.min(1, dt * 6));
-      st.phase += step / (0.95 * S) * Math.PI;
+      // GLB の足は最後に実際の移動量から更新する。押し戻された距離も反映する。
+      if (!gk.glb) {
+        st.walkW = lerp(st.walkW, moving ? clamp((st.spd || 0) / 0.6, 0.35, 1) : 0, Math.min(1, dt * 6));
+        st.phase += Math.hypot(motion.dx, motion.dz) / (0.95 * S) * Math.PI;
+      }
       // 向きを変えた速さで、体を弓なりにしならせる
       const yawRate = angleTo(st.prevYaw == null ? st.yaw : st.prevYaw, st.yaw) / Math.max(dt, 1e-3);
       st.prevYaw = st.yaw;
@@ -4515,21 +4638,23 @@
           } else if (r0 < 0.3) { st.lick = 0.9; seen('lick'); }
           else if (r0 < 0.58) { st.peek = rand(-0.7, 0.7); st.peekT = rand(1.2, 2.4); seen('look'); }
           else if (r0 < 0.68) { st.tiltT = 1.2; seen('tilt'); }
-          else if (r0 < 0.78) startAct('yawn');
-          else if (r0 < 0.9) startAct('wag', { side: Math.random() < 0.5 ? -1 : 1 });
-          else startAct('eyelick', { side: Math.random() < 0.5 ? -1 : 1 });
-          st.idleT = pk > 0 && pk < 1 ? rand(2, 4) : rand(4, 9);
+          else if (r0 < 0.73) startAct('sniff');
+          else if (r0 < 0.82) startAct('stretch');
+          else if (r0 < 0.9) startAct('settle', { dur: rand(6, 10) });
+          else startAct('yawn');
+          st.idleT = pk > 0 && pk < 1 ? rand(2, 4) : rand(7, 15) * st.profile.rest;
         }
       }
       if (st.peekT > 0) st.peekT -= dt;
+      const route = st.act && st.act.ph === 'go' ? st.act.to : st.target;
       if (st.pair) {
         wantLook = st.pair.fLook;
       } else if (!st.sleeping && !food && st.peekT > 0) {
         wantLook = st.peek;
-      } else if (moving && !food && st.target) {
+      } else if (!st.sleeping && !food && route && (moving || st.mode === 'walk' || st.act && st.act.ph === 'go')) {
         // 歩くときは、体より先に頭が行き先を向く
-        wantLook = clamp(angleTo(st.yaw, Math.atan2(st.target.x - st.x, st.target.z - st.z)) * 0.8, -0.6, 0.6);
-      } else if (!moving && !st.sleeping && !food) {
+        wantLook = clamp(angleTo(st.yaw, Math.atan2(route.x - st.x, route.z - st.z)) * 0.9, -0.6, 0.6);
+      } else if (!moving && !st.sleeping && !food && st.happy > 0) {
         wantLook = clamp(angleTo(st.yaw, Math.atan2(camera.position.x - st.x, camera.position.z - st.z)), -0.75, 0.75);
       } else if (st.meal) {
         wantLook = 0;
@@ -4550,8 +4675,8 @@
       P.look = st.look + (st.eatLook || 0);
       // 歩くときは一歩ごとに頭が小さく上下する
       if (st.mode !== 'drink') st.drinkPitch = lerp(st.drinkPitch || 0, 0, Math.min(1, dt * 3));
-      P.pitch = st.pitch + (st.eatPitch || 0) + (st.drinkPitch || 0) + Math.sin(st.phase * 2) * 0.035 * st.walkW;
-      P.tilt = (st.tiltT > 0 ? Math.sin(Math.min(1, st.tiltT) * Math.PI) * 0.22 : 0) + (st.happy > 0 ? Math.sin(st.t * 7) * 0.12 : 0);
+      P.pitch = st.pitch + (st.eatPitch || 0) + (st.drinkPitch || 0) + Math.sin(st.phase * 2) * 0.012 * st.walkW;
+      P.tilt = (st.tiltT > 0 ? Math.sin(Math.min(1, st.tiltT) * Math.PI) * 0.22 : 0) + (st.happy > 0 ? Math.sin(st.t * 2.2) * 0.025 : 0);
       P.bend = st.bend;
       // しぐさの姿勢（なめらかに切りかえる）
       {
@@ -4565,7 +4690,7 @@
         P.pitch += st.ap.pitch; P.look += st.ap.look; P.tilt += st.ap.tilt;
         P.jaw = st.ap.jaw; P.wag = st.ap.wag;
         // 前足でかりかり（その場で足を動かす）
-        if (st.ap.churn > 0.01) { st.phase += dt * 9 * st.ap.churn; P.phase = st.phase; P.walk = Math.max(P.walk, 0.55 * st.ap.churn); }
+        if (!gk.glb && st.ap.churn > 0.01) { st.phase += dt * 9 * st.ap.churn; P.phase = st.phase; P.walk = Math.max(P.walk, 0.55 * st.ap.churn); }
         st.tailUp = st.ap.tail;
       }
       P.curl = st.curl;
@@ -4576,7 +4701,7 @@
       P.tongue = st.lick > 0 ? Math.sin((0.9 - st.lick) / 0.9 * Math.PI) : 0;
       P.breathe = Math.sin(st.t * (st.sleeping ? 1.4 : 2.4));
       P.sway = 1;
-      ground(st, dt, S, !!st.hand);
+      ground(st, dt, S, !!st.hand, P.drop);
       if (st.y > 0.6) seen('climb');
       if (moving && st.night) seen('night');
       if (gk.U) {
@@ -4591,6 +4716,15 @@
       gk.root.position.set(st.x, st.y, st.z);
       gk.root.rotation.order = 'YXZ';
       gk.root.rotation.set(-st.slope, st.yaw, 0);
+      stepFeet(st, dt, motion, (x, z) => {
+        if (st.hand && st.hand.phase !== 'offer' && st.hand.phase !== 'shy') {
+          let y = surfaceAt(x, z);
+          for (const hand of st.hand.hands) y = Math.max(y, handHeightAt(hand, x, z));
+          return y;
+        }
+        return surfaceAt(x, z);
+      });
+      if (gk.glb) { P.phase = st.phase; P.walk = st.walkW; }
       pose(gk, P);
       blob.position.x = st.x;
       blob.position.y = 0.012 + st.y;
