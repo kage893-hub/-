@@ -1015,7 +1015,16 @@
   // Jagnandan & Higham (2017), doi:10.1038/s41598-017-11484-7, Table 1。
   // 数値をそのまま飼育中の速さに固定せず、ゆっくりした移動にも距離で同期させる。
   const FOOT_TIMING = [{ off: 0, duty: 0.72 }, { off: 0.5, duty: 0.72 }, { off: 0.58, duty: 0.78 }, { off: 0.08, duty: 0.78 }];
-  function stepFeet(g, dt, motion, floorAt) {
+  function footSurface(floorAt, x, z, scale) {
+    let y = floorAt(x, z);
+    // 足の中心だけでなく、指が広がる範囲の段差も避ける。
+    for (const radius of [0.16, 0.32]) for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4, r = radius * scale;
+      y = Math.max(y, floorAt(x + Math.cos(a) * r, z + Math.sin(a) * r));
+    }
+    return y;
+  }
+  function stepFeet(g, dt, motion, floorAt, poseDrop) {
     const gk = g.gk;
     if (!gk || !gk.glb) return;
     const scale = gk.root.scale.x, distance = Math.hypot(motion.dx, motion.dz);
@@ -1027,12 +1036,12 @@
       g.phase = 0.28 * Math.PI * 2;
       g.gait = { model: gk, rate: 0, feet: MODEL.feet.map(home => {
         const at = gk.root.localToWorld(home.clone());
-        at.y = floorAt(at.x, at.z) + home.y * scale;
+        at.y = footSurface(floorAt, at.x, at.z, scale) + home.y * scale;
         return { at, from: at.clone(), to: at.clone(), air: false, progress: 0 };
       }) };
     }
     const gait = g.gait;
-    const rate = travel / Math.max(dt, 0.001) / (0.88 * scale) * Math.PI * 2;
+    const rate = travel / Math.max(dt, 0.001) / (0.45 * scale) * Math.PI * 2;
     if (moving && !reset) gait.rate = Math.min(16, rate);
     const settling = gait.feet.some(f => f.air);
     g.phase += moving && !reset ? rate * dt : settling ? Math.max(3, gait.rate) * dt : 0;
@@ -1047,18 +1056,19 @@
       const q = ((g.phase / (Math.PI * 2) + timing.off) % 1 + 1) % 1;
       const swing = q >= timing.duty;
       const local = gk.root.worldToLocal(f.at.clone());
-      const overreach = Math.hypot(local.x - home.x, local.z - home.z) > (i < 2 ? 0.42 : 0.51);
+      f.replanted = false;
+      const overreach = Math.hypot(local.x - home.x, local.z - home.z) > (i < 2 ? 0.16 : 0.22);
       if (!f.air && (swing || overreach) && moving && !reset && gait.feet.filter(f => f.air).length < 2) {
         f.air = true; f.progress = 0; f.start = g.phase;
         f.duration = (swing ? 1 - q : 0.20) * Math.PI * 2;
         f.from.copy(f.at);
         // 行き先には移動と旋回の両方を使う。後ずさりでも足が逆へ運ばれる。
-        f.to.copy(home).applyAxisAngle(V(0, 1, 0), yawRate * 0.22);
+        f.to.copy(home).applyAxisAngle(V(0, 1, 0), yawRate * 0.08);
         gk.root.localToWorld(f.to);
         // 速さではなく残りの歩幅から予測する。ゆっくり歩く時にも足を後ろに置きすぎない。
-        const lead = direction.clone().multiplyScalar(0.88 * scale * ((swing ? 1 - q : 0.20) + timing.duty / 2) * forwardShare);
+        const lead = direction.clone().multiplyScalar(0.45 * scale * ((swing ? 1 - q : 0.20) + timing.duty / 2) * forwardShare);
         f.to.add(lead);
-        f.to.y = floorAt(f.to.x, f.to.z) + home.y * scale;
+        f.to.y = footSurface(floorAt, f.to.x, f.to.z, scale) + home.y * scale;
       }
       if (f.air) {
         f.progress = clamp((g.phase - f.start) / Math.max(0.06, f.duration), 0, 1);
@@ -1067,7 +1077,7 @@
         if (f.progress >= 1) { f.at.copy(f.to); f.air = false; }
       }
       // 静止中は接地点を更新しない。家具や手の高さだけは追従する。
-      if (!f.air) f.at.y = floorAt(f.at.x, f.at.z) + home.y * scale;
+      if (!f.air) f.at.y = footSurface(floorAt, f.at.x, f.at.z, scale) + home.y * scale;
       const target = gk.root.worldToLocal(f.at.clone());
       // ほるときは前足だけを交互に引く。後ろ足は体を支える。
       const dig = g.ap && g.ap.churn || 0;
@@ -1077,7 +1087,28 @@
         digging.z += 0.15 * Math.cos(ph); digging.y += Math.max(0, Math.sin(ph)) * 0.09;
         target.lerp(digging, dig);
       }
+      // 急旋回や段差で届かない位置に足を固定し続けない。足を置き直し、脚を引き伸ばさない。
+      const offset = target.clone().sub(home), reach = i < 2 ? 0.20 : 0.28;
+      let corrected = offset.length() > reach;
+      if (corrected) target.copy(home).add(offset.setLength(reach));
+      const hip = MODEL.pivots[i].clone();
+      hip.y -= (poseDrop == null ? g.drop || 0.04 : poseDrop) - 0.04;
+      const body = 1 - smooth(clamp((hip.z - 0.8) / 0.55, 0, 1));
+      hip.x += (g.walkW || 0) * 0.095 * Math.sin(g.phase) * clamp(-hip.z * 0.8, -1, 1) * body;
+      const bz = hip.z - 0.3;
+      hip.x += (g.bend || 0) * bz * bz * (bz > 0 ? 0.07 : 0.04);
+      const limb = target.clone().sub(hip), maxLength = home.distanceTo(MODEL.pivots[i]) * 1.10;
+      if (limb.length() > maxLength) { target.copy(hip).add(limb.setLength(maxLength)); corrected = true; }
+      if (corrected) {
+        f.at.copy(gk.root.localToWorld(target.clone()));
+        if (!f.air) { f.from.copy(f.at); f.to.copy(f.at); }
+        f.replanted = true;
+      }
       U.uFootTarget.value[i].copy(target);
+      // 坂や手の上でも、足の裏の面をワールド座標で計算する。
+      const up = V(0, 1, 0).applyQuaternion(gk.root.quaternion.clone().invert());
+      const floor = gk.root.worldToLocal(V(f.at.x, footSurface(floorAt, f.at.x, f.at.z, scale), f.at.z));
+      U.uFootPlane.value[i].set(up.x, up.y, up.z, up.dot(floor) + 0.002);
     }
   }
 
@@ -1320,6 +1351,7 @@
     const geo = new T.BufferGeometry();
     geo.setAttribute('position', new T.Float32BufferAttribute(positions, 3));
     geo.setAttribute('aLeg', new T.Float32BufferAttribute(legs, 1));
+    geo.setAttribute('aLimb', new T.Float32BufferAttribute(legs.map(() => 1), 1));
     geo.setAttribute('aPivot', new T.Float32BufferAttribute(pivotData, 3));
     geo.setAttribute('aCy', new T.Float32BufferAttribute(centers, 1));
     geo.setIndex(indices); geo.computeVertexNormals();
@@ -1440,6 +1472,32 @@
     g.setAttribute('aLeg', new T.BufferAttribute(LEG, 1));
     g.setAttribute('aPivot', new T.BufferAttribute(PV, 3));
     g.setAttribute('aCy', new T.BufferAttribute(CY, 1));
+    // 脚と胴の境界に接する頂点は動かさず、メッシュに沿った距離で滑らかに曲げる。
+    // x/z の分類だけで脚を回すと、胴やしっぽに細長い三角形ができてしまう。
+    const neighbors = Array.from({ length: n }, () => new Set());
+    const seam = new Set();
+    for (let t = 0; t < idx.length; t += 3) {
+      const tri = [idx[t], idx[t + 1], idx[t + 2]];
+      for (const a of tri) for (const b of tri) if (a !== b) {
+        neighbors[a].add(b);
+        if (LEG[a] > 0 && LEG[a] !== LEG[b]) seam.add(a);
+      }
+    }
+    const dist = new Float32Array(n); dist.fill(Infinity);
+    const queue = [...seam]; queue.forEach(i => { dist[i] = 0; });
+    for (let at = 0; at < queue.length; at++) {
+      const a = queue[at];
+      for (const b of neighbors[a]) if (LEG[b] === LEG[a]) {
+        const d = dist[a] + Math.hypot(P[a * 3] - P[b * 3], P[a * 3 + 1] - P[b * 3 + 1], P[a * 3 + 2] - P[b * 3 + 2]);
+        if (d < 0.30 && d + 0.00001 < dist[b]) { dist[b] = d; queue.push(b); }
+      }
+    }
+    const limb = new Float32Array(n);
+    for (let i = 0; i < n; i++) if (LEG[i] > 0) {
+      const outer = smooth(clamp((Math.abs(P[i * 3]) - Math.abs(PV[i * 3]) + 0.025) / 0.19, 0, 1));
+      limb[i] = Math.min(smooth(clamp(dist[i] / 0.30, 0, 1)), outer);
+    }
+    g.setAttribute('aLimb', new T.BufferAttribute(limb, 1));
     g.setIndex(new T.BufferAttribute(idx, 1));
     g.computeVertexNormals();
     // おなか側の継ぎ目（u が 1→0 に戻るところ）で模様が伸びないように、三角形ごとに u をそろえる
@@ -1453,6 +1511,7 @@
     MODEL.claws = makeClaws(feet, PIV);
     // 手のひら・足のひらの中心。造形は変えず、接地位置の計算に使う。
     MODEL.feet = [1, 2, 3, 4].map(leg => V(feet[leg].palm.x, 0.035, feet[leg].palm.z));
+    MODEL.pivots = [1, 2, 3, 4].map(leg => toGame(...PIV[leg]));
     // 目：左右それぞれ、モデルの目の盛り上がりを測って眼球を合わせる（左右で形が少しちがうため）
     const ER = 0.034;
     // モデルの目の盛り上がりから、眼球をどれだけ外へ出すか（モデルの左右差に合わせて別々に）
@@ -1481,6 +1540,7 @@
     uniform float uT, uPhase, uWalk, uLook, uPitch, uTilt, uCurl, uStalk, uHappy, uBreathe, uDrop, uTailFat, uTailLift, uBend, uJaw, uWag, uWhiteFeet, uFeetFrom;
     uniform float uPlant;
     uniform vec3 uFootHome[4], uFootTarget[4];
+    uniform vec4 uFootPlane[4];
     // 実物のレオパにあわせたしっぽ：長さは頭からお尻までの約0.8倍、いちばん太いところは首くらいの太さ
     #define TAIL_V -1.55
     #define TAIL_STRETCH 1.6
@@ -1488,11 +1548,21 @@
     varying float vLeoZ;
     varying float vLeoFeet;
     attribute float aLeg;
+    attribute float aLimb;
     attribute vec3 aPivot;
     attribute float aCy;
     vec3 rotY(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(c * q.x + s * q.z, q.y, -s * q.x + c * q.z); }
     vec3 rotX(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(q.x, c * q.y - s * q.z, s * q.y + c * q.z); }
     vec3 rotZ(vec3 q, float a) { float c = cos(a), s = sin(a); return vec3(c * q.x - s * q.y, s * q.x + c * q.y, q.z); }
+    vec3 rotAxis(vec3 q, vec3 axis, float angle) {
+      float c = cos(angle), s = sin(angle);
+      return q * c + cross(axis, q) * s + axis * dot(axis, q) * (1.0 - c);
+    }
+    vec3 alignAxis(vec3 q, vec3 from, vec3 to) {
+      vec3 axis = cross(from, to);
+      float len = length(axis);
+      return len < 0.00001 ? q : rotAxis(q, axis / len, atan(len, dot(from, to)));
+    }
     vec3 leoWarp(vec3 p, float leg, float cy) {
       if (p.z < TAIL_V) p.z = TAIL_V + (p.z - TAIL_V) * TAIL_STRETCH;
       // 坂をのぼるときは、しっぽが床にめりこまないように持ちあげる
@@ -1550,21 +1620,32 @@
         float duty = aLeg < 2.5 ? 0.72 : 0.78;
         float q = fract(uPhase / 6.283185 + off);
         float swing = clamp((q - duty) / (1.0 - duty), 0.0, 1.0);
-        float travel = q < duty ? mix(0.24, -0.24, q / duty) : mix(-0.24, 0.24, smoothstep(0.0, 1.0, swing));
+        float travel = q < duty ? mix(0.14, -0.14, q / duty) : mix(-0.14, 0.14, smoothstep(0.0, 1.0, swing));
         target = leoWarp(home, aLeg, aCy) + vec3(0.0, sin(swing * 3.14159) * 0.105, travel) * uWalk;
       }
       vec3 v0 = home - aPivot, v1 = target - aPivot;
-      // 左右の atan の境界をまたぐ場合も短い方へ曲げる。
-      float da = atan(sin(atan(v1.z, v1.x) - atan(v0.z, v0.x)), cos(atan(v1.z, v1.x) - atan(v0.z, v0.x)));
-      float angle = clamp(-da, -0.55, 0.55);
-      float joint = max(smoothstep(0.04, 0.22, length(p.xz - aPivot.xz)), 1.0 - smoothstep(0.06, 0.16, p.y));
-      vec3 limb = aPivot + rotY(p - aPivot, angle * joint);
-      vec3 palm = aPivot + rotY(home - aPivot, angle);
+      // 水平だけでなく上下にも脚を回し、足先の移動を前腕の引き伸ばしで埋めない。
+      vec3 axis = cross(v0, v1);
+      float len = length(axis);
+      float angle = min(0.85, atan(len, dot(v0, v1)));
+      axis = len > 0.00001 ? axis / len : vec3(0.0, 1.0, 0.0);
+      float joint = aLimb;
+      vec3 limb = aPivot + rotAxis(p - aPivot, axis, angle * joint);
+      vec3 palm = aPivot + rotAxis(home - aPivot, axis, angle);
       vec3 result = leoWarp(limb, aLeg, aCy);
       vec3 palmWarp = leoWarp(palm, aLeg, aCy);
       // 指先はまとめて動かし、前腕・すね側で曲げる。爪にも同じ式を使う。
-      float foot = (1.0 - smoothstep(0.10, 0.30, p.y)) * joint;
+      float foot = (1.0 - smoothstep(0.08, 0.40, p.y)) * joint;
       result += (target - palmWarp) * foot;
+      vec4 floorPlane = aLeg < 1.5 ? uFootPlane[0] : aLeg < 2.5 ? uFootPlane[1] : aLeg < 3.5 ? uFootPlane[2] : uFootPlane[3];
+      // 手のひら・指・爪はまとまった形を保ち、床に沿う。足首より上で曲げる。
+      vec3 palmOffset = p - home;
+      if (uPlant > 0.5) palmOffset = alignAxis(palmOffset, vec3(0.0, 1.0, 0.0), floorPlane.xyz);
+      result = mix(result, target + palmOffset, (1.0 - smoothstep(0.09, 0.36, p.y)) * joint);
+      result = mix(leoWarp(p, 0.0, aCy), result, aLimb);
+      if (uPlant > 0.5) {
+        result += floorPlane.xyz * max(0.0, floorPlane.w - dot(floorPlane.xyz, result)) * smoothstep(0.2, 0.9, aLimb);
+      }
       return result;
     }`;
   function deformPoint(p, U) {
@@ -1634,6 +1715,7 @@
     U.uPlant = { value: 0 };
     U.uFootHome = { value: MODEL.feet.map(p => p.clone()) };
     U.uFootTarget = { value: MODEL.feet.map(p => p.clone()) };
+    U.uFootPlane = { value: MODEL.feet.map(() => new T.Vector4(0, 1, 0, 0.002)) };
     // 脱皮中は古い皮で全体が白っぽい（ケースの中では少しずつ脱いでいく）
     U.uShedOn.value = look.shed ? 1 : 0; U.uShedEdge.value = 9;
     // ギャラクシーは手足ぜんぶ、エクリプスは指先だけ白く抜ける
@@ -4286,7 +4368,7 @@
       const previous = M.motionPrev || { x: M.x, z: M.z, yaw: M.yaw };
       const motion = { dx: M.x - previous.x, dz: M.z - previous.z, dyaw: angleTo(previous.yaw, M.yaw) };
       M.motionPrev = { x: M.x, z: M.z, yaw: M.yaw };
-      stepFeet(M, dt, motion, (x, z) => M.onHand && R.hand ? Math.max(surfaceAt(x, z), handHeightAt(R.hand, x, z)) : surfaceAt(x, z));
+      stepFeet(M, dt, motion, (x, z) => M.onHand && R.hand ? Math.max(surfaceAt(x, z), handHeightAt(R.hand, x, z)) : surfaceAt(x, z), P2.drop);
       P2.phase = M.phase; P2.walk = M.walkW;
       pose(gk, P2);
       mateBlob.position.set(M.x, 0.012 + M.y, M.z);
@@ -4429,7 +4511,15 @@
     function ground(g, dt, S, fast, poseDrop) {
       const sy = Math.sin(g.yaw), cy = Math.cos(g.yaw);
       const hf = surfaceAt(g.x + sy * 1.3 * S, g.z + cy * 1.3 * S), hm = surfaceAt(g.x, g.z), hb = surfaceAt(g.x - sy * 1.1 * S, g.z - cy * 1.1 * S);
-      g.y = lerp(g.y || 0, Math.max(hm, (hf + hb) / 2), Math.min(1, dt * (fast ? 14 : 8)));
+      let support = Math.max(hm, (hf + hb) / 2);
+      for (const foot of MODEL.feet || []) {
+        const x = g.x + (foot.x * cy + foot.z * sy) * S;
+        const z = g.z + (-foot.x * sy + foot.z * cy) * S;
+        const clearance = Math.max(0, 0.10 - Math.max(0, (poseDrop == null ? g.drop || 0.04 : poseDrop) - 0.04));
+        support = Math.max(support, footSurface(surfaceAt, x, z, S) - clearance * S);
+      }
+      // 上りでは体を床の下に残さず、下りだけゆっくり追従する。
+      g.y = Math.max(support, lerp(g.y || 0, support, Math.min(1, dt * (fast ? 14 : 8))));
       g.slope = lerp(g.slope || 0, clamp(Math.atan2(hf - hb, 2.4 * S), -0.8, 0.8), Math.min(1, dt * 6));
       // しっぽの途中と先が、足もとの床や岩より下にならない高さを計算して、しっぽを持ちあげる
       const cs = Math.cos(g.slope), sn = Math.sin(g.slope);
@@ -4723,7 +4813,7 @@
           return y;
         }
         return surfaceAt(x, z);
-      });
+      }, P.drop);
       if (gk.glb) { P.phase = st.phase; P.walk = st.walkW; }
       pose(gk, P);
       blob.position.x = st.x;

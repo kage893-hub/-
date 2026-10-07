@@ -7,7 +7,7 @@ async function harness() {
   p.on('pageerror', e => errors.push(String(e)));
   p.on('console', m => { if (m.type() === 'error' && /shader|WebGLProgram|GL_INVALID/.test(m.text())) errors.push(m.text()); });
   let scene = fs.readFileSync(__dirname + '/../../js/scene3d.js', 'utf8');
-  scene = scene.replace('_st: st, _cam: camera,', '_step: stepGecko, _render: () => renderer.render(scene, camera), _P: P, _st: st, _cam: camera,');
+  scene = scene.replace('_st: st, _cam: camera,', '_step: stepGecko, _render: () => renderer.render(scene, camera), _floor: surfaceAt, _P: P, _st: st, _cam: camera,');
   scene = scene.replace('root.Leopa3D = {', 'root._movement = { MODEL, DEFORM_GLSL }; root.Leopa3D = {');
   await p.route('**/js/scene3d.js', r => r.fulfill({ contentType: 'text/javascript', body: scene }));
   await p.addInitScript(() => { const original = window.setInterval; window._testIntervals = []; window.setInterval = (...args) => { const id = original(...args); _testIntervals.push(id); return id; }; });
@@ -40,15 +40,15 @@ const result=await p.evaluate(()=>{
  const f=shader(gl.FRAGMENT_SHADER,'#version 300 es\nprecision highp float;out vec4 color;void main(){color=vec4(1.0);}');
  const pr=gl.createProgram();gl.attachShader(pr,v);gl.attachShader(pr,f);gl.transformFeedbackVaryings(pr,['outputPosition'],gl.INTERLEAVED_ATTRIBS);gl.linkProgram(pr);if(!gl.getProgramParameter(pr,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(pr));gl.useProgram(pr);
  const attrib=(name,values,size)=>{const at=gl.getAttribLocation(pr,name);if(at<0)return;const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(values),gl.STATIC_DRAW);gl.enableVertexAttribArray(at);gl.vertexAttribPointer(at,size,gl.FLOAT,false,0,0)};
- attrib('position',MODEL.feet.flatMap(v=>v.toArray()),3);attrib('aLeg',[1,2,3,4],1);const pivots = []; const legs = MODEL.geo.attributes.aLeg, pivot = MODEL.geo.attributes.aPivot; for (let leg = 1; leg <= 4; leg++) { let at = 0; while (legs.getX(at) !== leg) at++; pivots.push(pivot.getX(at), pivot.getY(at), pivot.getZ(at)); } attrib('aPivot', pivots, 3);attrib('aCy',[0,0,0,0],1);
+ attrib('position',MODEL.feet.flatMap(v=>v.toArray()),3);attrib('aLeg',[1,2,3,4],1);attrib('aLimb',[1,1,1,1],1);const pivots = []; const legs = MODEL.geo.attributes.aLeg, pivot = MODEL.geo.attributes.aPivot; for (let leg = 1; leg <= 4; leg++) { let at = 0; while (legs.getX(at) !== leg) at++; pivots.push(pivot.getX(at), pivot.getY(at), pivot.getZ(at)); } attrib('aPivot', pivots, 3);attrib('aCy',[0,0,0,0],1);
  const feedback=gl.createBuffer();gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER,feedback);gl.bufferData(gl.TRANSFORM_FEEDBACK_BUFFER,48,gl.DYNAMIC_READ);gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER,0,feedback);gl.enable(gl.RASTERIZER_DISCARD);
- const gpu=()=>{const U=st.gk.U;for(const [name,item] of Object.entries(U)){const loc=gl.getUniformLocation(pr,name);if(loc===null)continue;if(typeof item.value==='number')gl.uniform1f(loc,item.value);else if(Array.isArray(item.value))gl.uniform3fv(loc,item.value.flatMap(v=>v.toArray()));}gl.beginTransformFeedback(gl.POINTS);gl.drawArrays(gl.POINTS,0,4);gl.endTransformFeedback();const out=new Float32Array(12);gl.getBufferSubData(gl.TRANSFORM_FEEDBACK_BUFFER,0,out);return Array.from({length:4},(_,i)=>new THREE.Vector3(...out.slice(i*3,i*3+3)))};
+ const gpu=(count=4)=>{const U=st.gk.U;for(const [name,item] of Object.entries(U)){const loc=gl.getUniformLocation(pr,name);if(loc===null)continue;if(typeof item.value==='number')gl.uniform1f(loc,item.value);else if(Array.isArray(item.value)){const values=item.value.flatMap(v=>v.toArray());if(item.value[0].isVector4)gl.uniform4fv(loc,values);else gl.uniform3fv(loc,values);}}gl.beginTransformFeedback(gl.POINTS);gl.drawArrays(gl.POINTS,0,count);gl.endTransformFeedback();const out=new Float32Array(count*3);gl.getBufferSubData(gl.TRANSFORM_FEEDBACK_BUFFER,0,out);return Array.from({length:count},(_,i)=>new THREE.Vector3(...out.slice(i*3,i*3+3)))};
  resetMotion({mode:'walk',target:{x:0,z:2.7},burst:999});
  let maxDrift=0,maxGPUError=0,airFrames=[0,0,0,0],samples=0;const previous=new Map();
  for(let n=0;n<220;n++){
   tick();const gait=st.gait, points=gpu();
   for(let i=0;i<4;i++){
-   const foot=gait.feet[i], prev=previous.get(i);if(prev&&!prev.air&&!foot.air)maxDrift=Math.max(maxDrift,foot.at.clone().setY(0).distanceTo(prev.at.clone().setY(0)));
+   const foot=gait.feet[i], prev=previous.get(i);if(prev&&!prev.air&&!foot.air&&!foot.replanted)maxDrift=Math.max(maxDrift,foot.at.clone().setY(0).distanceTo(prev.at.clone().setY(0)));
    previous.set(i,{air:foot.air,at:foot.at.clone()});maxGPUError=Math.max(maxGPUError,points[i].distanceTo(st.gk.U.uFootTarget.value[i]));if(foot.air)airFrames[i]++;
   }
   samples++;
@@ -61,9 +61,36 @@ const result=await p.evaluate(()=>{
  resetMotion();tank.startAct('sniff');let lowHead=false,lick=false;for(let n=0;n<210;n++){tick();lowHead ||= tank._P.pitch>.15;lick ||= tank._P.tongue>.2}check('鼻先を下げて舌で確かめ、通常動作に戻る',lowHead&&lick&&!st.act,{lowHead,lick});
  resetMotion();tank.startAct('stretch');let stretchDrop=1;for(let n=0;n<160;n++){tick();stretchDrop=Math.min(stretchDrop,tank._P.drop)}check('伸びから元の姿勢へ戻る',stretchDrop<0&&!st.act&&st.gait.feet.every(f=>!f.air),stretchDrop);
  resetMotion();tank.startAct('settle',{dur:3});let resting=false;for(let n=0;n<260;n++){tick();resting ||= tank._P.drop>.12}check('ゆっくり体を下げて休める',resting&&!st.act);
- resetMotion();const U=st.gk.U,shared=['uPlant','uFootHome','uFootTarget'];const sh={uniforms:{},vertexShader:'#include <common>\n#include <begin_vertex>',fragmentShader:'#include <common>\n#include <dithering_fragment>'};st.gk.clawMesh.material.onBeforeCompile(sh);check('爪も脚と同じ接地計算に追従する',shared.every(k=>sh.uniforms[k]===U[k]));
+ resetMotion();const U=st.gk.U,shared=['uPlant','uFootHome','uFootTarget','uFootPlane'];const sh={uniforms:{},vertexShader:'#include <common>\n#include <begin_vertex>',fragmentShader:'#include <common>\n#include <dithering_fragment>'};st.gk.clawMesh.material.onBeforeCompile(sh);check('爪も脚と同じ接地計算に追従する',shared.every(k=>sh.uniforms[k]===U[k]));
  tank.setDecor([{t:'stone',x:0,z:0,rot:0}]);resetMotion({mode:'walk',target:{x:1.5,z:1.5},burst:999});for(let n=0;n<180;n++)tick();check('岩の上でも足と姿勢が有限',st.gk.U.uFootTarget.value.every(v=>v.toArray().every(Number.isFinite))&&[st.y,st.slope,st.phase].every(Number.isFinite));tank._render();
+ // 足先4点だけでなく、実際に描かれる全三角形と指先の高さを評価する。
+ const G=MODEL.geo,N=G.attributes.position.count;
+ for(const [name,attr]of Object.entries(G.attributes))if(['position','aLeg','aLimb','aPivot','aCy'].includes(name))attrib(name,Array.from(attr.array),attr.itemSize);
+ gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER,feedback);gl.bufferData(gl.TRANSFORM_FEEDBACK_BUFFER,N*12,gl.DYNAMIC_READ);gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER,0,feedback);
+ const base=Array.from({length:N},(_,i)=>new THREE.Vector3().fromBufferAttribute(G.attributes.position,i));
+ const cases=[{name:'歩行',extra:{mode:'walk',target:{x:0,z:2.7},burst:999}},{name:'方向転換',extra:{mode:'walk',target:{x:0,z:-2.5},burst:999}},{name:'休む',act:'settle'},{name:'伸び',act:'stretch'},{name:'岩の上り下り',extra:{mode:'walk',target:{x:2,z:2},burst:999},rock:true},{name:'後ずさり',act:'startle'},{name:'手の上',hand:true},{name:'小さい個体の歩行',size:.5,extra:{mode:'walk',target:{x:1,z:2},burst:999}},{name:'大きい個体の歩行',size:1.2,extra:{mode:'walk',target:{x:1,z:2},burst:999}}];
+ metrics.mesh=[];
+ for(const c of cases){
+  st.size=c.size||1;st.gk.root.scale.setScalar(.95*st.size);tank.setDecor(c.rock?[{t:'stone',x:0,z:0,rot:0}]:[]);resetMotion(c.extra||{});if(c.act)tank.startAct(c.act);if(c.hand)tank.startHandling(100);
+  let maxRatio=0,minFloor=0;
+  for(let frame=0;frame<(c.hand?420:180);frame++){
+   if(c.hand&&frame===330)tank.handCmd('down');st.t+=1/30;tank._step(1/30);if(st.mode==='idle')st.wait=999;if(frame%6)continue;
+   const pts=gpu(N);st.gk.root.updateMatrixWorld(true);
+   for(let i=0;i<N;i+=3)if([i,i+1,i+2].some(j=>G.attributes.aLeg.getX(j)>0))for(const[a,b]of[[i,i+1],[i+1,i+2],[i+2,i]]){
+    const length=base[a].distanceTo(base[b]);if(length>.015)maxRatio=Math.max(maxRatio,pts[a].distanceTo(pts[b])/length);
+   }
+   for(let i=0;i<N;i++)if(G.attributes.aLeg.getX(i)>0&&G.attributes.aLimb.getX(i)>.9&&G.attributes.position.getY(i)<.10){
+    const world=pts[i].clone().applyMatrix4(st.gk.root.matrixWorld);minFloor=Math.min(minFloor,world.y-tank._floor(world.x,world.z));
+   }
+  }
+  metrics.mesh.push({name:c.name,maxRatio,minFloor});
+  check(c.name+'で脚の三角形が大きく引き伸ばされない',maxRatio<2.5,maxRatio);
+  check(c.name+'で指が床や家具の下に突き抜けない',minFloor>-.005,minFloor);
+ }
+ tank.endHandling();tank.setDecor([]);
+
  return {checks,metrics};
 });
+if (process.argv[2]) fs.writeFileSync(process.argv[2] + '/movement-metrics.json', JSON.stringify(result.metrics, null, 2));
 assert.deepEqual(result.checks.filter(c => !c.ok), []); assert.deepEqual(errors, []); console.log('動きの検査 ' + result.checks.length + '件 OK'); console.log(JSON.stringify(errors));
 }finally{await b.close()}})().catch(e=>{console.error(e);process.exit(1)});

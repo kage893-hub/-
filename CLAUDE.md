@@ -47,7 +47,7 @@
   - 起動の引数：`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`
   - 画面サイズ：390×844
 - 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition・study・family・behavior・movement）。最後の行が `[]` ならエラーなし。
-  - movement は足の接地・旋回・後ずさり・前足だけの掘り動作・待機中のしぐさを検査する。接地情報は表示中だけの一時データで、セーブには足さない。
+  - movement は足の接地・旋回・後ずさり・前足だけの掘り動作・待機中のしぐさを検査する。足先の4点だけでなく、描画後の脚の三角形と指先の床・家具・手に対する高さも検査する。接地情報は表示中だけの一時データで、セーブには足さない。
 - テスト用の入り口：`window.__leopaState()`（状態 S）、`window.__leopaTank()`（3D ケース。`_st` が内部状態）
 - 時間を進めるテストは、`Date` を差しかえる（`addInitScript` で偽の Date クラスを入れる）。
 - はじめの流れを進めるヘルパー（start.js）：
