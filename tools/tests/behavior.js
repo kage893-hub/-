@@ -46,6 +46,32 @@ const fs = require('fs'), assert = require('node:assert/strict');
       check('座標と姿勢が壊れない', [st.x, st.z, st.yaw, st.drop].every(Number.isFinite));
       tank.setGecko({ ...g, id: 'another-gecko', seed: g.seed + 1, size: 1, stage: 'adult' });
       check('個体の切り替えでのぞく動作を引き継がない', !st.hidePeek && st.mode === 'idle');
+      tank.setDecor([]); tank.takeFoods(); tank.setNight(false);
+      const reset = extra => {
+        Object.assign(st, { x: 0, z: -2, yaw: 0, mode: 'idle', wait: 999, sleeping: false, act: null, hand: null, pair: null, hidePeek: null, target: null, hunt: null, meal: null, burst: 999, pauseT: 0, idleT: 999, walkTime: 0, walkProgress: null, spd: 0, ...extra });
+      };
+      const tick = n => { for (let i = 0; i < n; i++) { st.t += 1 / 30; tank._step(1 / 30); } };
+      try {
+        Math.random = () => .5;
+        reset({ mode: 'walk', target: { x: 0, z: 3 } });
+        const destination = st.target;
+        tick(285);
+        check('9秒以上進んでも行き先を急に選び直さない', st.mode === 'walk' && st.target === destination && st.z > 0);
+        check('通常の歩行を落ち着いた速さに抑える', st.spd <= .55 * st.profile.walk + .00001);
+        for (let i = 0; i < 600 && st.mode === 'walk'; i++) tick(1);
+        check('到着したら昼は12秒以上休む', st.mode === 'idle' && st.wait > 12);
+        reset({ mode: 'walk', target: { x: 0, z: 99 } }); for (let i = 0; i < 1800 && st.mode === 'walk'; i++) tick(1);
+        check('進めないときは行き先を外して休める', st.mode === 'idle' && st.target === null && st.wait > 0);
+        reset({ mode: 'walk', target: { x: 0, z: 3 }, pauseT: 6 }); tick(150);
+        check('歩行途中の休憩を行き詰まりと間違えない', st.mode === 'walk' && st.pauseT > 0 && st.walkTime === 0);
+        reset(); tank.startAct('yawn'); tick(60);
+        check('しぐさのあともすぐに歩き出さない', st.mode === 'idle' && st.wait >= 12);
+        reset(); tank.setNight(true); tank.startAct('yawn'); tick(60);
+        check('夜も6秒以上休憩し昼より活動的', st.mode === 'idle' && st.wait >= 6 && st.wait < 22.5 * st.profile.rest);
+        reset(); tank.spawnFood('cricketS'); tick(1);
+        check('長い休憩中も餌にはすぐ反応する', !!st.hunt);
+        tank.takeFoods(); tank.setNight(false);
+      } finally { Math.random = original; }
       return checks;
     });
     assert.deepEqual(results.filter(r => !r.ok), []); assert.deepEqual(errors, []);

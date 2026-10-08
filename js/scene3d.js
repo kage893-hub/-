@@ -3332,7 +3332,7 @@
 
     const st = {
       gk: null, id: null, key: '', size: 1, x: 0.5, z: 0.8, yaw: 0.4,
-      mode: 'idle', wait: 1, target: null, sleeping: false, zzz: 0,
+      mode: 'idle', wait: 10, target: null, sleeping: false, zzz: 0,
       foods: [], poops: [], t: 0, phase: 0, walkW: 0, blinkT: 2, blinkV: 0,
       lick: 0, happy: 0, stalk: 0, meal: null, hunt: null, eatLook: 0, eatPitch: 0, look: 0, tiltT: 0, active: true, night: false,
       drop: 0.04, curl: 0, pitch: 0,
@@ -3376,8 +3376,8 @@
       }
       const key = lookKey(look);
       if (look.id !== st.id) {
-        Object.assign(st, { x: rand(-1.5, 2), z: rand(-0.5, 1.5), yaw: rand(-1, 1), mode: 'idle', wait: 1, sleeping: false, stalk: 0, hidePeek: null, act: null, target: null });
-        st.gait = null; st.phase = 0; st.walkW = 0; st.spd = 0; st.prevYaw = null;
+        Object.assign(st, { x: rand(-1.5, 2), z: rand(-0.5, 1.5), yaw: rand(-1, 1), mode: 'idle', wait: rand(8, 14), sleeping: false, stalk: 0, hidePeek: null, act: null, target: null });
+        st.gait = null; st.phase = 0; st.walkW = 0; st.spd = 0; st.prevYaw = null; st.walkProgress = null; st.pauseT = 0; st.burst = null; st.idleT = null;
       }
       st.profile = behaviorProfile(look.seed);
       st.tame = look.tame || 0;
@@ -3530,7 +3530,7 @@
         const to = q.phase === 'back' ? q.origin : q.goal;
         step = moveToward(to.x, to.z, 0.35, dt);
         if (Math.hypot(to.x - st.x, to.z - st.z) < 0.16 || q.t > 8) {
-          if (q.phase === 'back') { st.hidePeek = null; st.sleeping = true; st.mode = 'idle'; st.wait = rand(12, 22) * st.profile.rest; st.zzz = 0.8; }
+          if (q.phase === 'back') { st.hidePeek = null; st.sleeping = true; st.mode = 'idle'; st.wait = (st.night ? rand(30, 60) : rand(60, 120)) * st.profile.rest; st.zzz = 0.8; }
           else { q.phase = 'look'; q.t = 0; st.peekT = 0; seen('look'); }
         }
       } else {
@@ -3662,13 +3662,13 @@
     // ---------- 動き
     const _m = new T.Vector3();
     function mouthWorld() { st.gk.mouth.getWorldPosition(_m); return _m; }
-    function moveToward(tx, tz, speed, dt, g) {
+    function moveToward(tx, tz, speed, dt, g, turnLimit = 2.2) {
       g = g || st;
       const dx = tx - g.x, dz = tz - g.z;
       const d = Math.hypot(dx, dz);
       if (d < 0.05) return 0;
       const diff = angleTo(g.yaw, Math.atan2(dx, dz));
-      g.yaw += clamp(diff * (1 - Math.exp(-dt * 5)), -dt * 2.2, dt * 2.2);
+      g.yaw += clamp(diff * (1 - Math.exp(-dt * 5)), -dt * turnLimit, dt * turnLimit);
       // 大きな旋回では前進を控えて踏み替える。到着直前にも小さく減速する。
       const alignment = Math.max(0.08, Math.pow(Math.max(0, Math.cos(diff)), 2));
       const desired = speed * alignment * clamp(d / 0.65, 0.12, 1);
@@ -3681,14 +3681,18 @@
     function clampPos(dt) {
       if (st.hand && st.hand.phase !== 'offer' && st.hand.phase !== 'shy') return;
       resolveObstacles();
-      // 家具にはばまれて進めないときは、行き先を変える
-      if (st.mode === 'walk' || st.mode === 'toHide' || st.mode === 'toDrink' || st.mode === 'toBask') {
-        st.walkTime = (st.walkTime || 0) + dt;
-        if (st.walkTime > 9) { st.mode = 'idle'; st.wait = 0.5; st.walkTime = 0; }
-      }
       const m = 1.4 * st.size;
       st.x = clamp(st.x, -BOUNDS.x + m, BOUNDS.x - m);
       st.z = clamp(st.z, BOUNDS.zMin + m, BOUNDS.zMax - m * 0.6);
+      // 歩いている時間ではなく、実際に進めない時間だけを数える。
+      // 立ち止まって周囲を見る間や旋回中に、行き先を選び直さない。
+      if (['walk', 'toHide', 'toDrink', 'toBask'].includes(st.mode) && !st.hand && !st.pair && !st.hunt && !st.act) {
+        const prev = st.walkProgress;
+        const progressing = !prev || prev.target !== st.target || Math.hypot(st.x - prev.x, st.z - prev.z) > dt * 0.01 || Math.abs(angleTo(prev.yaw, st.yaw)) > dt * 0.02;
+        st.walkTime = progressing || st.pauseT > 0 ? 0 : (st.walkTime || 0) + dt;
+        st.walkProgress = { x: st.x, z: st.z, yaw: st.yaw, target: st.target };
+        if (st.walkTime > 4) { st.mode = 'idle'; st.target = null; st.wait = calmRest(); st.walkTime = 0; st.walkProgress = null; }
+      } else { st.walkTime = 0; st.walkProgress = null; }
     }
 
     function stepFoods(dt) {
@@ -4066,9 +4070,9 @@
       } else if (H.phase === 'lifted') {
         H.onT += dt;
         // 手の上で、ときどき少し歩いて向きを変える
-        H.wT = (H.wT == null ? rand(2, 4) : H.wT) - dt;
-        if (H.wT <= 0) { H.goal = Math.random() < 0.5 ? ctr(cur, rand(-0.15, 0.2) * len) : null; H.wT = rand(3, 6); if (Math.random() < 0.4) st.lick = 0.9; }
-        if (H.goal) { step = moveToward(H.goal.x, H.goal.z, 0.5, dt); if (!step) H.goal = null; }
+        H.wT = (H.wT == null ? rand(6, 10) : H.wT) - dt;
+        if (H.wT <= 0) { H.goal = Math.random() < 0.5 ? ctr(cur, rand(-0.15, 0.2) * len) : null; H.wT = rand(8, 14); if (Math.random() < 0.4) st.lick = 0.9; }
+        if (H.goal) { step = moveToward(H.goal.x, H.goal.z, 0.35, dt, st, 1.1); if (!step) H.goal = null; }
         const limit = 28 + H.tame * 0.3;
         if (H.onT > limit && !H.restless) { H.restless = true; handlers.onHandling && handlers.onHandling('restless'); }
         if (H.restless) { const e = ctr(cur, len * 0.45); step = moveToward(e.x, e.z, 0.7, dt); }
@@ -4385,11 +4389,13 @@
       st.mode = 'act';
       return true;
     }
-    function endAct() { st.act = null; st.mode = 'idle'; st.wait = rand(1.5, 4); }
+    // 通常の休憩は実時間。個体の傾向を残しつつ、次々に歩き直さない。
+    function calmRest() { return (st.night ? rand(8, 16) : rand(15, 30)) * st.profile.rest; }
+    function endAct() { st.act = null; st.mode = 'idle'; st.wait = calmRest(); }
     function actGo(A, dt, nf) {
-      const step = moveToward(A.to.x, A.to.z, 0.8 * nf, dt);
+      const step = moveToward(A.to.x, A.to.z, 0.5 * nf * st.profile.walk, dt, st, 1.1);
       A.goT = (A.goT || 0) + dt;
-      if (Math.hypot(A.to.x - st.x, A.to.z - st.z) < 0.18 || A.goT > 12) {
+      if (Math.hypot(A.to.x - st.x, A.to.z - st.z) < 0.18 || A.goT > 24) {
         if (A.path && A.path.length) { A.to = A.path.shift(); A.goT = 0; return step; }
         A.ph = 'do'; A.t = 0;
       }
@@ -4628,19 +4634,19 @@
             const w = st.target && st.target.water;
             if (w) { const my = mouthWorld().y; st.drinkPitch = clamp((st.drinkPitch || 0) + (my - (w.y + 0.04)) * dt * 6, -0.3, 0.8); }
           }
-          if (st.wait <= 0) { const was = st.mode; st.mode = 'idle'; st.wait = rand(1.5, 4); if (was === 'bask' && Math.random() < 0.4) startAct('yawn'); }
+          if (st.wait <= 0) { const was = st.mode; st.mode = 'idle'; st.wait = calmRest(); if (was === 'bask' && Math.random() < 0.4) startAct('yawn'); }
         } else if (st.mode === 'walk' || st.mode === 'toHide' || st.mode === 'toDrink' || st.mode === 'toBask') {
           // 本物のレオパのように、少し歩いては止まり、まわりを見てまた歩く
           if (st.pauseT > 0) {
             st.pauseT -= dt;
             st.yaw += angleTo(st.yaw, Math.atan2(st.target.x - st.x, st.target.z - st.z)) * Math.min(1, dt * 0.8);
           } else {
-            step = moveToward(st.target.x, st.target.z, 0.85 * nf * st.profile.walk, dt);
+            step = moveToward(st.target.x, st.target.z, 0.55 * nf * st.profile.walk, dt, st, 1.1);
             st.burst = (st.burst == null ? rand(3, 6) : st.burst) - dt;
             if (st.burst <= 0 && Math.hypot(st.target.x - st.x, st.target.z - st.z) > 1.2) {
               st.burst = st.night ? rand(4, 8) : rand(3, 6);
               // 毎回ではなく、ときどき立ち止まる
-              if (Math.random() < (st.night ? 0.3 : 0.5)) st.pauseT = st.night ? rand(0.3, 0.7) : rand(0.4, 1.0);
+              if (Math.random() < (st.night ? 0.5 : 0.7)) st.pauseT = st.night ? rand(1.2, 2.5) : rand(2, 4);
               if (st.pauseT > 0) {
                 if (Math.random() < 0.35) st.lick = 0.9;
                 else { st.peek = rand(-0.6, 0.6); st.peekT = st.pauseT; }
@@ -4649,10 +4655,10 @@
           }
           if (Math.hypot(st.target.x - st.x, st.target.z - st.z) < 0.15) {
             if (st.mode === 'toHide' && st.target.next) st.target = st.target.next;
-            else if (st.mode === 'toHide') { st.sleeping = true; st.wait = rand(18, 35) * st.profile.rest; st.zzz = 0.8; st.mode = 'idle'; seen('hide'); }
+            else if (st.mode === 'toHide') { st.sleeping = true; st.wait = (st.night ? rand(30, 60) : rand(60, 120)) * st.profile.rest; st.zzz = 0.8; st.mode = 'idle'; seen('hide'); }
             else if (st.mode === 'toDrink') { st.mode = 'drink'; st.wait = rand(3, 5); st.lickT = 0.2; seen('drink'); }
             else if (st.mode === 'toBask') { st.mode = 'bask'; st.wait = rand(8, 16); seen('bask'); }
-            else { st.mode = 'idle'; st.wait = (st.night ? rand(0.8, 2.5) : rand(2.5, 6)) * st.profile.rest; }
+            else { st.mode = 'idle'; st.wait = calmRest(); }
           }
         } else {
           st.wait -= dt;
@@ -4677,7 +4683,7 @@
             }
             else if (stone && !st.night && r0 < 0.28) { st.mode = 'toBask'; st.target = { x: stone.x + rand(-0.3, 0.3), z: stone.z + rand(-0.3, 0.3), face: rand(0, 6.28) }; }
             else if ((!st.night || st.heatPref < 0) && Math.random() < (st.heatPref < 0 ? 0.5 : st.profile.hide) && HIDE) { st.mode = 'toHide'; st.target = HIDE.tunnel ? { x: HIDE.door.x, z: HIDE.door.z, next: { x: HIDE.x, z: HIDE.z } } : { x: HIDE.x, z: HIDE.z }; }
-            else if (!st.night && Math.random() < 0.12) { st.sleeping = true; st.wait = rand(12, 25); st.zzz = 0.8; seen('nap'); }
+            else if (!st.night && Math.random() < 0.12) { st.sleeping = true; st.wait = rand(45, 90) * st.profile.rest; st.zzz = 0.8; seen('nap'); }
             else if (st.night && Math.random() < 0.3 && startWalkAct('patrol')) { /* 夜はケースのふちをパトロール */ }
             else if (Math.random() < 0.1 && startWalkAct('glass')) { /* ガラスをぺろぺろ */ }
             else if (Math.random() < 0.08 && startWalkAct('dig')) { /* 床をかりかり */ }
@@ -4719,20 +4725,20 @@
       let wantLook = 0;
       // じっとしているときは、ときどき舌をぺろっと出したり、きょろきょろ見回したりする
       if (!moving && !st.sleeping && !food && st.mode === 'idle' && !st.pair) {
-        st.idleT = (st.idleT == null ? rand(3, 7) : st.idleT) - dt;
+        st.idleT = (st.idleT == null ? rand(10, 18) : st.idleT) - dt;
         if (st.idleT <= 0) {
           const r0 = Math.random(), pk = shedPeel();
           if (pk > 0.02 && pk < 0.98 && r0 < 0.75) {
             if (Math.random() < 0.4) { st.shedAct = { type: 'rub', t: 0 }; seen('shedRub'); }
             else st.shedAct = { type: 'pull', t: 0, side: Math.random() < 0.5 ? -1 : 1 };
           } else if (r0 < 0.3) { st.lick = 0.9; seen('lick'); }
-          else if (r0 < 0.58) { st.peek = rand(-0.7, 0.7); st.peekT = rand(1.2, 2.4); seen('look'); }
+          else if (r0 < 0.58) { st.peek = rand(-0.45, 0.45); st.peekT = rand(2, 3.5); seen('look'); }
           else if (r0 < 0.68) { st.tiltT = 1.2; seen('tilt'); }
           else if (r0 < 0.73) startAct('sniff');
           else if (r0 < 0.82) startAct('stretch');
           else if (r0 < 0.9) startAct('settle', { dur: rand(6, 10) });
           else startAct('yawn');
-          st.idleT = pk > 0 && pk < 1 ? rand(2, 4) : rand(7, 15) * st.profile.rest;
+          st.idleT = pk > 0 && pk < 1 ? rand(2, 4) : rand(16, 30) * st.profile.rest;
         }
       }
       if (st.peekT > 0) st.peekT -= dt;
