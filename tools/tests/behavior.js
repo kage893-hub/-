@@ -47,6 +47,8 @@ const fs = require('fs'), assert = require('node:assert/strict');
       tank.setGecko({ ...g, id: 'another-gecko', seed: g.seed + 1, size: 1, stage: 'adult' });
       check('個体の切り替えでのぞく動作を引き継がない', !st.hidePeek && st.mode === 'idle');
       tank.setDecor([]); tank.takeFoods(); tank.setNight(false);
+      // 9秒で到着してしまう速い個体を避け、長い歩行を確実に検査する。
+      st.profile = profiles.find(p => p.name === 'のんびり');
       const reset = extra => {
         Object.assign(st, { x: 0, z: -2, yaw: 0, mode: 'idle', wait: 999, sleeping: false, act: null, hand: null, pair: null, hidePeek: null, target: null, hunt: null, meal: null, burst: 999, pauseT: 0, idleT: 999, walkTime: 0, walkProgress: null, spd: 0, ...extra });
       };

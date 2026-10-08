@@ -133,6 +133,14 @@
     if (s.daily && s.daily.streak >= 7) s.achievementMedals.streak7 = true;
     s.showRec = s.showRec || {};
     s.showRec.champ = Math.max(s.showRec.champ || 0, (s.trophies || []).filter(t => t.rank === 1).length);
+    // 病院の不具合のお詫びは、更新前の全アルバムの受診記録から一度だけ配る。
+    // 旅立った子の記録も対象。更新後の受診や再読み込みでは追加しない。
+    if (!s.clinicApology) {
+      const visits = Object.values(s.albums || {}).reduce((n, a) => n + (a.entries || []).filter(e => e.text === 'どうぶつ病院でみてもらって、元気になった').length, 0);
+      const coins = visits * 20;
+      s.coins += coins;
+      s.clinicApology = { visits, coins, at: Date.now(), announced: false };
+    }
     window.LeopaFamily.sync(s);
     return s;
   }
@@ -208,6 +216,7 @@
       tut: { step: 0 }, geckos: [], eggs: [], dex: {}, names: {}, decorInv: { grass: 1 }, decorV3: true, selected: null, offers: [], offersAt: 0,
       lastTick: Date.now(), nextId: 1, welcomed: false, stats: { hatched: 0, rehomed: 0 },
       calc: 10, dust: true, layBox: [], learned: {}, starterFlag: true,
+      clinicApology: { visits: 0, coins: 0, at: Date.now(), announced: true },
     };
     // はじめはショップでレオパを選ぶところから
     S.starters = makeStarters();
@@ -677,8 +686,8 @@
     const cond = { mouth: g.clean < 25 || g.poop >= 3, bone: boneOf(g) < 20, tummy: heatOf(g) <= 29 || (g.wormRun || 0) >= 4 };
     for (const k in cond) g.bad[k] = cond[k] ? (g.bad[k] || 0) + dms : Math.max(0, (g.bad[k] || 0) - dms);
     if (g.sick) return;
-    // 実時間3日つづくと体調をくずす。ゲームの速さは√で少しだけ効く（おなかと同じ）
-    const k = Object.keys(cond).find(x => g.bad[x] > 3 * DAYMS / Math.sqrt(speedX()));
+    // 実時間6日つづくと体調をくずす。ゲームの速さは√で少しだけ効く（おなかと同じ）
+    const k = Object.keys(cond).find(x => g.bad[x] > 6 * DAYMS / Math.sqrt(speedX()));
     if (!k) return;
     g.sick = { type: k, at: now };
     g.bad[k] = 0;
@@ -1128,10 +1137,11 @@
     clinic() {
       const g = selected();
       if (!g || !g.sick) return;
-      if (S.coins < 20) { toast('コインが足りません（20コイン）'); return; }
+      if (S.coins < 10) { toast('コインが足りません（10コイン）'); return; }
       const k = SICK[g.sick.type];
-      S.coins -= 20;
+      S.coins -= 10;
       g.sick = null;
+      g.bad = {};
       learn('sick');
       memo(g, 'どうぶつ病院でみてもらって、元気になった');
       closeSheet();
@@ -1563,6 +1573,7 @@
   // ---------- ギフトコード（コードそのものはソースに書かず、ハッシュで照合する）
   const GIFTS = {
     yqq9dl: { id: 'tomato', coins: 300, text: 'コイン300枚' },
+    '170itcr': { id: 'hanshin-victory', coins: 200, food: { cricketS: 50, cricket: 50 }, text: 'コイン200枚・コオロギS50匹・コオロギM50匹' },
   };
   const giftNorm = v => v.normalize('NFKC').trim().toUpperCase().replace(/\s+/g, '').replace(/[\u3041-\u3096]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60));
   const giftHash = v => { let x = 2166136261; for (const c of v) { x ^= c.codePointAt(0); x = Math.imul(x, 16777619) >>> 0; } return x.toString(36); };
@@ -1589,6 +1600,7 @@
     if (S.gifts[gift.id]) { giftSheet('このギフトコードは受け取りずみです'); return; }
     S.gifts[gift.id] = Date.now();
     S.coins += gift.coins || 0;
+    for (const [kind, count] of Object.entries(gift.food || {})) S.food[kind] = (S.food[kind] || 0) + count;
     closeSheet();
     sfx('hatch');
     toast(`ギフトを受け取りました！ ${gift.text}`);
@@ -3025,7 +3037,7 @@
       <summary><span>けんこうチェック</span><span class="pill ${bad ? 'warn' : 'good'}">${sum}</span></summary>
       <div class="health-rows">${rows.map(([k, [v, cls]]) => `<span>${k}</span><b class="hv ${cls}">${v}</b>`).join('')}</div>
       ${tips.length ? `<p class="small">アドバイス：${tips.join('。')}。</p>` : '<p class="muted small">このままの暮らしで大丈夫。</p>'}
-      ${g.sick ? '<button class="act primary wide" data-action="clinic">どうぶつ病院でみてもらう（20コイン）</button>' : ''}
+      ${g.sick ? '<button class="act primary wide" data-action="clinic">どうぶつ病院でみてもらう（10コイン）</button>' : ''}
       <p class="body-label">からだチェック</p>
       <div class="body-check">${[['eye', '目'], ['mouth', '口'], ['jaw', 'あご・足'], ['toe', '指・しっぽ'], ['poop', 'フン']].map(([k, n]) => `<button class="chip" data-action="bodyCheck" data-part="${k}">${n}</button>`).join('')}</div>
     </details>`;
@@ -4018,6 +4030,13 @@
   }
   window.__leopaTank = () => tank;
   if (!S) freshState();
+  if (S.clinicApology && !S.clinicApology.announced) {
+    const apology = S.clinicApology;
+    apology.announced = true;
+    // 受診や画面操作より先に配布済みを保存し、再起動で重複して配らない。
+    saveNow();
+    if (apology.coins > 0) setTimeout(() => toast(`病院の不具合のお詫びとして、過去の受診${apology.visits}回分の${apology.coins}コインをお届けしました。今回限りのお詫びです。`), 1500);
+  }
   const awayFrom = S.lastTick;
   initTank();
   // 3D モデルが読みこめたら、レオパを差しかえる
