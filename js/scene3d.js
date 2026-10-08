@@ -3183,30 +3183,15 @@
     let obstacles = [];   // ぶつかる家具（トンネルは左右の壁だけ）
     let placed = [];      // 置いてある家具ぜんぶ（選択・水入れ探しなど）
     let climbs = [];      // よじ登れる家具
-    // よじ登れる家具の高さ（床を細かいマス目に分けて、上から光線を当てて測る）
-    const HF = { c: 0.12, nx: 0, nz: 0, h: null };
+    // 家具の三角形から実際の表面を測る。縁を床との補間で低くしない。
+    const HF = { surfaces: [] };
     function buildHF() {
-      HF.nx = Math.ceil(TK.hw * 2 / HF.c) + 1; HF.nz = Math.ceil(TK.hd * 2 / HF.c) + 1;
-      HF.h = new Float32Array(HF.nx * HF.nz);
-      if (!climbs.length) return;
-      const rc = new T.Raycaster(), down = new T.Vector3(0, -1, 0), from = new T.Vector3();
-      for (const o of climbs) {
-        o.updateMatrixWorld(true);
-        const bb = new T.Box3().setFromObject(o);
-        const i0 = Math.max(0, Math.floor((bb.min.x + TK.hw) / HF.c)), i1 = Math.min(HF.nx - 1, Math.ceil((bb.max.x + TK.hw) / HF.c));
-        const j0 = Math.max(0, Math.floor((bb.min.z + TK.hd) / HF.c)), j1 = Math.min(HF.nz - 1, Math.ceil((bb.max.z + TK.hd) / HF.c));
-        for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
-          rc.set(from.set(-TK.hw + i * HF.c, bb.max.y + 1, -TK.hd + j * HF.c), down);
-          const hit = rc.intersectObject(o, true).find(h => h.object.name !== 'water');
-          if (hit && hit.point.y > HF.h[j * HF.nx + i]) HF.h[j * HF.nx + i] = hit.point.y;
-        }
-      }
+      HF.surfaces = climbs.map(o => buildContactSurface(o));
     }
     function heightAt(x, z) {
-      if (!HF.h) return 0;
-      const fx = clamp((x + TK.hw) / HF.c, 0, HF.nx - 1.001), fz = clamp((z + TK.hd) / HF.c, 0, HF.nz - 1.001);
-      const i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j, H = HF.h, n = HF.nx;
-      return lerp(lerp(H[j * n + i], H[j * n + i + 1], u), lerp(H[(j + 1) * n + i], H[(j + 1) * n + i + 1], u), v);
+      let top = 0;
+      for (const surface of HF.surfaces) top = Math.max(top, contactHeight(surface, x, z));
+      return top;
     }
     let decorKey = '';
     let edit = null; // もようがえ中なら { sel }
@@ -3941,7 +3926,42 @@
     }
 
     // ---- ふれあい：手のひらを差し出すと乗ってくる。持ちあげたり、なでたり、手から手へ歩かせたり
-    let handProf = null; // 手のひらの高さ（指先方向の位置ごと）
+    // 接地する三角形を平面のマスに分け、足元の実際の高さを軽く調べる。
+    function buildContactSurface(g, len = 1, cell = 0.12) {
+      const cells = new Map();
+      const bin = v => Math.floor(v / cell);
+      g.updateMatrixWorld(true);
+      g.traverse(o => {
+        if (!o.isMesh || o.name === 'water') return;
+        const geo = o.geometry, pos = geo.attributes.position, idx = geo.index;
+        for (let i = 0; i < (idx ? idx.count : pos.count); i += 3) {
+          const tri = [0, 1, 2].map(k => new T.Vector3().fromBufferAttribute(pos, idx ? idx.getX(i + k) : i + k).applyMatrix4(o.matrixWorld).divideScalar(len));
+          const [a, b, c] = tri;
+          const det = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
+          if (Math.abs(det) < 1e-10) continue;
+          const material = Array.isArray(o.material) ? o.material[(geo.groups.find(group => i >= group.start && i < group.start + group.count) || {}).materialIndex || 0] : o.material;
+          // 描画と同じ面だけを使い、裏向きの三角形を架空の足場にしない。
+          if (material.side === T.FrontSide && det > 0 || material.side === T.BackSide && det < 0) continue;
+          const item = { a, b, c, det };
+          for (let x = bin(Math.min(a.x, b.x, c.x)); x <= bin(Math.max(a.x, b.x, c.x)); x++)
+            for (let z = bin(Math.min(a.z, b.z, c.z)); z <= bin(Math.max(a.z, b.z, c.z)); z++) {
+              const key = x + ',' + z;
+              if (!cells.has(key)) cells.set(key, []);
+              cells.get(key).push(item);
+            }
+        }
+      });
+      return { cells, bin };
+    }
+    function contactHeight(surface, x0, z0) {
+      let top = -1;
+      for (const { a, b, c: v, det } of surface.cells.get(surface.bin(x0) + ',' + surface.bin(z0)) || []) {
+        const u = ((b.z - v.z) * (x0 - v.x) + (v.x - b.x) * (z0 - v.z)) / det;
+        const w = ((v.z - a.z) * (x0 - v.x) + (a.x - v.x) * (z0 - v.z)) / det;
+        if (u >= -1e-7 && w >= -1e-7 && u + w <= 1.0000001) top = Math.max(top, u * a.y + w * b.y + (1 - u - w) * v.y);
+      }
+      return top;
+    }
     function buildHand(len) {
       const g = new T.Group();
       if (kitHas('Hand')) {
@@ -3960,31 +3980,20 @@
         g.add(palm);
       }
       g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-      if (!handProf) {
-        // 長さ1あたりの高さを、指先方向に32か所測っておく
-        const t = buildHand.tmp || (buildHand.tmp = true);
-        const probe = g.clone(); probe.scale.setScalar(1 / len); probe.updateMatrixWorld(true);
-        const rc = new T.Raycaster(), down = new T.Vector3(0, -1, 0), prof = [];
-        for (let i = 0; i <= 32; i++) {
-          const x = -0.5 + i / 32;
-          let top = 0;
-          for (const z of [-0.06, 0, 0.06]) { rc.set(new T.Vector3(x, 5, z), down); const h = rc.intersectObject(probe, true)[0]; if (h) top = Math.max(top, h.point.y); }
-          prof.push(top);
-        }
-        handProf = prof;
-      }
+      g.userData.surface = buildContactSurface(g, len, 0.025);
       g.userData.len = len;
       return g;
     }
     // 手の上の高さ（手の外なら -1）
     function handHeightAt(h, x, z) {
-      if (!h || !handProf) return -1;
+      if (!h) return -1;
       const len = h.userData.len;
       const dx = x - h.position.x, dz = z - h.position.z, c = Math.cos(h.rotation.y), s2 = Math.sin(h.rotation.y);
       const lx = dx * c - dz * s2, lz = dx * s2 + dz * c;
-      if (Math.abs(lz) > len * 0.2 || Math.abs(lx) > len * 0.5) return -1;
-      const f = clamp((lx / len + 0.5) * 32, 0, 32), i = Math.min(31, Math.floor(f));
-      return h.position.y + lerp(handProf[i], handProf[i + 1], f - i) * len * 0.92;
+      if (Math.abs(lz) > len * 0.5 || Math.abs(lx) > len * 0.55) return -1;
+      // 指の間は床、親指や手のひらの上はその表面に接地する。
+      const top = contactHeight(h.userData.surface, lx / len, lz / len);
+      return top < 0 ? -1 : h.position.y + top * len + 0.008;
     }
     function surfaceAt(x, z) {
       let y = heightAt(x, z);
@@ -4027,14 +4036,21 @@
       if (cmd === 'walk' && H.phase === 'lifted') {
         // つぎの手を、いまの手の指先の先に差し出す（ケースの外に出そうなら内側へ曲げる）
         const cur = H.hands[H.cur], len = cur.userData.len, yaw = cur.rotation.y + Math.PI / 2;
-        // いまの手の指先に、つぎの手首がつくように置く。ケースの外に出るなら、向きを少しずつ変えて探す
-        const tipX = cur.position.x + Math.sin(yaw) * len * 0.46, tipZ = cur.position.z + Math.cos(yaw) * len * 0.46;
-        let nx = 0, nz = 0, ny = yaw;
-        for (const d of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8, 2.4, -2.4, Math.PI]) {
-          ny = yaw + d;
-          nx = tipX + Math.sin(ny) * len * 0.44; nz = tipZ + Math.cos(ny) * len * 0.44;
-          if (Math.abs(nx) < BOUNDS.x - len * 0.35 && nz > BOUNDS.zMin + len * 0.2 && nz < BOUNDS.zMax - len * 0.2) break;
+        // 両手を少し重ねて支えをつなぎ、ケースの縁を避ける
+        // 狭いケースでは横へ渡す。折り返して元の手と重なる位置は選ばない。
+        const tipX = cur.position.x + Math.sin(yaw) * len * 0.05, tipZ = cur.position.z + Math.cos(yaw) * len * 0.05;
+        let nx = 0, nz = 0, ny = yaw, found = false;
+        for (const gap of [0.58, 0.42]) {
+          for (const d of [0, 0.6, -0.6, Math.PI / 2, -Math.PI / 2, 1.8, -1.8, 2.4, -2.4, Math.PI]) {
+            ny = yaw + d;
+            nx = tipX + Math.sin(ny) * len * gap; nz = tipZ + Math.cos(ny) * len * gap;
+            const mx = len * (Math.abs(Math.sin(ny)) * 0.5 + Math.abs(Math.cos(ny)) * 0.22);
+            const mz = len * (Math.abs(Math.cos(ny)) * 0.5 + Math.abs(Math.sin(ny)) * 0.22);
+            if (Math.abs(nx) + mx < BOUNDS.x && nz - mz > BOUNDS.zMin && nz + mz < BOUNDS.zMax && Math.hypot(nx - st.x, nz - st.z) > len * 0.25) { found = true; break; }
+          }
+          if (found) break;
         }
+        if (!found) return;
         let h = H.hands[1 - H.cur];
         if (!h) { h = buildHand(len); scene.add(h); H.hands.push(h); }
         placeHand(h, nx, nz, ny, cur.position.y - 0.05);
@@ -4089,8 +4105,9 @@
           handlers.onHandling && handlers.onHandling('walked');
         }
       } else if (H.phase === 'down') {
-        cur.position.y = Math.max(0, cur.position.y - dt * 1.6);
-        if (cur.position.y <= 0.001) {
+        // 手渡しの途中でおろす場合も、両手を一緒に下げる。
+        for (const h of H.hands) if (h.position.y >= 0) h.position.y = Math.max(0, h.position.y - dt * 1.6);
+        if (H.hands.every(h => h.position.y <= 0.001)) {
           // 床におりたら、手から前へおりて終わり
           const e = ctr(cur, len * 0.95);
           step = moveToward(e.x, e.z, 0.9, dt);
@@ -4100,7 +4117,11 @@
       // 手の上にいるあいだは、手からはみ出さないように
       if (st.hand && st.hand.phase !== 'offer' && st.hand.phase !== 'shy' && (st.hand.phase !== 'down' || cur.position.y > 0.01)) {
         const hs = [H.hands[H.cur]].concat(H.next != null ? [H.hands[H.next]] : []);
-        if (!hs.some(h => handHeightAt(h, st.x, st.z) > -0.5)) {
+        // 指の間や手と手の境目では、胴の中心に手がなくても足で支えられる。
+        const sy = Math.sin(st.yaw), cy = Math.cos(st.yaw);
+        const supported = hs.some(h => handHeightAt(h, st.x, st.z) > -0.5 || (MODEL.feet || []).some(foot =>
+          handHeightAt(h, st.x + (foot.x * cy + foot.z * sy) * S, st.z + (-foot.x * sy + foot.z * cy) * S) > -0.5));
+        if (!supported) {
           const c = ctr(cur, 0);
           st.x = lerp(st.x, c.x, 0.2); st.z = lerp(st.z, c.z, 0.2);
         }

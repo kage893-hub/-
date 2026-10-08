@@ -7,7 +7,7 @@ async function harness() {
   p.on('pageerror', e => errors.push(String(e)));
   p.on('console', m => { if (m.type() === 'error' && /shader|WebGLProgram|GL_INVALID/.test(m.text())) errors.push(m.text()); });
   let scene = fs.readFileSync(__dirname + '/../../js/scene3d.js', 'utf8');
-  scene = scene.replace('_st: st, _cam: camera,', '_step: stepGecko, _render: () => renderer.render(scene, camera), _floor: surfaceAt, _P: P, _st: st, _cam: camera,');
+  scene = scene.replace('_st: st, _cam: camera,', '_step: stepGecko, _render: () => renderer.render(scene, camera), _floor: surfaceAt, _handHeight: handHeightAt, _climbs: () => climbs, _P: P, _st: st, _cam: camera,');
   scene = scene.replace('root.Leopa3D = {', 'root._movement = { MODEL, DEFORM_GLSL }; root.Leopa3D = {');
   await p.route('**/js/scene3d.js', r => r.fulfill({ contentType: 'text/javascript', body: scene }));
   await p.addInitScript(() => { const original = window.setInterval; window._testIntervals = []; window.setInterval = (...args) => { const id = original(...args); _testIntervals.push(id); return id; }; });
@@ -62,6 +62,28 @@ const result=await p.evaluate(()=>{
  resetMotion();tank.startAct('stretch');let stretchDrop=1;for(let n=0;n<160;n++){tick();stretchDrop=Math.min(stretchDrop,tank._P.drop)}check('伸びから元の姿勢へ戻る',stretchDrop<0&&!st.act&&st.gait.feet.every(f=>!f.air),stretchDrop);
  resetMotion();tank.startAct('settle',{dur:3});let resting=false;for(let n=0;n<260;n++){tick();resting ||= tank._P.drop>.12}check('ゆっくり体を下げて休める',resting&&!st.act);
  resetMotion();const U=st.gk.U,shared=['uPlant','uFootHome','uFootTarget','uFootPlane'];const sh={uniforms:{},vertexShader:'#include <common>\n#include <begin_vertex>',fragmentShader:'#include <common>\n#include <dithering_fragment>'};st.gk.clawMesh.material.onBeforeCompile(sh);check('爪も脚と同じ接地計算に追従する',shared.every(k=>sh.uniforms[k]===U[k]));
+ // 断面の推定値ではなく、実際の手の三角形の表面と一致するか確かめる。
+ resetMotion();tank.startHandling(100);
+ const hand=st.hand.hands[0],handLen=hand.userData.len,ray=new THREE.Raycaster();hand.updateMatrixWorld(true);
+ let handSamples=0,missing=0,minGap=0,maxGap=0;
+ for(let x=-20;x<=20;x++)for(let z=-12;z<=12;z++){
+  const at=hand.localToWorld(new THREE.Vector3(x/42*handLen,0,z/42*handLen));ray.set(new THREE.Vector3(at.x,10,at.z),new THREE.Vector3(0,-1,0));const hit=ray.intersectObject(hand,true)[0];if(!hit)continue;
+  const y=tank._handHeight(hand,at.x,at.z);handSamples++;if(y<0)missing++;else{minGap=Math.min(minGap,y-hit.point.y);maxGap=Math.max(maxGap,y-hit.point.y)}
+ }
+ check('指や親指も実際の手の表面で接地を判定する',handSamples>100&&missing===0&&minGap>-.00001&&maxGap<.009,{handSamples,missing,minGap,maxGap});
+ for(let n=0;n<1500&&tank.handling()!=='lifted';n++)tick(1/30);
+ check('手に乗って持ち上げる動作が完了する',tank.handling()==='lifted');
+ const walkStart={x:st.x,z:st.z};tank.handCmd('walk');for(let n=0;n<1200&&tank.handling()==='walk';n++)tick(1/30);
+ check('狭いケースでも次の手へ歩いて渡りきれる',tank.handling()==='lifted'&&st.hand.cur===1&&Math.hypot(st.x-walkStart.x,st.z-walkStart.z)>handLen*.25);
+ resetMotion();tank.startHandling(100);for(let n=0;n<1500&&tank.handling()!=='lifted';n++)tick(1/30);
+ tank.handCmd('walk');for(let n=0;n<15;n++)tick(1/30);tank.handCmd('down');for(let n=0;n<30;n++)tick(1/30);
+ check('手渡しの途中でおろすと両手が一緒に下がる',st.hand.hands.every(h=>h.position.y>=0&&h.position.y<.3),st.hand.hands.map(h=>h.position.y));
+ for(let n=0;n<270&&tank.handling();n++)tick(1/30);check('手渡し中のおろす操作でふれあいを終えられる',!tank.handling());
+ tank.setDecor([{t:'stone',x:0,z:0,rot:.4}]);let rockSamples=0,rockError=0;
+ for(let x=-15;x<=15;x++)for(let z=-15;z<=15;z++){
+  ray.set(new THREE.Vector3(x*.08,10,z*.08),new THREE.Vector3(0,-1,0));const hit=ray.intersectObjects(tank._climbs(),true)[0];if(!hit)continue;rockSamples++;rockError=Math.max(rockError,Math.abs(tank._floor(x*.08,z*.08)-hit.point.y));
+ }
+ check('岩の縁も床との補間で低くせず実際の表面を使う',rockSamples>30&&rockError<.00001,{rockSamples,rockError});
  tank.setDecor([{t:'stone',x:0,z:0,rot:0}]);resetMotion({mode:'walk',target:{x:1.5,z:1.5},burst:999});for(let n=0;n<180;n++)tick();check('岩の上でも足と姿勢が有限',st.gk.U.uFootTarget.value.every(v=>v.toArray().every(Number.isFinite))&&[st.y,st.slope,st.phase].every(Number.isFinite));tank._render();
  // 足先4点だけでなく、実際に描かれる全三角形と指先の高さを評価する。
  const G=MODEL.geo,N=G.attributes.position.count;
@@ -72,7 +94,7 @@ const result=await p.evaluate(()=>{
  metrics.mesh=[];
  for(const c of cases){
   st.size=c.size||1;st.gk.root.scale.setScalar(.95*st.size);tank.setDecor(c.rock?[{t:'stone',x:0,z:0,rot:0}]:[]);resetMotion(c.extra||{});if(c.act)tank.startAct(c.act);if(c.hand)tank.startHandling(100);
-  let maxRatio=0,minFloor=0;
+  let maxRatio=0,minFloor=0,minBody=0,bodyPoint=null;
   for(let frame=0;frame<(c.hand?420:180);frame++){
    if(c.hand&&frame===330)tank.handCmd('down');st.t+=1/30;tank._step(1/30);if(st.mode==='idle')st.wait=999;if(frame%6)continue;
    const pts=gpu(N);st.gk.root.updateMatrixWorld(true);
@@ -82,8 +104,10 @@ const result=await p.evaluate(()=>{
    for(let i=0;i<N;i++)if(G.attributes.aLeg.getX(i)>0&&G.attributes.aLimb.getX(i)>.9&&G.attributes.position.getY(i)<.10){
     const world=pts[i].clone().applyMatrix4(st.gk.root.matrixWorld);minFloor=Math.min(minFloor,world.y-tank._floor(world.x,world.z));
    }
+   if(c.hand)for(let i=0;i<N;i++)if(G.attributes.aLeg.getX(i)===0&&G.attributes.position.getZ(i)>-1.55&&G.attributes.position.getY(i)<.20){const world=pts[i].clone().applyMatrix4(st.gk.root.matrixWorld),gap=world.y-tank._floor(world.x,world.z);if(gap<minBody){minBody=gap;bodyPoint=base[i].toArray()}}
   }
-  metrics.mesh.push({name:c.name,maxRatio,minFloor});
+  metrics.mesh.push({name:c.name,maxRatio,minFloor,minBody,bodyPoint});
+  if(c.hand)check('手の上で頭やおなかが表面を突き抜けない',minBody>-.005,{minBody,bodyPoint});
   check(c.name+'で脚の三角形が大きく引き伸ばされない',maxRatio<2.5,maxRatio);
   check(c.name+'で指が床や家具の下に突き抜けない',minFloor>-.005,minFloor);
  }
