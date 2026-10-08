@@ -475,7 +475,10 @@
     toastBusy = true;
     el.textContent = m;
     el.classList.add('show');
-    setTimeout(() => { el.classList.remove('show'); setTimeout(nextToast, 250); }, 2400);
+    // ひらがな化で長くなる文章も、読める文字数で表示時間を決める。
+    const reading = window.LKids && window.LKids.on ? window.LKids.conv(m) : m;
+    const duration = Math.min(30000, Math.max(6000, 2000 + Array.from(reading).length * 160));
+    setTimeout(() => { el.classList.remove('show'); setTimeout(nextToast, 250); }, duration);
   }
 
   // ---------- シート（下から出るパネル）
