@@ -256,9 +256,36 @@
     return DEX.filter(d => d.test(g, tang, p)).map(d => d.id);
   }
 
+  // 図鑑の結果から親を探す。色・模様を選別する項目は、ゲームの繁殖式を使った目安。
+  const LINE_TARGETS = new Set(['ハイイエロー', 'タンジェリン', 'ハイポ', 'スーパーハイポ', 'キャロットテール', 'SHTCTB', 'ジャングル', 'ストライプ', 'ブラックナイト', 'ラベンダー', 'ラプター', 'レッドアイアルビノ', 'サングロー', 'ギャラクシー']);
+  function targetChance(mom, dad, id) {
+    const entry = DEX.find(d => d.id === id);
+    if (!entry) return { p: 0, approximate: false };
+    const approximate = LINE_TARGETS.has(id);
+    if (approximate) {
+      // 検索のたびに順位が変わらないよう、予想だけに固定の乱数を使う。
+      let seed = 91753, hits = 0;
+      const rng = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return (seed + 0.5) / 4294967296; };
+      for (let i = 0; i < 384; i++) {
+        const child = breed(mom, dad, rng);
+        if (entry.test(child.genes, child.tang, child.poly)) hits++;
+      }
+      return { p: hits / 384, approximate: true };
+    }
+    const m = normGenes(mom.genes), d = normGenes(dad.genes);
+    const dists = LOCI.map(l => locusDist(m[l.key], d[l.key]));
+    let chance = 0;
+    (function walk(i, genes, p) {
+      if (!p) return;
+      if (i === LOCI.length) { if (entry.test(genes, 0, P({}))) chance += p; return; }
+      for (let c = 0; c < 3; c++) if (dists[i][c]) walk(i + 1, Object.assign({}, genes, { [LOCI[i].key]: c }), p * dists[i][c]);
+    })(0, {}, 1);
+    return { p: chance, approximate: false };
+  }
+
   const api = {
     LOCI, POLY, TANG_HIGH, TANG_MID, THRESH: T, DEX,
-    morphName, mendelName, lineTokens, isGalaxy, hets, locusDist, breed, forecast, normGenes, normPoly, randomPoly, dexMatches,
+    morphName, mendelName, lineTokens, isGalaxy, hets, locusDist, breed, forecast, targetChance, normGenes, normPoly, randomPoly, dexMatches,
   };
   root.LeopaGenetics = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

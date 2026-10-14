@@ -859,3 +859,22 @@ body.sheet-open { overflow: hidden; }
 
 .achievement-fold .fold-open, .achievement-fold[open] .fold-closed { display:none; }
 .achievement-fold[open] .fold-open { display:inline; }
+
+/* たまごから開くペアリング案内 */
+.pair-plan, .pair-fields, .pair-candidates { display:grid; gap:12px; }
+.pair-tabs { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.pair-tabs button { white-space:normal; min-height:48px; }
+.pair-entry p { margin:8px 0; }
+.pair-entry-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.pair-entry-actions .act { white-space:normal; min-width:0; min-height:52px; padding:10px 4px; font-size:14px; }
+.pair-fields label, .pair-target { display:grid; gap:6px; font-weight:700; font-size:13px; }
+.pair-fields select, .pair-target select { width:100%; min-width:0; min-height:46px; padding:10px; border:1px solid var(--line); border-radius:12px; background:var(--surface); color:var(--ink); font:inherit; font-weight:400; }
+.pair-plan .pair-head { flex-wrap:nowrap; align-items:flex-start; }
+.pair-plan .pair-head > div { min-width:0; overflow-wrap:anywhere; }
+.pair-plan .pair-head small { display:block; margin-top:4px; }
+.pair-chance { display:flex; gap:12px; justify-content:space-between; align-items:center; font-size:13px; }
+.pair-chance > span { overflow-wrap:anywhere; }
+.pair-chance b { flex-shrink:0; color:var(--female); }
+.pair-help { padding:12px; border-radius:12px; background:var(--surface-2); }
+.pair-plan details summary { cursor:pointer; min-height:32px; }
+.pair-help ol { padding-left:22px; line-height:1.8; }

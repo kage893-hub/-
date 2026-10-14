@@ -491,7 +491,7 @@
     document.body.classList.add('sheet-open');
     killViewer();
     const f = $('#sheetBody input, #sheetBody button');
-    if (f) setTimeout(() => f.focus({ preventScroll: f.tagName !== 'INPUT' }), 50);
+    if (f && !(options && options.focus === false)) setTimeout(() => f.focus({ preventScroll: f.tagName !== 'INPUT' }), 50);
   }
   let viewer = null;
   function killViewer() { if (viewer) { try { viewer.destroy(); } catch (e) {} viewer = null; } }
@@ -817,6 +817,83 @@
     if (g.restUntil > now) return `おやすみ中です（あと${fmtLeft(g.restUntil - now)}）`;
     return '';
   }
+
+  // 検索条件は画面を開いている間だけ保持する。セーブには追加しない。
+  let pairPlan = { mode: 'parents', mom: '', dad: '', target: 'スーパーマックスノー', limit: 6, fromTarget: false };
+  const pairChanceCache = new Map();
+  function pairChance(mom, dad) {
+    const key = JSON.stringify([pairPlan.target, mom.genes, mom.tang, mom.poly, dad.genes, dad.tang, dad.poly]);
+    if (!pairChanceCache.has(key)) {
+      if (pairChanceCache.size >= 512) pairChanceCache.clear();
+      pairChanceCache.set(key, G.targetChance(mom, dad, pairPlan.target));
+    }
+    return pairChanceCache.get(key);
+  }
+  function pairForecastHTML(mom, dad) {
+    const fc = G.forecast(mom, dad);
+    const rows = fc.morphs.map(m => `<div class="fc-row"><span>${esc(m.name)}</span><span class="fc-bar"><i style="--v:${(m.p * 100).toFixed(1)}%"></i></span><b>${pct(m.p)}</b></div>`);
+    return `<div class="forecast"><b>遺伝子の組み合わせの予想</b><p class="muted small">確率は卵1こごとの予想です。色や模様には個体差があり、モルフ名が変わることもあります。</p>
+      ${rows.slice(0, 6).join('')}${rows.length > 6 ? `<details><summary>ほか${rows.length - 6}種類も見る</summary>${rows.slice(6).join('')}</details>` : ''}
+      ${fc.hets.length ? `<details><summary>かくれた遺伝子（het）の予想</summary><p class="small">hetは、見た目には出ていない遺伝子です。</p>${fc.hets.map(h => `<div class="fc-row"><span>het ${esc(h.name)}</span><span></span><b>${pct(h.p)}</b></div>`).join('')}</details>` : ''}
+      <details><summary>色や模様の予想</summary><p class="small">両親の平均を中心に、1匹ずつばらつきます。</p><p class="muted small">${[['タンジェリン度', fc.tang]].concat(G.POLY.map(t => [t.name, fc.poly[t.key]])).map(([n, v]) => `${n} ${v}`).join(' ・ ')}</p></details></div>`;
+  }
+  const pairOptionLabel = text => window.LKids && LKids.on ? LKids.conv(text) : text;
+  function pairParentHTML(g) {
+    return `<div class="pair-head">${A.swatch(g)}<div><b>${g.sex === 'F' ? '♀ おかあさん' : '♂ おとうさん'}：${esc(g.name)}</b><small class="muted">${esc(nameOf(g))}${G.hets(g.genes).length ? ` ・ het ${G.hets(g.genes).map(esc).join(' / ')}` : ''}</small></div></div>`;
+  }
+  function pairProblems(mom, dad, now) {
+    return [mom, dad].map(g => { const reason = pairBlock(g, now); return reason ? `${esc(g.name)}：${esc(reason)}` : ''; }).filter(Boolean);
+  }
+  function pairStartHTML(mom, dad, now) {
+    const problems = pairProblems(mom, dad, now);
+    return `${problems.length ? `<p class="notice small">${problems.join('<br>')}</p>` : '<p class="small good">この2匹はいまペアリングできます</p>'}
+      <button class="act primary wide" data-action="pairFromPlan" data-mom="${esc(mom.id)}" data-dad="${esc(dad.id)}" ${problems.length ? 'disabled' : ''}>この2匹でペアリングする</button>`;
+  }
+  function openPairPlanner(mode) {
+    const now = Date.now(), g = selected();
+    const first = sex => S.geckos.find(x => x.sex === sex && !pairBlock(x, now)) || S.geckos.find(x => x.sex === sex);
+    pairPlan = { mode: mode === 'target' ? 'target' : 'parents', mom: (g && g.sex === 'F' ? g : first('F'))?.id || '', dad: (g && g.sex === 'M' ? g : first('M'))?.id || '', target: 'スーパーマックスノー', limit: 6, fromTarget: false };
+    pairChanceCache.clear();
+    renderPairPlanner();
+  }
+  function renderPairPlanner() {
+    const focusId = ['pairPlanMom', 'pairPlanDad', 'pairPlanTarget'].includes(document.activeElement?.id) ? document.activeElement.id : '';
+    const now = Date.now(), moms = S.geckos.filter(g => g.sex === 'F'), dads = S.geckos.filter(g => g.sex === 'M');
+    const tabs = `<div class="seg pair-tabs" role="tablist" aria-label="ペアの探し方">${[['parents', '親からえらぶ'], ['target', '生まれる子から探す']].map(([mode, label]) => `<button role="tab" aria-selected="${pairPlan.mode === mode}" class="${pairPlan.mode === mode ? 'on' : ''}" data-action="pairPlanMode" data-mode="${mode}">${label}</button>`).join('')}</div>`;
+    const help = `<details class="pair-help"><summary>ペアリングの進め方</summary><ol class="small"><li>アダルトのオスとメスをえらびます。ごはんと、おやすみの状態も確認しよう。</li><li>生まれる子の予想を見て、組み合わせを決めます。</li><li>ペアリングのあと、メスが卵を産むのを待ちます。卵にしるしをつけて、インキュベーターへ移そう。</li></ol><p class="small">空きケースは${Math.max(0, S.cases - S.geckos.length)}こ。ふ化した子は1匹ずつ別のケースで育てます。</p></details>`;
+    let body = '';
+    if (pairPlan.mode === 'parents') {
+      const options = (list, id) => `<option value="">えらんでください</option>${list.map(g => `<option value="${esc(g.id)}" ${g.id === id ? 'selected' : ''}>${esc(pairOptionLabel(g.name + ' ・ ' + nameOf(g) + (pairBlock(g, now) ? '（いまは組めません）' : '')))}</option>`).join('')}`;
+      const mom = moms.find(g => g.id === pairPlan.mom), dad = dads.find(g => g.id === pairPlan.dad);
+      body = `<p class="small">① 親をえらぶ → ② 予想を見る → ③ ペアリング</p><div class="pair-fields"><label for="pairPlanMom">♀ おかあさん<select id="pairPlanMom">${options(moms, pairPlan.mom)}</select></label><label for="pairPlanDad">♂ おとうさん<select id="pairPlanDad">${options(dads, pairPlan.dad)}</select></label></div>
+        ${mom && dad ? `<div class="pair-card">${pairParentHTML(mom)}${pairParentHTML(dad)}${pairPlan.fromTarget ? `<div class="pair-chance"><span>${esc(pairPlan.target)}の予想</span><b>${pairChance(mom, dad).approximate ? '目安 約' : ''}${pct(pairChance(mom, dad).p)}</b></div>` : ''}${pairForecastHTML(mom, dad)}${pairStartHTML(mom, dad, now)}</div>` : '<p class="notice">オスとメスを1匹ずつえらぶと、子の予想が見られます。</p>'}`;
+    } else {
+      const entry = G.DEX.find(d => d.id === pairPlan.target) || G.DEX[0];
+      const candidates = [];
+      for (const mom of moms) for (const dad of dads) {
+        const chance = pairChance(mom, dad);
+        if (chance.p > 0) candidates.push({ mom, dad, chance, ready: !pairProblems(mom, dad, now).length });
+      }
+      candidates.sort((a, b) => Number(b.ready) - Number(a.ready) || b.chance.p - a.chance.p || a.mom.name.localeCompare(b.mom.name, 'ja') || a.dad.name.localeCompare(b.dad.name, 'ja'));
+      body = `<label class="pair-target" for="pairPlanTarget">生まれてほしいモルフ<select id="pairPlanTarget">${G.DEX.map(d => `<option value="${esc(d.id)}" ${d.id === entry.id ? 'selected' : ''}>${esc(pairOptionLabel(d.name))}</option>`).join('')}</select></label>
+        <p class="small">${esc(entry.hint)}</p><p class="muted small">飼っている子から探します。いま組めるペアを優先して、予想の高い順に表示します。</p>
+        <p class="muted small">「目安」は色や模様のばらつきを含む予想です。結果を保証するものではありません。図鑑の条件に当てはまる子を探すので、別のモルフの特徴も一緒に出ることがあります。</p>
+        <p class="small"><b>候補 ${candidates.length}組</b></p><div class="pair-candidates">${candidates.slice(0, pairPlan.limit).map(({ mom, dad, chance }) => `<div class="pair-card">${pairParentHTML(mom)}${pairParentHTML(dad)}<div class="pair-chance"><span>${esc(entry.name)}の予想</span><b>${chance.approximate ? '目安 約' : ''}${pct(chance.p)}</b></div>
+          <button class="act ghost" data-action="pairPlanChoose" data-mom="${esc(mom.id)}" data-dad="${esc(dad.id)}">この親で予想を見る</button>${pairStartHTML(mom, dad, now)}</div>`).join('')}</div>
+        ${candidates.length > pairPlan.limit ? '<button class="act wide" data-action="pairPlanMore">ほかの候補も見る</button>' : ''}
+        ${!candidates.length ? '<p class="notice">この予想では候補が見つかりませんでした。上のヒントを見て、親からえらぶ画面で別の組み合わせも比べてみよう。色や模様は個体差があるため、目安に出ない結果になることもあります。</p>' : ''}`;
+    }
+    openSheet(`<div class="pair-plan"><h3 class="sheet-title">ペアリング</h3>${tabs}${!moms.length || !dads.length ? `<p class="notice">${!moms.length ? 'メス' : 'オス'}がまだいません。ショップでおむかえすると、組み合わせを探せます。</p>` : ''}${body}${help}<button class="act" data-action="closeSheet">とじる</button></div>`, { focus: !focusId });
+    if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
+  }
+  document.addEventListener('change', ev => {
+    const field = { pairPlanMom: 'mom', pairPlanDad: 'dad', pairPlanTarget: 'target' }[ev.target.id];
+    if (!field) return;
+    const id = ev.target.id;
+    pairPlan[field] = ev.target.value; pairPlan.limit = 6;
+    renderPairPlanner();
+    const el = document.getElementById(id); if (el) el.focus({ preventScroll: true });
+  });
 
   // ---------- ヒーター（ケースごと）
   const HEAT_MIN = 28, HEAT_MAX = 36;
@@ -1187,6 +1264,16 @@
           <button class="act primary" type="submit">決定</button>
         </form>`);
     },
+    pairPlanner(t) { openPairPlanner(t.dataset.mode); },
+    pairPlanMode(t) { pairPlan.mode = t.dataset.mode === 'target' ? 'target' : 'parents'; pairPlan.limit = 6; renderPairPlanner(); },
+    pairPlanMore() { const top = $('#sheetBody').scrollTop; pairPlan.limit += 6; renderPairPlanner(); $('#sheetBody').scrollTop = top; },
+    pairPlanChoose(t) { pairPlan.mom = t.dataset.mom; pairPlan.dad = t.dataset.dad; pairPlan.mode = 'parents'; pairPlan.fromTarget = true; renderPairPlanner(); },
+    pairFromPlan(t) {
+      const mom = S.geckos.find(g => g.id === t.dataset.mom && g.sex === 'F'), dad = S.geckos.find(g => g.id === t.dataset.dad && g.sex === 'M');
+      if (!mom || !dad || pairProblems(mom, dad, Date.now()).length || pairScene) { renderPairPlanner(); return; }
+      S.selected = mom.id;
+      ACTIONS.pair({ dataset: { id: dad.id } });
+    },
     pairMenu() {
       const g = selected();
       if (!g) return;
@@ -1215,7 +1302,7 @@
           <button class="act primary" data-action="pair" data-id="${p.id}">${esc(p.name)}とペアリング</button>
         </div>`;
       }).join('');
-      openSheet(`<h3 class="sheet-title">${esc(g.name)}のお相手をえらぶ</h3>
+      openSheet(`<h3 class="sheet-title">${esc(g.name)}のお相手をえらぶ</h3><button class="act ghost wide" data-action="pairPlanner" data-mode="target">生まれる子から探す</button>
         ${rows || `<p class="notice">いまペアリングできる${g.sex === 'F' ? 'オス' : 'メス'}がいません。</p>`}
         ${ng.length ? `<div class="muted small">${ng.map(x => `${esc(x.name)}：${pairBlock(x, now)}`).join('<br>')}</div>` : ''}
         ${!opp.length ? `<p class="muted small">ショップで${g.sex === 'F' ? 'オス' : 'メス'}をおむかえするか、卵をかえしてみよう。</p>` : ''}`);
@@ -1224,7 +1311,7 @@
       const g = selected();
       const p = S.geckos.find(x => x.id === t.dataset.id);
       const now = Date.now();
-      if (!g || !p || pairBlock(g, now) || pairBlock(p, now)) return;
+      if (!g || !p || g.id === p.id || g.sex === p.sex || pairBlock(g, now) || pairBlock(p, now)) return;
       const mom = g.sex === 'F' ? g : p, dad = g.sex === 'F' ? p : g;
       memo(mom, `${dad.name}とペアリングした`);
       memo(dad, `${mom.name}とペアリングした`);
@@ -1832,6 +1919,7 @@
         </div></div>`;
     }).join('');
     setHTML($('#view-eggs'), `
+      <div class="card pair-entry"><h2 class="h2">ペアリング</h2><p class="small">親の組み合わせと、生まれる子の予想をここから確認できます。</p><div class="pair-entry-actions"><button class="act primary" data-action="pairPlanner" data-mode="parents">親からえらぶ</button><button class="act" data-action="pairPlanner" data-mode="target">生まれる子から探す</button></div></div>
       ${layCard}
       <h2 class="h2">インキュベーター <small class="muted">${S.eggs.length} / ${EGG_CAP}</small></h2>
       <div class="card">
