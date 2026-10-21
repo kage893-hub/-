@@ -38,6 +38,8 @@
 
 - 勉強モードは `S.kids` がオンのときだけ。1回5問、正解1問2コイン、日付ごとに20コインまで。報酬と正解数は `S.study` に保存し、古いセーブは `migrate()` で初期化する。漢字を読む問題の文字は `data-raw` でひらがな変換を止める。
 
+- ペットシッターは100コインで全員を実時間24時間お世話する。倍速変更で期限を変えない。延長も100コインで実時間24時間を追加し、自動更新しない。契約・報告は `S.sitter` に保存し、古いセーブは `migrate()` で未契約にする。給餌・掃除・水替えは実時間5分ごとに処理し、留守中も期限内だけ計算する。エサ・粉は在庫を消費し、自動のお世話ではコイン・今日のおせわ・手動のお世話の実績を増やさない。
+
 - 家系の記録は `S.familyRecords` に個体ごとに保存し、親のIDでつなぐ。古い親の写しは `seed` で同じ個体を識別し、名前だけでは結び付けない。里親・販売の前にも記録を保存する。新しい親の写しには `id` を含める。
 - 行動の傾向は `Leopa3D.behaviorProfile(seed)` で決め、同じ個体では変わらない。行動の傾向の説明は「くわしく見る」の中だけに表示し、ケース画面には表示しない。隠れ家のぞきは捕食・ふれあい・ペアリング・家具変更・個体切り替えで中断できるようにする。
 
@@ -45,7 +47,8 @@
 - サーバー：`npx http-server -p 8123 -s -c-1 .`（つながらなくなったら起動しなおす）
 - Playwright ＋ Chromium、画面サイズ 390×844。swiftshader で 3D はとても遅い。
   - 起動の引数：`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`
-- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition・study・family・behavior・movement・pairplan）。最後の行が `[]` ならエラーなし。
+- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition・study・family・behavior・movement・pairplan・sitter）。最後の行が `[]` ならエラーなし。
+  - sitter は実時間の期限・全員の給餌と在庫・留守中と分割処理・延長と課金・移行・保存・自動報酬なしを検査する。
   - pairplan は逆引きの遺伝確率・色や模様の目安・30匹の候補・親の条件・たまごからの開始・保存を検査する。
   - movement は足の接地・旋回・後ずさり・前足だけの掘り動作・待機中のしぐさを検査する。足先の4点だけでなく、描画後の脚の三角形と指先の床・家具・手に対する高さも検査する。接地情報は表示中だけの一時データで、セーブには足さない。
   - 環境変数 `CHROME`（Chromium のパス）、`PLAYWRIGHT`（playwright モジュールのパス）、`BASE`（サーバーの URL）で、環境に合わせられる。

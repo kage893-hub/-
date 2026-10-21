@@ -878,3 +878,19 @@ body.sheet-open { overflow: hidden; }
 .pair-help { padding:12px; border-radius:12px; background:var(--surface-2); }
 .pair-plan details summary { cursor:pointer; min-height:32px; }
 .pair-help ol { padding-left:22px; line-height:1.8; }
+
+/* 全員のお世話をまとめて頼めるペットシッター */
+.sitter-card { display:flex; justify-content:space-between; align-items:center; gap:12px; width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:14px; background:var(--surface); color:var(--ink); text-align:left; font:inherit; cursor:pointer; }
+.sitter-card b { font-size:13px; }
+.sitter-card small { display:block; margin-top:4px; font-size:12px; color:var(--muted); }
+.sitter-card > span:last-child { font-size:24px; color:var(--muted); }
+.sitter-sheet { display:grid; gap:12px; }
+.sitter-sheet p { margin:0; }
+.sitter-price { display:grid; gap:4px; padding:14px; border-radius:14px; background:var(--accent-soft); }
+.sitter-price b { font-size:20px; }
+.sitter-rules { margin:0; padding-left:22px; line-height:1.9; }
+.sitter-stock { display:grid; gap:10px; }
+.sitter-totals { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:0; }
+.sitter-totals div { padding:12px 4px; background:var(--surface-2); border-radius:12px; text-align:center; }
+.sitter-totals dt { font-size:12px; }
+.sitter-totals dd { margin:4px 0 0; font-weight:700; font-size:22px; }

@@ -31,6 +31,124 @@
     worm: { name: 'ミルワーム', hunger: 18, growth: 8, price: 7, pack: 10, desc: 'みんな大好き。脂肪が多いのでおやつに' },
     paste: { name: '練り餌', hunger: 14, growth: 3, price: 10, pack: 10, unit: '回分', desc: '粉を水でねった人工フード。栄養のバランスがよく、カルシウム入り。においになれるまで食べないことも' },
   };
+  // ペットシッターの期間はゲームの速さを使わず、実時間で固定する。
+  const SITTER_COST = 100, SITTER_SPAN = DAYMS, SITTER_STEP = 5 * MIN;
+  function normalizeSitter(value) {
+    if (!value || !Number.isFinite(value.startedAt) || !Number.isFinite(value.until) || value.until <= value.startedAt) return null;
+    const count = x => Number.isFinite(x) ? Math.max(0, Math.floor(x)) : 0;
+    const food = Object.fromEntries(Object.keys(FOODS).map(k => [k, count((value.food || {})[k])]));
+    return { startedAt: value.startedAt, until: value.until, nextAt: Number.isFinite(value.nextAt) && value.nextAt > value.startedAt ? value.nextAt : value.startedAt + SITTER_STEP,
+      meals: count(value.meals), cleans: count(value.cleans), waters: count(value.waters), powder: count(value.powder), leftovers: count(value.leftovers), food,
+      needs: value.needs || {}, shortages: value.shortages || {}, finished: !!value.finished, seen: !!value.seen };
+  }
+  function finishSitter(sitter) { if (!sitter.finished) { sitter.finished = true; sitter.seen = false; } }
+  function sitterActive(now) { return !!(S.sitter && !S.sitter.finished && now >= S.sitter.startedAt && now < S.sitter.until); }
+  function sitterLeft(ms) { const m = Math.max(1, Math.ceil(ms / MIN)), h = Math.floor(m / 60); return h ? `${h}時間${m % 60 ? m % 60 + '分' : ''}` : `${m}分`; }
+  function sitterFood(g, stock, checkPortion = true) {
+    const order = stageOf(g) === 'baby' ? ['cricketS', 'paste', 'worm'] : ['cricket', 'cricketS', 'dubia', 'paste', 'worm'];
+    const kind = order.find(k => stock[k] > 0 && !tooBig(k, g) && (k !== 'paste' || g.pasteOk > 0) && (k !== 'worm' || (g.wormRun || 0) < 3));
+    // 優先するエサでも満腹を超える量は足さない。端数を埋めるための追加も不要。
+    return kind && (!checkPortion || g.hunger + FOODS[kind].hunger <= 100 + 1e-7) ? kind : undefined;
+  }
+  function settleSitter() { if (S.sitter && !S.sitter.finished) simulate(Date.now()); }
+  function sitterCare(at) {
+    const sitter = S.sitter;
+    if (!sitter || sitter.finished || at < sitter.startedAt || at >= sitter.until) return;
+    const needs = {};
+    // おなかの空いた子から見る。1匹だけで在庫を使い切らないよう、1回の食事は90程度まで。
+    for (const g of [...S.geckos].sort((a, b) => a.hunger - b.hunger)) {
+      if ((g.adopted || g.born || 0) > at) continue;
+      if (g.poop > 0 || g.clean < 70 - 1e-7 || (g.left || []).length) {
+        sitter.leftovers += (g.left || []).length;
+        g.poop = 0; g.clean = 100; g.left = []; g._toilet = 0; sitter.cleans++;
+      }
+      if (hasDish(g) && (!g.waterAt || at - g.waterAt >= DAYMS)) { g.waterAt = at; sitter.waters++; }
+      if (g.hunger > 60 + 1e-7) continue;
+      const sp = g.shedUntil ? shedProgress(g, at) : -1;
+      if (sp >= 0 && sp < 0.6) { needs[g.id] = 'shed'; continue; }
+      // プレイヤーがいまケースに入れたエサを、二重に予約しない。
+      if (!document.hidden && Date.now() - at < SITTER_STEP && g.id === tankGid && tank && tank.pendingFoods && tank.pendingFoods().length) continue;
+      let eaten = 0;
+      while (g.hunger < 90 - 1e-7) {
+        const kind = sitterFood(g, S.food);
+        if (!kind) break;
+        const dust = !!S.dust && S.calc > 0 && kind !== 'paste';
+        S.food[kind]--; if (dust) { S.calc--; sitter.powder++; }
+        applyEat(g, kind, dust, { automatic: true, now: at });
+        sitter.food[kind] = (sitter.food[kind] || 0) + 1; eaten++;
+      }
+      if (eaten) sitter.meals++;
+      if (g.hunger < 90 - 1e-7 && !sitterFood(g, S.food, false)) {
+        needs[g.id] = 'food'; sitter.shortages[g.id] = g.name;
+      }
+    }
+    sitter.needs = needs;
+  }
+  // 在庫の案内用。成長段階を固定して計算する、余裕を見た目安（速く育つと必要量は減る）。
+  function sitterFoodEstimate(hours) {
+    const stock = { ...S.food }, used = Object.fromEntries(Object.keys(FOODS).map(k => [k, 0])), short = {};
+    for (const source of [...S.geckos].sort((a, b) => a.hunger - b.hunger)) {
+      const g = { ...source }, rate = HUNGER_RATE[stageOf(g)] * Math.sqrt(speedX());
+      let elapsed = 0;
+      while (elapsed < hours) {
+        const wait = Math.max(0, (g.hunger - 60) / rate);
+        if (elapsed + wait >= hours) break;
+        elapsed += wait; g.hunger = Math.min(g.hunger, 60);
+        let ate = false;
+        while (g.hunger < 90 - 1e-7) {
+          const kind = sitterFood(g, stock);
+          if (!kind) break;
+          stock[kind]--; used[kind]++; g.hunger += FOODS[kind].hunger;
+          g.wormRun = kind === 'worm' ? (g.wormRun || 0) + 1 : 0; ate = true;
+        }
+        if (g.hunger <= 60 || !ate) {
+          const kind = stageOf(g) === 'baby' ? 'cricketS' : 'cricket';
+          short[kind] = (short[kind] || 0) + Math.max(1, Math.ceil((90 - g.hunger + rate * (hours - elapsed)) / FOODS[kind].hunger));
+          break;
+        }
+      }
+    }
+    return { used, short };
+  }
+  let sitterQuote = 0, sitterQuoteCounter = 0;
+  function sitterCard(now) {
+    const sitter = S.sitter, active = sitterActive(now), unread = sitter && sitter.finished && !sitter.seen;
+    const needs = active && Object.values(sitter.needs).includes('food');
+    return `<button class="sitter-card" data-action="${unread ? 'sitterReport' : 'sitterMenu'}"><span><b>ペットシッター${active ? ` ・ あと${sitterLeft(sitter.until - now)}` : unread ? ' ・ お世話が終わりました' : ''}</b><small>${needs ? 'エサ不足の子がいます。在庫を確認しよう' : active ? '実時間の契約で全員のお世話中' : unread ? 'お世話の報告を見る' : '実時間24時間・全員まとめて100コイン'}</small></span><span aria-hidden="true">›</span></button>`;
+  }
+  function sitterDate(at) { return new Date(at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+  function sitterMenu() {
+    const now = Date.now(); simulate(now); renderView();
+    const active = sitterActive(now), hours = (active ? S.sitter.until - now : 0) / HOUR + 24, estimate = sitterFoodEstimate(hours), quote = ++sitterQuoteCounter;
+    sitterQuote = quote;
+    openSheet(`<div class="sitter-sheet"><h3 class="sheet-title">ペットシッター</h3><p class="sitter-price"><b>実時間24時間</b><span>全員まとめて 100コイン</span></p>
+      ${active ? `<p class="notice">お世話中 ・ あと${sitterLeft(S.sitter.until - now)}<br>終了：${sitterDate(S.sitter.until)}<br>延長すると、この終了時刻に24時間を追加します。</p>` : '<p class="small">アプリを閉じている間も、留守中のお世話を次に開いたときに反映します。1倍・3倍・12倍でも、契約は実時間24時間です。</p>'}
+      <ul class="sitter-rules small"><li>飼っている全員の、おなかが60以下になったら90程度までごはん。</li><li>フン・食べ残しの回収とケースのおそうじ、水入れの水替え。</li><li>エサは持っているものを使い、成長段階に合うコオロギを優先します。</li><li>病院・脱皮のケア・繁殖・買い物はおまかせできません。</li></ul>
+      <div class="card sitter-stock"><b>${active ? '延長後の終了まで' : '24時間'}のエサの目安</b><p class="small">いまいる${S.geckos.length}匹の、おなかの減る速さに合わせて見積もっています。</p>
+        ${Object.keys(estimate.short).length ? `<p class="notice small">エサが足りない見込みです。${Object.entries(estimate.short).map(([k, n]) => `${FOODS[k].name} あと約${n}匹`).join('・')}を用意すると安心です。不足すると、ごはんをあげられない子が出ます。</p>` : '<p class="small good">いまの在庫で足りそうです。</p>'}
+        <p class="muted small">${Object.entries(estimate.used).filter(([, n]) => n).map(([k, n]) => `${FOODS[k].name} 約${n}${FOODS[k].unit || '匹'}`).join(' ・ ') || 'いまの状態では、給餌の予定はありません。'}</p>
+        <p class="muted small">成長・脱皮・食欲で変わる目安です。新しくおむかえした子もお世話します。カルシウムは「ごはん」の設定どおり、在庫がある分だけ使います。</p>
+        <button class="act ghost sm" data-action="sitterShop">ごはんを補充する</button></div>
+      <p class="muted small">ベビーに大きすぎるエサや、食べなれていない練り餌は使いません。ミルワームは続けすぎず、脱皮前で白いときは給餌を待ちます。自動のお世話ではコイン・今日のおせわ・お世話の実績は増えません。</p>
+      <button class="act primary wide" data-action="sitterBuy" data-quote="${quote}" ${S.coins < SITTER_COST || !S.geckos.length ? 'disabled' : ''}>${active ? '24時間延長する' : '24時間お願いする'}（100コイン）</button>
+      ${S.coins < SITTER_COST ? '<p class="small muted">100コイン必要です。</p>' : ''}${!S.geckos.length ? '<p class="small muted">先にレオパをおむかえしよう。</p>' : ''}
+      <p class="muted small">自動では更新しません。期限後のお世話はプレイヤーに戻ります。</p>
+      ${S.sitter ? '<button class="act wide" data-action="sitterReport">お世話の報告を見る</button>' : ''}<button class="act ghost" data-action="closeSheet">とじる</button></div>`);
+  }
+  function sitterReport() {
+    const now = Date.now(); simulate(now); const sitter = S.sitter;
+    if (!sitter) { sitterMenu(); return; }
+    sitter.seen = true; saveNow(); renderView();
+    const active = sitterActive(now), names = Object.values(sitter.shortages);
+    openSheet(`<div class="sitter-sheet"><h3 class="sheet-title">ペットシッターの報告</h3><p class="small">${sitterDate(sitter.startedAt)} から ${sitterDate(sitter.until)} まで</p><p class="notice">${active ? `お世話中 ・ あと${sitterLeft(sitter.until - now)}（開始からの合計）` : 'お世話が終わりました。自動更新はしていません。'}</p>
+      <dl class="sitter-totals"><div><dt>ごはん</dt><dd>${sitter.meals}回</dd></div><div><dt>おそうじ</dt><dd>${sitter.cleans}回</dd></div><div><dt>水替え</dt><dd>${sitter.waters}回</dd></div></dl>
+      <h4 class="h4">使ったエサ</h4><ul class="small">${Object.entries(sitter.food).filter(([, n]) => n).map(([k, n]) => `<li>${FOODS[k].name}：${n}${FOODS[k].unit || '匹'}</li>`).join('') || '<li>まだ使っていません</li>'}</ul><p class="small">カルシウム ${sitter.powder}回分 ・ 食べ残しの回収 ${sitter.leftovers}こ</p>
+      ${names.length ? `<p class="notice small">エサ不足で給餌を待った子：${names.map(esc).join('・')}。在庫を確認してね。</p>` : ''}
+      ${Object.values(sitter.needs).includes('shed') ? '<p class="small">脱皮前で白い子は、食欲が戻るのを待っています。</p>' : ''}
+      <p class="muted small">病院や脱皮のケアは、おうちの人が確認してね。自動のお世話のコイン報酬はありません。</p>
+      <button class="act wide" data-action="sitterMenu">依頼・延長の画面へ</button><button class="act ghost" data-action="closeSheet">とじる</button></div>`);
+  }
+
   // 卵の温度で性別と日数が変わる（温度依存性決定）
   const TEMPS = [
     { t: 27, label: '27℃', note: 'メスが多い', days: 75, pMale: 0.1 },
@@ -120,6 +238,7 @@
     for (const x of [...s.geckos, ...s.eggs, ...(s.offers || []), ...s.layBox, ...(s.special && s.special.offer ? [s.special.offer] : [])]) if (x.poly && x.poly.mel == null) x.poly.mel = Math.round(4 + Math.random() * 12);
     for (const g of s.geckos) if (g.gravid && g.gravid.dad && g.gravid.dad.poly && g.gravid.dad.poly.mel == null) g.gravid.dad.poly.mel = 8;
     s.learned = s.learned || {};
+    s.sitter = normalizeSitter(s.sitter);
     for (const g of s.geckos) if (!Number.isFinite(g.emptyH) || g.emptyH < 0) g.emptyH = 0;
     const study = s.study || {};
     s.study = { day: typeof study.day === 'string' ? study.day : '', rewarded: Number.isInteger(study.rewarded) ? clamp(study.rewarded, 0, 10) : 0, total: Number.isInteger(study.total) ? Math.max(0, study.total) : 0 };
@@ -217,6 +336,7 @@
       lastTick: Date.now(), nextId: 1, welcomed: false, stats: { hatched: 0, rehomed: 0 },
       calc: 10, dust: true, layBox: [], learned: {}, starterFlag: true,
       clinicApology: { visits: 0, coins: 0, at: Date.now(), announced: true },
+      sitter: null,
     };
     // はじめはショップでレオパを選ぶところから
     S.starters = makeStarters();
@@ -263,6 +383,25 @@
 
   // ---------- 時間の流れ（アプリを閉じていた間もまとめて進める）
   function simulate(now) {
+    const sitter = S.sitter;
+    if (!sitter || sitter.finished || now < sitter.startedAt || S.lastTick >= sitter.until || now < S.lastTick) {
+      simulateCore(now);
+      if (sitter && now >= sitter.until) finishSitter(sitter);
+      return;
+    }
+    if (S.lastTick < sitter.startedAt) simulateCore(sitter.startedAt);
+    // 固定した実時間の間隔でお世話する。開いていても閉じていても同じ回を処理する。
+    while (sitter.nextAt <= now && sitter.nextAt < sitter.until) {
+      if (sitter.nextAt > S.lastTick) simulateCore(sitter.nextAt, true);
+      sitterCare(sitter.nextAt);
+      sitter.nextAt += SITTER_STEP;
+    }
+    const end = Math.min(now, sitter.until);
+    if (S.lastTick < end) simulateCore(end, true);
+    if (now >= sitter.until) finishSitter(sitter);
+    if (now > sitter.until) simulateCore(now);
+  }
+  function simulateCore(now, automatic) {
     if (!S.speed) S.speed = 3;
     const dtH = (now - S.lastTick) / HOUR;
     // 端末の時計が戻されたときは、そこから数えなおす（戻した分だけ時間が止まってしまわないように）
@@ -284,7 +423,7 @@
       if (g.poopAt && now >= g.poopAt) {
         // 見ているケースなら、いつものトイレの場所へ歩いていってからフンをする
         const doPoop = () => { if (!g.poopAt) return; g.poop = Math.min(3, g.poop + 1); g.clean = clamp(g.clean - 10); g.poopAt = 0; g._toilet = 0; mile(g, 'poop', 'はじめてのフンをした（元気なしるし！）', false); };
-        if (!g._toilet && tank && tank.toilet && g.id === tankGid && view === 'case' && !document.hidden && tank.toilet(() => { doPoop(); renderView(); save(); })) g._toilet = now;
+        if (!automatic && !g._toilet && tank && tank.toilet && g.id === tankGid && view === 'case' && !document.hidden && tank.toilet(() => { doPoop(); renderView(); save(); })) g._toilet = now;
         else if (!g._toilet || now - g._toilet > 25000) doPoop();
       }
       if (g.shedUntil && now >= g.shedUntil) finishShed(g);
@@ -778,27 +917,25 @@
     if (!silent && mom) toast(`ペアリング成功！${mom.name}は約${fmtLeft(realDays(28))}後に卵を産みます`);
     renderView();
   }
-  function applyEat(g, kind, dust) {
-    mile(g, 'eat', `はじめての${FOODS[kind].name}をぱくっと食べた`, true);
+  function applyEat(g, kind, dust, options) {
+    const automatic = !!(options && options.automatic), now = options && options.now != null ? options.now : Date.now();
+    if (!automatic) mile(g, 'eat', `はじめての${FOODS[kind].name}をぱくっと食べた`, true);
     // 練り餌にはカルシウムが入っている
     g.bone = clamp(boneOf(g) + (dust ? 8 : kind === 'paste' ? 5 : -3));
     if (kind === 'paste') g.pasteOk = (g.pasteOk || 0) + 1;
-    if (dust) learn('calcium');
-    g.fedAt = Date.now();
+    if (dust && !automatic) learn('calcium');
+    g.fedAt = now;
     g.wormRun = kind === 'worm' ? (g.wormRun || 0) + 1 : 0;
     const F = FOODS[kind];
     g.hunger = clamp(g.hunger + F.hunger);
     if (g.hunger > 0) g.emptyH = 0;
     // しっぽの栄養：ミルワームは脂肪が多いので、たくさんあげるとぽっちゃりに
     g.cond = clamp((g.cond == null ? 55 : g.cond) + ({ cricketS: 0.8, cricket: 1.2, dubia: 1.6, worm: 3.2, paste: 1 })[kind] - (g.cond > 70 && kind !== 'worm' ? 0.6 : 0));
-    grow(g, F.growth * (GROWTH.perHour / 6) * speedX() * heatInfo(heatOf(g)).growth, Date.now());
-    g.tame = clamp(g.tame + 1);
-    S.coins += 1;
-    daily('fed');
+    grow(g, F.growth * (GROWTH.perHour / 6) * speedX() * heatInfo(heatOf(g)).growth, now);
+    if (!automatic) { g.tame = clamp(g.tame + 1); S.coins += 1; daily('fed'); }
     // はじめてのお世話ガイド中は、フンを早めに出して待たせない
-    if (!g.poopAt) g.poopAt = Date.now() + (tutStep() === 1 ? 20000 : 2 * MIN);
-    renderView();
-    save();
+    if (!g.poopAt) g.poopAt = now + (!automatic && tutStep() === 1 ? 20000 : 2 * MIN);
+    if (!automatic) { renderView(); save(); }
   }
   function pendingHunger() { return tank ? tank.pendingFoods().reduce((s, k) => s + FOODS[k].hunger, 0) : 0; }
   function bulkFeedLimit(g, kind) {
@@ -947,6 +1084,7 @@
   function needsCare(g) { const now = Date.now(); return g.hunger < 25 || g.poop > 0 || g.clean < 35 || !!g.shedUntil || !!g.stuckShed || !!g.sick || (g.left && g.left.length > 0) || waterDirty(g, now); }
 
   function hatch(id) {
+    settleSitter();
     const e = S.eggs.find(x => x.id === id);
     if (!e || Date.now() < e.hatchAt) return;
     if (S.geckos.length >= S.cases) {
@@ -1046,9 +1184,10 @@
         <p class="muted small">${{ baby: 'ベビーは毎日', young: 'ヤングは1〜2日に1回', adult: 'おとなは2〜3日に1回' }[stageOf(g)]}が目安。えさは目と目の間の幅より小さいものを選ぼう。なくなったらショップで買えます。</p>
         <p class="muted small">いまは${speedX()}倍速。おなか90→30まで約${fmtLeft(60 / (HUNGER_RATE[stageOf(g)] * Math.sqrt(speedX())) * HOUR)}です。おなかを見て、空になりきる前にごはんをあげよう。</p>`);
     },
-    dustToggle() { S.dust = !S.dust; if (S.dust && S.calc <= 0) toast('カルシウムがありません。ショップで買えます'); save(); ACTIONS.feedMenu(); },
+    dustToggle() { settleSitter(); S.dust = !S.dust; if (S.dust && S.calc <= 0) toast('カルシウムがありません。ショップで買えます'); save(); ACTIONS.feedMenu(); },
     feedMode(t) { S.feedMode = t.dataset.m; save(); ACTIONS.feedMenu(); },
     feed(t) {
+      settleSitter();
       const g = selected();
       const k = t.dataset.kind;
       if (!g || !S.food[k]) return;
@@ -1263,6 +1402,23 @@
           <input id="renameInput" value="${esc(g.name)}" maxlength="10" autocomplete="off">
           <button class="act primary" type="submit">決定</button>
         </form>`);
+    },
+    sitterMenu, sitterReport,
+    sitterShop() { closeSheet(); S.shopTab = 'food'; switchView('shop'); },
+    sitterBuy(t) {
+      if (!sitterQuote || Number(t.dataset.quote) !== sitterQuote) return;
+      sitterQuote = 0;
+      if (otherSavedNewer()) { reloadForNewer(); return; }
+      const now = Date.now(); simulate(now);
+      if (S.coins < SITTER_COST || !S.geckos.length) { sitterMenu(); return; }
+      if (tank && tank.pendingFoods && tank.pendingFoods().length) flushFoods();
+      S.coins -= SITTER_COST;
+      if (sitterActive(now)) S.sitter.until += SITTER_SPAN;
+      else {
+        S.sitter = normalizeSitter({ startedAt: now, until: now + SITTER_SPAN });
+        sitterCare(now);
+      }
+      saveNow(); sitterReport();
     },
     pairPlanner(t) { openPairPlanner(t.dataset.mode); },
     pairPlanMode(t) { pairPlan.mode = t.dataset.mode === 'target' ? 'target' : 'parents'; pairPlan.limit = 6; renderPairPlanner(); },
@@ -1520,6 +1676,7 @@
         <button class="act primary" data-action="closeSheet">とじる</button>`);
     },
     setSpeed(t) {
+      settleSitter();
       const v = SPEEDS.find(x => x.x === Number(t.dataset.x));
       if (!v) return;
       if (v.cost && !S.speedOpen) {
@@ -1531,12 +1688,14 @@
       renderView(); save();
     },
     buyCalc() {
+      settleSitter();
       if (S.coins < 15) { toast('コインが足りません'); return; }
       S.coins -= 15; S.calc = (S.calc || 0) + 50; S.dust = true;
       toast('カルシウムパウダーを買いました');
       renderView(); save();
     },
     buyFood(t) {
+      settleSitter();
       const k = t.dataset.kind, F = FOODS[k];
       if (S.coins < F.price) { toast('コインが足りません'); return; }
       S.coins -= F.price;
@@ -1599,6 +1758,7 @@
     },
     viewAngle(t) { if (viewer) viewer.view(t.dataset.v); },
     buyGecko(t) {
+      settleSitter();
       const i = t.dataset.i;
       const o = offerAt(i);
       if (!o) return;
@@ -1844,6 +2004,7 @@
         <button class="act" data-action="album">アルバム</button>
         <button class="act" data-action="profileCard">カード</button>
       </div>
+      ${sitterCard(now)}
       ${tutCoach()}
       ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮をうながす</button>' : ''}
       ${g.stuckShed ? '<button class="act wide mist" data-action="soak">ぬるま湯ケアで、のこった皮をとる</button>' : ''}
@@ -2138,7 +2299,7 @@
           <span class="row-side price">15</span>
         </button></div>`,
       interior: () => `<div class="shop-tabs two interior-switch" role="group" aria-label="インテリアの種類"><button class="${interiorSection === 'decor' ? 'on' : ''}" data-action="interiorSection" data-section="decor" aria-pressed="${interiorSection === 'decor'}">家具</button><button class="${interiorSection === 'cage' ? 'on' : ''}" data-action="interiorSection" data-section="cage" aria-pressed="${interiorSection === 'cage'}">ケース</button></div>${interiorSection === 'cage' ? cageShop() : interiorShop()}`,
-      other: () => `${studyCard()}${speedShop()}
+      other: () => `${studyCard()}${speedShop()}${sitterCard(now)}
       <h3 class="h3">ケース <small class="muted">${S.geckos.length} / ${S.cases} 使用中</small></h3>
       <div class="list">
         <button class="row" data-action="buyCase" ${S.cases >= CASE_MAX || S.coins < casePrice() ? 'disabled' : ''}>
@@ -3530,6 +3691,7 @@
         <p class="set-label">販売ライセンス</p>
         <p class="small">${S.license ? '取得ずみ。里親・ブリーダー依頼・ショーのブースが使えます。' : 'まだ持っていません。里親・ブリーダー依頼・ショーのブースに必要です。'}飼い方クイズ ${LQ_N}問中${LQ_PASS}問以上で合格。何度でも挑戦できます。</p>
         ${S.license ? '<button class="act" data-action="licenseView">ライセンス証を見る</button>' : ''}<button class="act" data-action="licenseStart">${S.license ? 'クイズで腕だめし' : 'ライセンスのクイズに挑戦'}</button>
+        <p class="set-label">留守中のお世話</p><button class="act wide" data-action="sitterMenu">ペットシッター</button>
         <p class="set-label">ゲームの更新</p>
         <p class="small">ネットにつないで、最新版を読み込みます。育てた子・コイン・アルバムなどのセーブデータは残ります。</p>
         <button class="act" data-action="updateGame" ${updatingGame ? 'disabled' : ''}>${updatingGame ? '更新を確認しています…' : 'ゲームを更新する'}</button>
@@ -4139,7 +4301,7 @@
   switchView('case');
   setInterval(tick, 5000);
   let hiddenAt = 0;
-  document.addEventListener('visibilitychange', () => { if (document.hidden) { hiddenAt = Date.now(); saveNow(); } else { tick(); if (hiddenAt) awaySummary(hiddenAt, Date.now()); } });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { hiddenAt = Date.now(); if (sitterActive(hiddenAt)) { settleSitter(); if (tank && tank.pendingFoods && tank.pendingFoods().length) flushFoods(); } saveNow(); } else { tick(); if (hiddenAt) awaySummary(hiddenAt, Date.now()); } });
   if (!S.welcomed) { if (!S.geckos.length && !(S.starters && S.starters.length)) S.starters = makeStarters(); if (S.geckos.length && S.starters && S.starters.length) starterList(); else firstRun(); }
 
   if ('serviceWorker' in navigator && /^(https:|http:\/\/localhost)/.test(location.href)) {
