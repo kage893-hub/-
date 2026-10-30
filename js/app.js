@@ -22,7 +22,7 @@
   const speedX = () => (S && S.speed) || 3;
   // 実際の日数をゲーム内の時間に直す（抱卵・ふ化・おやすみも成長と同じ速さで進む）
   const realDays = d => d * DAYMS / speedX();
-  const EGG_CAP = 12, CASE_MAX = 30;
+  const EGG_CAP = 12, CASE_MAX = 100;
 
   const FOODS = {
     cricketS: { name: 'コオロギS', hunger: 9, growth: 2, price: 4, pack: 10, desc: '小さめのコオロギ。ベビーにちょうどいい大きさ' },
