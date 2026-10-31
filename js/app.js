@@ -31,6 +31,8 @@
     worm: { name: 'ミルワーム', hunger: 18, growth: 8, price: 7, pack: 10, desc: 'みんな大好き。脂肪が多いのでおやつに' },
     paste: { name: '練り餌', hunger: 14, growth: 3, price: 10, pack: 10, unit: '回分', desc: '粉を水でねった人工フード。栄養のバランスがよく、カルシウム入り。においになれるまで食べないことも' },
   };
+  // カルシウムパウダー（ショップの1袋。ショーのまとめ買いはこの3袋分）
+  const CALC = { price: 15, pack: 200 };
   // ペットシッターの期間はゲームの速さを使わず、実時間で固定する。
   const SITTER_COST = 100, SITTER_SPAN = DAYMS, SITTER_STEP = 5 * MIN;
   function normalizeSitter(value) {
@@ -1689,8 +1691,8 @@
     },
     buyCalc() {
       settleSitter();
-      if (S.coins < 15) { toast('コインが足りません'); return; }
-      S.coins -= 15; S.calc = (S.calc || 0) + 50; S.dust = true;
+      if (S.coins < CALC.price) { toast('コインが足りません'); return; }
+      S.coins -= CALC.price; S.calc = (S.calc || 0) + CALC.pack; S.dust = true;
       toast('カルシウムパウダーを買いました');
       renderView(); save();
     },
@@ -2294,9 +2296,9 @@
           <span class="row-main"><b>${F.name} ${F.pack}${F.unit || '匹'}</b><small>いま ${S.food[k] || 0}${F.unit || '匹'} ・ ${F.desc}</small></span>
           <span class="row-side price">${F.price}</span>
         </button>`).join('')}
-        <button class="row" data-action="buyCalc" ${S.coins < 15 ? 'disabled' : ''}>
-          <span class="row-main"><b>カルシウムパウダー 50回分</b><small>いま ${S.calc || 0}回分 ・ ごはんにまぶして骨を強く。足りないと骨が弱くなります</small></span>
-          <span class="row-side price">15</span>
+        <button class="row" data-action="buyCalc" ${S.coins < CALC.price ? 'disabled' : ''}>
+          <span class="row-main"><b>カルシウムパウダー ${CALC.pack}回分</b><small>いま ${S.calc || 0}回分 ・ ごはんにまぶして骨を強く。足りないと骨が弱くなります</small></span>
+          <span class="row-side price">${CALC.price}</span>
         </button></div>`,
       interior: () => `<div class="shop-tabs two interior-switch" role="group" aria-label="インテリアの種類"><button class="${interiorSection === 'decor' ? 'on' : ''}" data-action="interiorSection" data-section="decor" aria-pressed="${interiorSection === 'decor'}">家具</button><button class="${interiorSection === 'cage' ? 'on' : ''}" data-action="interiorSection" data-section="cage" aria-pressed="${interiorSection === 'cage'}">ケース</button></div>${interiorSection === 'cage' ? cageShop() : interiorShop()}`,
       other: () => `${studyCard()}${speedShop()}${sitterCard(now)}
@@ -2794,6 +2796,86 @@
     save();
   }
   function decorTap(i) { if (editing) setEditing({ sel: i, place: null }); }
+  // ---- おすすめ配置：持っている家具から選び、見栄えのする場所に置く
+  // 役わり：水入れ → シェルター → 登れる家具 → 植物 → 飾り の順に選ぶ
+  const decorRole = (id, d) => d.drink ? 'dish' : d.shelter ? 'shelter' : decorCategoryOf(id, d) === 'plant' ? 'plant' : d.climb ? 'climb' : 'ornament';
+  // ケージの見た目に合う家具（恐竜時代なら恐竜、おかしの家ならおかし、ショー限定ケースならショー限定の家具）
+  const THEME_DECOR = { dino: /^(trex|trike|stego|para)$/, candy: /^(donut|cookie|cake|ginger)$/ };
+  function themeFits(g, id, d) {
+    const th = cageOf(g).theme;
+    if (th === 'expoGold') return d.expo === 'gold';
+    if (th === 'expoNight') return d.expo === 'night';
+    return !!(THEME_DECOR[th] && THEME_DECOR[th].test(id));
+  }
+  // 置き場所の目安（u：横 -1左〜1右、右が暖かい側／v：奥 -1〜手前 1）。右奥の角はトイレの場所
+  const DECOR_SLOTS = {
+    shelter: [[0.55, -0.3], [0.6, 0.3], [-0.6, -0.45]],
+    dish: [[-0.62, 0.45], [-0.3, 0.58], [0.05, 0.55]],
+    climb: [[-0.15, -0.5], [-0.62, -0.45], [0.2, -0.55], [0.05, 0.05]],
+    plant: [[-0.88, -0.78], [0.3, -0.82], [0.9, 0.2], [-0.88, 0.62], [-0.45, -0.85], [0.9, 0.78]],
+    ornament: [[0.35, 0.62], [-0.08, 0.72], [0.75, 0.72], [-0.45, 0.15], [0.1, -0.15]],
+  };
+  const ROLE_ORDER = ['shelter', 'climb', 'dish', 'plant', 'ornament'];
+  function pickRecommended(g, pool) {
+    const left = Object.assign({}, pool), picks = [];
+    const score = id => { const d = L3.DECOR[id]; return (themeFits(g, id, d) ? 1000 : 0) + d.price; };
+    const take = (role, n, allowDup) => {
+      for (let k = 0; k < n && picks.length < MAX_DECOR; k++) {
+        const ids = Object.keys(left).filter(id => left[id] > 0 && decorRole(id, L3.DECOR[id]) === role && (allowDup || !picks.includes(id)));
+        if (!ids.length) return;
+        ids.sort((a, b) => score(b) - score(a));
+        picks.push(ids[0]); left[ids[0]]--;
+      }
+    };
+    const themed = Object.keys(left).filter(id => left[id] > 0 && themeFits(g, id, L3.DECOR[id])).length;
+    take('dish', 1); take('shelter', 1); take('climb', themed ? 1 : 2); take('plant', themed ? 1 : 2); take('ornament', themed ? 3 : 2);
+    // あまったら、ちがう家具 → 同じ家具の2つ目 の順で埋める（水入れ・シェルターは後回し）
+    for (const allowDup of [false, true]) for (const role of ['ornament', 'plant', 'climb', 'shelter', 'dish']) take(role, MAX_DECOR, allowDup);
+    return picks;
+  }
+  function autoDecor(g) {
+    const list = decorOf(g), TK = cageDims(g);
+    const pool = Object.assign({}, S.decorInv);
+    for (const d of list) pool[d.t] = (pool[d.t] || 0) + 1;
+    const picks = pickRecommended(g, pool);
+    picks.sort((a, b) => ROLE_ORDER.indexOf(decorRole(a, L3.DECOR[a])) - ROLE_ORDER.indexOf(decorRole(b, L3.DECOR[b])) || L3.DECOR[b].r - L3.DECOR[a].r);
+    list.length = 0;
+    const used = new Set(), r = prngApp(strHash(g.id + ':decor')), placed = [];
+    const fits = (x, z, t, gap) => !decorOk(g, x, z, t) && list.every(d => Math.hypot(x - d.x, z - d.z) >= L3.DECOR[t].r + L3.DECOR[d.t].r - 0.25 + gap);
+    for (const t of picks) {
+      const role = decorRole(t, L3.DECOR[t]), slots = DECOR_SLOTS[role];
+      let spot = null;
+      for (const [k, [u, v]] of slots.entries()) {
+        if (used.has(role + k)) continue;
+        const x = u * TK.hw + (r() - 0.5) * 0.3, z = v * TK.hd + (r() - 0.5) * 0.3;
+        if (fits(x, z, t, 0.35)) { spot = [x, z]; used.add(role + k); break; }
+      }
+      if (!spot) {
+        // 目安の場所がふさがっていたら、近い場所を探す（すきまを少しずつ狭める）
+        const [au, av] = slots[0], cand = [];
+        for (let x = -TK.hw; x <= TK.hw; x += 0.5) for (let z = -TK.hd; z <= TK.hd; z += 0.5) cand.push([x, z, Math.hypot(x / TK.hw - au, z / TK.hd - av)]);
+        cand.sort((a, b) => a[2] - b[2]);
+        for (const gap of [0.35, 0]) { const c = cand.find(([x, z]) => fits(x, z, t, gap)); if (c) { spot = c; break; } }
+      }
+      if (!spot) continue;
+      const rot = role === 'plant' || role === 'ornament' ? +(r() * Math.PI * 2).toFixed(2) : role === 'climb' ? +((r() - 0.5) * 0.6).toFixed(2) : 0;
+      list.push({ t, x: +spot[0].toFixed(2), z: +spot[1].toFixed(2), rot });
+      placed.push(t);
+    }
+    // 持ち物の数を合わせる（置いたぶんを減らす）
+    const inv = {};
+    for (const [t, n] of Object.entries(pool)) inv[t] = n;
+    for (const t of placed) inv[t]--;
+    for (const t of Object.keys(inv)) if (inv[t] <= 0) delete inv[t];
+    S.decorInv = inv;
+    return placed.length;
+  }
+  function clearDecor(g) {
+    const list = decorOf(g), n = list.length;
+    for (const d of list) S.decorInv[d.t] = (S.decorInv[d.t] || 0) + 1;
+    list.length = 0;
+    return n;
+  }
   function editPanel(g) {
     const list = decorOf(g);
     const inv = Object.entries(S.decorInv).filter(([, n]) => n > 0);
@@ -2805,6 +2887,7 @@
       <div class="gc-head"><b>もようがえ中</b><small class="muted">${list.length} / ${MAX_DECOR} 個</small></div>
       <p class="muted small">${hint}</p>
       ${sel ? `<div class="actions"><button class="act sm" data-action="rotateDecor">向きを変える</button><button class="act sm" data-action="storeDecor">しまう</button></div>` : ''}
+      <div class="actions"><button class="act sm" data-action="decorAutoAsk" ${list.length || inv.length ? '' : 'disabled'}>おすすめに並べる</button><button class="act sm" data-action="decorClearAsk" ${list.length ? '' : 'disabled'}>ぜんぶ片付ける</button></div>
       <div class="label">ケージ</div>
       <div class="decor-inv">${Object.entries(L3.CAGE_SIZES).filter(([id]) => cageOwn()[id]).map(([id, v]) => `<button class="chip${cageOf(g).size === id ? ' on' : ''}" data-action="setCageOpt" data-kind="size" data-id="${id}">${v.name}</button>`).join('')}</div>
       <div class="decor-inv">${Object.entries(L3.CAGE_THEMES).filter(([id]) => cageOwn()[id]).map(([id, v]) => `<button class="chip${cageOf(g).theme === id ? ' on' : ''}" data-action="setCageOpt" data-kind="theme" data-id="${id}">${v.name}</button>`).join('')}</div>
@@ -2923,6 +3006,34 @@
       if (!d) return;
       d.rot = ((d.rot || 0) + Math.PI / 2) % (Math.PI * 2);
       renderView(); save();
+    },
+    decorAutoAsk() {
+      const g = selected(); if (!g || !editing) return;
+      openSheet(`<h3 class="sheet-title">おすすめに並べる</h3>
+        <p>持っている家具から、${esc(g.name)}のケースに合うものを${MAX_DECOR}個まで選んで並べます。シェルターは暖かい側、水入れは涼しい側に置きます。</p>
+        ${decorOf(g).length ? '<p class="muted small">いま置いている家具は、いったん片付けてから並べなおします。</p>' : ''}
+        <div class="actions"><button class="act" data-action="closeSheet">やめる</button><button class="act primary" data-action="decorAuto">並べる</button></div>`);
+    },
+    decorAuto() {
+      const g = selected(); if (!g) return;
+      closeSheet();
+      const n = autoDecor(g);
+      sfx('tap'); toast(n ? `おすすめの家具を${n}個並べました` : '置ける家具がありません');
+      setEditing({ sel: null, place: null }); save();
+    },
+    decorClearAsk() {
+      const g = selected(); if (!g || !editing || !decorOf(g).length) return;
+      openSheet(`<h3 class="sheet-title">ぜんぶ片付ける</h3>
+        <p>${esc(g.name)}のケースの家具を、ぜんぶ持ち物にしまいます。</p>
+        <p class="muted small">シェルターや水入れもしまうので、あとでまた置いてあげてね。</p>
+        <div class="actions"><button class="act" data-action="closeSheet">やめる</button><button class="act primary" data-action="decorClear">片付ける</button></div>`);
+    },
+    decorClear() {
+      const g = selected(); if (!g) return;
+      closeSheet();
+      const n = clearDecor(g);
+      toast(`家具を${n}個しまいました`);
+      setEditing({ sel: null, place: null }); save();
     },
     storeDecor() {
       const g = selected(); if (!g || !editing || editing.sel == null) return;
@@ -4150,7 +4261,10 @@
             <span class="row-art">${A.food(k)}</span>
             <span class="row-main"><b>${F.name} ${F.pack * BULK}${F.unit || '匹'}</b><small>いつもは ${F.price * BULK} コイン ・ いま ${S.food[k] || 0}${F.unit || '匹'}</small></span>
             <span class="row-side price">${price}</span></button>`;
-        }).join('')}</div>
+        }).join('')}
+          <button class="row" data-action="expoBulk" data-kind="calc" ${S.coins < Math.round(CALC.price * BULK * BULK_OFF) ? 'disabled' : ''}>
+            <span class="row-main"><b>カルシウムパウダー ${CALC.pack * BULK}回分</b><small>いつもは ${CALC.price * BULK} コイン ・ いま ${S.calc || 0}回分</small></span>
+            <span class="row-side price">${Math.round(CALC.price * BULK * BULK_OFF)}</span></button></div>
         <h3 class="h3">家具 10種類が半額</h3>
         <div class="item-grid">${E.decor.map(t => itemCard('decor', t, L3.DECOR[t], String(expoDecorPrice(t)))).join('')}</div>`;
     } else {
@@ -4257,7 +4371,16 @@
       save(); renderView();
     },
     expoBulk(t) {
-      const k = t.dataset.kind, F = FOODS[k];
+      const k = t.dataset.kind;
+      if (k === 'calc') {
+        const price = Math.round(CALC.price * BULK * BULK_OFF);
+        if (S.coins < price) { toast('コインが足りません'); return; }
+        S.coins -= price; S.calc = (S.calc || 0) + CALC.pack * BULK; S.dust = true;
+        sfx('buy'); toast(`カルシウムパウダーを${CALC.pack * BULK}回分まとめ買いしました`);
+        renderView(); save();
+        return;
+      }
+      const F = FOODS[k];
       const price = Math.round(F.price * BULK * BULK_OFF);
       if (S.coins < price) { toast('コインが足りません'); return; }
       S.coins -= price; S.food[k] = (S.food[k] || 0) + F.pack * BULK;
