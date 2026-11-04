@@ -1564,8 +1564,12 @@
       const lv = lvOf(t.dataset.lv), day = todayKey();
       if (!lv) return;
       const th = themeOf(lv, day);
-      const list = S.geckos.map(g => {
-        const why = lv === CHAMP ? (stageOf(g) === 'baby' ? 'ベビーはまだ出られません' : '') : showBlock(g, day), sc = showScore(g, th, day);
+      // 出られる子を★の多い順に上へ。まだ出られないベビー、今日もう出場した子の順に下へ
+      const rows = S.geckos.map(g => {
+        const why = lv === CHAMP ? (stageOf(g) === 'baby' ? 'ベビーはまだ出られません' : '') : showBlock(g, day);
+        return { g, why, sc: showScore(g, th, day), group: !why ? 0 : g.showDay === day ? 2 : 1 };
+      }).sort((a, b) => a.group - b.group || b.sc.base - a.sc.base);
+      const list = rows.map(({ g, why, sc }) => {
         return `<button class="row" data-action="showEnter" data-lv="${t.dataset.lv}" data-id="${g.id}" ${why ? 'disabled' : ''}>
           <span class="row-art">${A.swatch(g)}</span>
           <span class="row-main"><b>${esc(g.name)} ${sexMark(g)}</b><small>${esc(nameOf(g))} ・ ${STAGE_LABEL[stageOf(g)]}${why ? ' ・ ' + why : ''}</small></span>
