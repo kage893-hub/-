@@ -48,6 +48,7 @@
 - Playwright ＋ Chromium、画面サイズ 390×844。swiftshader で 3D はとても遅い。
   - 起動の引数：`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`
 - 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition・study・family・behavior・movement・pairplan・sitter）。最後の行が `[]` ならエラーなし。
+  - **ふだんは、変更に関係するテストと画面の確認だけを流す**（2026-11-04 からの決まり）。全13本は、家具・3D・セーブの形など広く影響する変更のときに流す。
   - sitter は実時間の期限・全員の給餌と在庫・留守中と分割処理・延長と課金・移行・保存・自動報酬なしを検査する。
   - pairplan は逆引きの遺伝確率・色や模様の目安・30匹の候補・親の条件・たまごからの開始・保存を検査する。
   - movement は足の接地・旋回・後ずさり・前足だけの掘り動作・待機中のしぐさを検査する。足先の4点だけでなく、描画後の脚の三角形と指先の床・家具・手に対する高さも検査する。接地情報は表示中だけの一時データで、セーブには足さない。
