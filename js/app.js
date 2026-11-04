@@ -649,7 +649,7 @@
   let tank = null;
   let tankGid = null;
 
-  // しっぽの太さ（-0.15 ほっそり 〜 +0.35 ぽっちゃり）
+  // しっぽの太さ（-0.15 ほっそり 〜 +0.35 たっぷり）
   const condOf = g => (g.cond == null ? 55 : g.cond);
   const fatOf = g => clamp((condOf(g) - 55) / 120, -0.15, 0.35);
   function tankCondition(g) {
@@ -931,7 +931,7 @@
     const F = FOODS[kind];
     g.hunger = clamp(g.hunger + F.hunger);
     if (g.hunger > 0) g.emptyH = 0;
-    // しっぽの栄養：ミルワームは脂肪が多いので、たくさんあげるとぽっちゃりに
+    // しっぽの栄養：ミルワームは脂肪が多いので、ほかのごはんより早くたまる
     g.cond = clamp((g.cond == null ? 55 : g.cond) + ({ cricketS: 0.8, cricket: 1.2, dubia: 1.6, worm: 3.2, paste: 1 })[kind] - (g.cond > 70 && kind !== 'worm' ? 0.6 : 0));
     grow(g, F.growth * (GROWTH.perHour / 6) * speedX() * heatInfo(heatOf(g)).growth, now);
     if (!automatic) { g.tame = clamp(g.tame + 1); S.coins += 1; daily('fed'); }
@@ -3342,7 +3342,7 @@
   function weightOf(g) {
     let w = bodyBase(g);
     w *= 0.93 + (g.hunger / 100) * 0.1;
-    w *= 0.92 + condOf(g) / 100 * 0.16;                       // しっぽの栄養（ほっそり〜ぽっちゃり）                       // おなかが空くと軽く、満腹だと少し重く
+    w *= 0.92 + condOf(g) / 100 * 0.16;                       // しっぽの栄養（ほっそり〜たっぷり）                       // おなかが空くと軽く、満腹だと少し重く
     if (g.gravid) w *= 1.18;                                   // 卵のぶん
     return Math.round(w * 10) / 10;
   }
@@ -3377,7 +3377,8 @@
   // ======================================================
   function healthCard(g) {
     const c = condOf(g), now = Date.now();
-    const tail = c < 30 ? ['ほっそり', 'warn', 'ごはんを少し多めにあげよう'] : c < 45 ? ['すこし細め', 'info', 'コオロギやデュビアをしっかりあげよう'] : c <= 72 ? ['ちょうどいい', 'good', ''] : c <= 85 ? ['ぷっくり', 'good', 'しっぽに栄養がたっぷり'] : ['ぽっちゃり', 'warn', 'ミルワームはおやつ程度に。コオロギ中心がおすすめ'];
+    const tail = c < 30 ? ['ほっそり', 'warn', 'ごはんを少し多めにあげよう'] : c < 45 ? ['すこし細め', 'info', 'コオロギやデュビアをしっかりあげよう'] : c <= 72 ? ['ちょうどいい', 'good', ''] : c <= 85 ? ['ぷっくり', 'good', 'しっぽに栄養がたっぷり'] : (g.wormRun || 0) >= 3 ? ['たっぷり', 'info', 'ミルワームが続いています。ミルワームはおやつ程度に。コオロギ中心がおすすめ'] : ['たっぷり', 'good', ''];
+    // しっぽが太いのは栄養をためられている元気なしるし。注意は、脂肪の多いミルワームが続いたときだけ
     const log = weightLog(g);
     const wk = log.length > 1 ? log[Math.max(0, log.length - 8)] : null;
     const dw = wk ? Math.round((weightOf(g) - wk.w) * 10) / 10 : null;
