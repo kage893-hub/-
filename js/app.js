@@ -1620,7 +1620,7 @@
           <button class="act primary" data-action="closeSheet">とじる</button>
         </div>`);
         renderView();
-      }, 1700);
+      }, 600);
     },
     buyCage(t) {
       const kind = t.dataset.kind, id = t.dataset.id;
