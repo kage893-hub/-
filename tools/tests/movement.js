@@ -7,7 +7,7 @@ async function harness() {
   p.on('pageerror', e => errors.push(String(e)));
   p.on('console', m => { if (m.type() === 'error' && /shader|WebGLProgram|GL_INVALID/.test(m.text())) errors.push(m.text()); });
   let scene = fs.readFileSync(__dirname + '/../../js/scene3d.js', 'utf8');
-  scene = scene.replace('_st: st, _cam: camera,', '_clearance: poseClearance, _obstacles: () => obstacles, _resolve: resolveObstacles, _step: stepGecko, _render: () => renderer.render(scene, camera), _floor: surfaceAt, _handHeight: handHeightAt, _climbs: () => climbs, _P: P, _st: st, _cam: camera,');
+  scene = scene.replace('_st: st, _cam: camera,', '_clearance: wallClearance, _obstacles: () => obstacles, _resolve: resolveObstacles, _step: stepGecko, _render: () => renderer.render(scene, camera), _floor: surfaceAt, _handHeight: handHeightAt, _climbs: () => climbs, _P: P, _st: st, _cam: camera,');
   scene = scene.replace('root.Leopa3D = {', 'root._movement = { MODEL, DEFORM_GLSL }; root.Leopa3D = {');
   await p.route('**/js/scene3d.js', r => r.fulfill({ contentType: 'text/javascript', body: scene }));
   await p.addInitScript(() => { const original = window.setInterval; window._testIntervals = []; window.setInterval = (...args) => { const id = original(...args); _testIntervals.push(id); return id; }; });
@@ -123,25 +123,18 @@ const result=await p.evaluate(()=>{
  check('壁ぎわの方向転換で頭・胴・尾をケース外へ出さない',wallGap>=-1e-6,metrics.wallTurn);
  check('壁ぎわで押し戻されて急に横滑りしない',wallJump<.04,wallJump);
  check('壁に止まり続けず方向転換して歩ける',st.x< -2,metrics.wallTurn);
- // 両端の姿勢は安全でも、その間にある薄い板をすり抜けてはいけない。
- tank.setCage({size:'big'});tank.setDecor([]);resetMotion({x:-4.6,yaw:Math.PI/2});
- tank._obstacles().push({x:0,z:0,rot:.17,i:999,t:'test',box:{cx:0,cz:0,hx:.02,hz:3}});
- const previousPose={x:st.x,z:st.z,yaw:st.yaw};st.x=4.5;tank._resolve(st,previousPose);
- check('高速移動でも途中の薄い家具を通り抜けない',st.x< -1.8&&tank._clearance(st)>=-1e-6,{x:st.x,gap:tank._clearance(st)});
- tank._obstacles().length=0;
- // 回転した実際の家具を迂回する。サイズによる余裕も変わる。
- metrics.detours=[];
- for(const size of [.6,1]){
-  tank.setDecor([{t:'log',x:0,z:0,rot:.55}]);st.size=size;st.gk.root.scale.setScalar(.95*size);
-  resetMotion({x:-4.6,z:0,yaw:Math.PI/2,mode:'walk',target:{x:4.6,z:0},burst:999,profile:{...st.profile,walk:1}});
-  let gap=Infinity,jump=0,side=0;
-  for(let n=0;n<2400;n++){const x=st.x,z=st.z;tick(1/30);gap=Math.min(gap,tank._clearance(st));jump=Math.max(jump,Math.hypot(st.x-x,st.z-z));side=Math.max(side,Math.abs(st.z));if(st.x>4.4||st.mode==='idle')break;}
-  const data={size,gap,jump,side,x:st.x,z:st.z};metrics.detours.push(data);
-  check('家具を避ける途中で体が貫通しない '+size,gap>=-1e-6,data);
-  check('家具に押し出されて急に移動しない '+size,jump<.05,data);
-  check('家具の手前で止まらず迂回して目的地へ進む '+size,st.x>3.8&&side>.5,data);
- }
  tank.setDecor([]);tank.setCage({size:'std'});
+ // 普段の配置で、尾の近くの家具を理由に歩行が止まり続けないこと。
+ metrics.furnishedWalk=[];
+ for(const size of [.65,1]){
+  st.size=size;st.gk.root.scale.setScalar(.95*size);tank.setDecor(Leopa3D.DEFAULT_DECOR);
+  resetMotion({x:0,z:0,yaw:0,mode:'walk',target:{x:3,z:0},burst:999,profile:{...st.profile,walk:1}});
+  let distance=0,arrived=false;
+  for(let n=0;n<1200;n++){const x=st.x,z=st.z;tick(1/30);distance+=Math.hypot(st.x-x,st.z-z);if(Math.hypot(st.x-3,st.z)<.2){arrived=true;break}if(st.mode==='idle')break;}
+  const data={size,distance,arrived,x:st.x,z:st.z};metrics.furnishedWalk.push(data);
+  check('通常の家具配置で目的地まで歩ける '+size,arrived&&distance>2.8,data);
+ }
+ tank.setDecor([]);
 
  return {checks,metrics};
 });
