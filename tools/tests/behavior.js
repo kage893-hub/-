@@ -47,15 +47,17 @@ const fs = require('fs'), assert = require('node:assert/strict');
       tank.setGecko({ ...g, id: 'another-gecko', seed: g.seed + 1, size: 1, stage: 'adult' });
       check('個体の切り替えでのぞく動作を引き継がない', !st.hidePeek && st.mode === 'idle');
       tank.setDecor([]); tank.takeFoods(); tank.setNight(false);
-      // 9秒で到着してしまう速い個体を避け、長い歩行を確実に検査する。
+      // 尾までケース内に収まる開始位置で、9秒以上の歩行を検査する。
+      tank.setCage({size: 'big'});
+      // 9秒で到着してしまう速い個体を避ける。
       st.profile = profiles.find(p => p.name === 'のんびり');
       const reset = extra => {
-        Object.assign(st, { x: 0, z: -2, yaw: 0, mode: 'idle', wait: 999, sleeping: false, act: null, hand: null, pair: null, hidePeek: null, target: null, hunt: null, meal: null, burst: 999, pauseT: 0, idleT: 999, walkTime: 0, walkProgress: null, spd: 0, ...extra });
+        Object.assign(st, { x: 0, z: -1.5, yaw: 0, mode: 'idle', wait: 999, sleeping: false, act: null, hand: null, pair: null, hidePeek: null, target: null, hunt: null, meal: null, burst: 999, pauseT: 0, idleT: 999, walkTime: 0, walkProgress: null, spd: 0, ...extra });
       };
       const tick = n => { for (let i = 0; i < n; i++) { st.t += 1 / 30; tank._step(1 / 30); } };
       try {
         Math.random = () => .5;
-        reset({ mode: 'walk', target: { x: 0, z: 3 } });
+        reset({ mode: 'walk', target: { x: 0, z: 3.5 } });
         const destination = st.target;
         tick(285);
         check('9秒以上進んでも行き先を急に選び直さない', st.mode === 'walk' && st.target === destination && st.z > 0);
@@ -64,7 +66,7 @@ const fs = require('fs'), assert = require('node:assert/strict');
         check('到着したら昼は12秒以上休む', st.mode === 'idle' && st.wait > 12);
         reset({ mode: 'walk', target: { x: 0, z: 99 } }); for (let i = 0; i < 1800 && st.mode === 'walk'; i++) tick(1);
         check('進めないときは行き先を外して休める', st.mode === 'idle' && st.target === null && st.wait > 0);
-        reset({ mode: 'walk', target: { x: 0, z: 3 }, pauseT: 6 }); tick(150);
+        reset({ mode: 'walk', target: { x: 0, z: 3.5 }, pauseT: 6 }); tick(150);
         check('歩行途中の休憩を行き詰まりと間違えない', st.mode === 'walk' && st.pauseT > 0 && st.walkTime === 0);
         reset(); tank.startAct('yawn'); tick(60);
         check('しぐさのあともすぐに歩き出さない', st.mode === 'idle' && st.wait >= 12);

@@ -7,7 +7,7 @@ async function harness() {
   p.on('pageerror', e => errors.push(String(e)));
   p.on('console', m => { if (m.type() === 'error' && /shader|WebGLProgram|GL_INVALID/.test(m.text())) errors.push(m.text()); });
   let scene = fs.readFileSync(__dirname + '/../../js/scene3d.js', 'utf8');
-  scene = scene.replace('_st: st, _cam: camera,', '_step: stepGecko, _render: () => renderer.render(scene, camera), _floor: surfaceAt, _handHeight: handHeightAt, _climbs: () => climbs, _P: P, _st: st, _cam: camera,');
+  scene = scene.replace('_st: st, _cam: camera,', '_clearance: poseClearance, _obstacles: () => obstacles, _resolve: resolveObstacles, _step: stepGecko, _render: () => renderer.render(scene, camera), _floor: surfaceAt, _handHeight: handHeightAt, _climbs: () => climbs, _P: P, _st: st, _cam: camera,');
   scene = scene.replace('root.Leopa3D = {', 'root._movement = { MODEL, DEFORM_GLSL }; root.Leopa3D = {');
   await p.route('**/js/scene3d.js', r => r.fulfill({ contentType: 'text/javascript', body: scene }));
   await p.addInitScript(() => { const original = window.setInterval; window._testIntervals = []; window.setInterval = (...args) => { const id = original(...args); _testIntervals.push(id); return id; }; });
@@ -56,7 +56,7 @@ const result=await p.evaluate(()=>{
  metrics.walk={maxDrift,maxGPUError,airFrames,samples};check('接地中の足が水平に滑らない',maxDrift<.000001,metrics.walk);check('描画側の足中心も接地目標に一致',maxGPUError<.00001,maxGPUError);check('4本すべてで踏み替えがある',airFrames.every(n=>n>0),airFrames);
  st.mode='idle';st.wait=999;st.target=null;for(let n=0;n<60;n++)tick();check('停止後に宙に足を残さない',st.gait.feet.every(f=>!f.air));const phase=st.phase;for(let n=0;n<30;n++)tick();check('停止中に足踏みし続けない',Math.abs(st.phase-phase)<1e-10);
  resetMotion({mode:'walk',target:{x:0,z:-2.5},burst:999});let maxYaw=0,turnFeet=false,prevYaw=st.yaw;for(let n=0;n<180;n++){tick();maxYaw=Math.max(maxYaw,Math.abs(st.yaw-prevYaw)*60);prevYaw=st.yaw;if(st.gait.feet.some(f=>f.air)&&Math.abs(st.yaw)>.1)turnFeet=true;}check('旋回速度が制限されている',maxYaw<=2.20001,maxYaw);check('大きな方向転換でも足を踏み替える',turnFeet);
- resetMotion();tank.startAct('startle');let reverseAir=false;for(let n=0;n<60;n++){tick();reverseAir ||= st.gait.feet.some(f=>f.air)}check('後ずさりしても足が動く',st.z<-.15&&reverseAir,{z:st.z,reverseAir});
+ resetMotion({z:.7});tank.startAct('startle');let reverseAir=false;for(let n=0;n<60;n++){tick();reverseAir ||= st.gait.feet.some(f=>f.air)}check('後ずさりしても足が動く',st.z<.55&&reverseAir,{z:st.z,reverseAir});
  resetMotion();tank.startAct('dig');let frontChange=0,rearChange=0;const homeTargets=st.gk.U.uFootTarget.value.map(x=>x.clone());for(let n=0;n<120;n++){tick();for(let i=0;i<4;i++){const d=st.gk.U.uFootTarget.value[i].distanceTo(homeTargets[i]);if(i<2)frontChange=Math.max(frontChange,d);else rearChange=Math.max(rearChange,d)}}check('掘る動きは前足だけ、後ろ足は支える',frontChange>.10&&rearChange<.00001,{frontChange,rearChange});
  resetMotion();tank.startAct('sniff');let lowHead=false,lick=false;for(let n=0;n<210;n++){tick();lowHead ||= tank._P.pitch>.15;lick ||= tank._P.tongue>.2}check('鼻先を下げて舌で確かめ、通常動作に戻る',lowHead&&lick&&!st.act,{lowHead,lick});
  resetMotion();tank.startAct('stretch');let stretchDrop=1;for(let n=0;n<160;n++){tick();stretchDrop=Math.min(stretchDrop,tank._P.drop)}check('伸びから元の姿勢へ戻る',stretchDrop<0&&!st.act&&st.gait.feet.every(f=>!f.air),stretchDrop);
@@ -90,14 +90,15 @@ const result=await p.evaluate(()=>{
  for(const [name,attr]of Object.entries(G.attributes))if(['position','aLeg','aLimb','aPivot','aCy'].includes(name))attrib(name,Array.from(attr.array),attr.itemSize);
  gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER,feedback);gl.bufferData(gl.TRANSFORM_FEEDBACK_BUFFER,N*12,gl.DYNAMIC_READ);gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER,0,feedback);
  const base=Array.from({length:N},(_,i)=>new THREE.Vector3().fromBufferAttribute(G.attributes.position,i));
- const cases=[{name:'歩行',extra:{mode:'walk',target:{x:0,z:2.7},burst:999}},{name:'方向転換',extra:{mode:'walk',target:{x:0,z:-2.5},burst:999}},{name:'休む',act:'settle'},{name:'伸び',act:'stretch'},{name:'岩の上り下り',extra:{mode:'walk',target:{x:2,z:2},burst:999},rock:true},{name:'後ずさり',act:'startle'},{name:'手の上',hand:true},{name:'小さい個体の歩行',size:.5,extra:{mode:'walk',target:{x:1,z:2},burst:999}},{name:'大きい個体の歩行',size:1.2,extra:{mode:'walk',target:{x:1,z:2},burst:999}}];
+ const cases=[{name:'歩行',extra:{mode:'walk',target:{x:0,z:2.7},burst:999}},{name:'方向転換',extra:{mode:'walk',target:{x:0,z:-2.5},burst:999}},{name:'休む',act:'settle'},{name:'伸び',act:'stretch'},{name:'岩の上り下り',extra:{mode:'walk',target:{x:2,z:2},burst:999},rock:true},{name:'後ずさり',act:'startle'},{name:'手の上',hand:true},{name:'小さい個体の歩行',size:.5,extra:{mode:'walk',target:{x:1,z:2},burst:999}},{name:'大きい個体の歩行',size:1.2,extra:{mode:'walk',target:{x:1,z:2},burst:999}},{name:'壁ぎわの平行歩行',wall:true,extra:{x:5.7,z:.7,yaw:0,mode:'walk',target:{x:5.7,z:2.5},burst:999}},{name:'壁ぎわの方向転換',wall:true,extra:{x:4,z:0,yaw:Math.PI/2,mode:'walk',target:{x:-3,z:0},burst:999}}];
  metrics.mesh=[];
  for(const c of cases){
   st.size=c.size||1;st.gk.root.scale.setScalar(.95*st.size);tank.setDecor(c.rock?[{t:'stone',x:0,z:0,rot:0}]:[]);resetMotion(c.extra||{});if(c.act)tank.startAct(c.act);if(c.hand)tank.startHandling(100);
-  let maxRatio=0,minFloor=0,minBody=0,bodyPoint=null;
+  let maxRatio=0,minFloor=0,minBody=0,bodyPoint=null,minWall=Infinity;
   for(let frame=0;frame<(c.hand?420:180);frame++){
    if(c.hand&&frame===330)tank.handCmd('down');st.t+=1/30;tank._step(1/30);if(st.mode==='idle')st.wait=999;if(frame%6)continue;
    const pts=gpu(N);st.gk.root.updateMatrixWorld(true);
+   if(c.wall)for(const pt of pts){const w=pt.clone().applyMatrix4(st.gk.root.matrixWorld);minWall=Math.min(minWall,6.5-Math.abs(w.x),4.5-Math.abs(w.z))}
    for(let i=0;i<N;i+=3)if([i,i+1,i+2].some(j=>G.attributes.aLeg.getX(j)>0))for(const[a,b]of[[i,i+1],[i+1,i+2],[i+2,i]]){
     const length=base[a].distanceTo(base[b]);if(length>.015)maxRatio=Math.max(maxRatio,pts[a].distanceTo(pts[b])/length);
    }
@@ -106,12 +107,41 @@ const result=await p.evaluate(()=>{
    }
    if(c.hand)for(let i=0;i<N;i++)if(G.attributes.aLeg.getX(i)===0&&G.attributes.position.getZ(i)>-1.55&&G.attributes.position.getY(i)<.20){const world=pts[i].clone().applyMatrix4(st.gk.root.matrixWorld),gap=world.y-tank._floor(world.x,world.z);if(gap<minBody){minBody=gap;bodyPoint=base[i].toArray()}}
   }
-  metrics.mesh.push({name:c.name,maxRatio,minFloor,minBody,bodyPoint});
+  metrics.mesh.push({name:c.name,maxRatio,minFloor,minBody,bodyPoint,...(c.wall?{minWall}:{})});
+  if(c.wall)check('描画後の脚・指・尾も壁の外へ突き抜けない',minWall>-.02,{minWall});
   if(c.hand)check('手の上で頭やおなかが表面を突き抜けない',minBody>-.005,{minBody,bodyPoint});
   check(c.name+'で脚の三角形が大きく引き伸ばされない',maxRatio<2.5,maxRatio);
   check(c.name+'で指が床や家具の下に突き抜けない',minFloor>-.005,minFloor);
  }
  tank.endHandling();tank.setDecor([]);
+ // 壁ぎわの U ターンは、頭だけでなく尾まで確認する。押し戻しによる瞬間移動も検出する。
+ st.size=1;st.gk.root.scale.setScalar(.95);tank.setCage({size:'std'});
+ resetMotion({x:4,z:0,yaw:Math.PI/2,mode:'walk',target:{x:-3,z:0},burst:999,profile:{...st.profile,walk:1}});
+ let wallGap=Infinity,wallJump=0;
+ for(let n=0;n<1500;n++){const x=st.x,z=st.z;tick(1/30);wallGap=Math.min(wallGap,tank._clearance(st));wallJump=Math.max(wallJump,Math.hypot(st.x-x,st.z-z));if(st.x< -2.8||st.mode==='idle')break;}
+ metrics.wallTurn={wallGap,wallJump,x:st.x,z:st.z};
+ check('壁ぎわの方向転換で頭・胴・尾をケース外へ出さない',wallGap>=-1e-6,metrics.wallTurn);
+ check('壁ぎわで押し戻されて急に横滑りしない',wallJump<.04,wallJump);
+ check('壁に止まり続けず方向転換して歩ける',st.x< -2,metrics.wallTurn);
+ // 両端の姿勢は安全でも、その間にある薄い板をすり抜けてはいけない。
+ tank.setCage({size:'big'});tank.setDecor([]);resetMotion({x:-4.6,yaw:Math.PI/2});
+ tank._obstacles().push({x:0,z:0,rot:.17,i:999,t:'test',box:{cx:0,cz:0,hx:.02,hz:3}});
+ const previousPose={x:st.x,z:st.z,yaw:st.yaw};st.x=4.5;tank._resolve(st,previousPose);
+ check('高速移動でも途中の薄い家具を通り抜けない',st.x< -1.8&&tank._clearance(st)>=-1e-6,{x:st.x,gap:tank._clearance(st)});
+ tank._obstacles().length=0;
+ // 回転した実際の家具を迂回する。サイズによる余裕も変わる。
+ metrics.detours=[];
+ for(const size of [.6,1]){
+  tank.setDecor([{t:'log',x:0,z:0,rot:.55}]);st.size=size;st.gk.root.scale.setScalar(.95*size);
+  resetMotion({x:-4.6,z:0,yaw:Math.PI/2,mode:'walk',target:{x:4.6,z:0},burst:999,profile:{...st.profile,walk:1}});
+  let gap=Infinity,jump=0,side=0;
+  for(let n=0;n<2400;n++){const x=st.x,z=st.z;tick(1/30);gap=Math.min(gap,tank._clearance(st));jump=Math.max(jump,Math.hypot(st.x-x,st.z-z));side=Math.max(side,Math.abs(st.z));if(st.x>4.4||st.mode==='idle')break;}
+  const data={size,gap,jump,side,x:st.x,z:st.z};metrics.detours.push(data);
+  check('家具を避ける途中で体が貫通しない '+size,gap>=-1e-6,data);
+  check('家具に押し出されて急に移動しない '+size,jump<.05,data);
+  check('家具の手前で止まらず迂回して目的地へ進む '+size,st.x>3.8&&side>.5,data);
+ }
+ tank.setDecor([]);tank.setCage({size:'std'});
 
  return {checks,metrics};
 });

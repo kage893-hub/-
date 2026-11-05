@@ -3162,6 +3162,7 @@
       if (key === cageKey) return;
       const sizeChanged = !cageKey || cageKey.split('|')[0] !== size;
       cageKey = key;
+      st.nav = null;
       TK.hw = CAGE_SIZES[size].hw; TK.hd = CAGE_SIZES[size].hd;
       BOUNDS.x = TK.hw - 0.7; BOUNDS.zMin = -TK.hd + 0.6; BOUNDS.zMax = TK.hd - 0.5;
       buildCage(theme);
@@ -3239,6 +3240,7 @@
       decorKey = key;
       if (st.hidePeek) wake();
       st.gait = null;
+      st.nav = null;
       while (decorG.children.length) { const c = decorG.children.pop(); disposeTree(c); }
       obstacles = []; placed = []; climbs = [];
       HIDE = null;
@@ -3288,24 +3290,87 @@
       if (d) { ring.position.x = d.x; ring.position.z = d.z; ring.scale.setScalar(d.r + 0.15); }
     }
     function setEdit(e) { edit = e; if (e) setClose(false); showSel(); }
+    // 体の向きも含めた接触範囲。尾は細く、胴と頭には幅を持たせる。
+    const BODY_CONTACTS = [];
+    const bodySections = [[2.18, 0.25], [1.4, 0.38], [0.6, 0.44], [-0.2, 0.44], [-1.0, 0.38], [-1.8, 0.30], [-2.6, 0.23], [-3.4, 0.14], [-4.48, 0.08]];
+    for (let i = 0; i < bodySections.length - 1; i++) {
+      const [z, r] = bodySections[i], [nextZ, nextR] = bodySections[i + 1], n = Math.ceil((z - nextZ) / 0.2);
+      for (let j = 0; j < n; j++) BODY_CONTACTS.push([lerp(z, nextZ, j / n), lerp(r, nextR, j / n)]);
+    }
+    BODY_CONTACTS.push(bodySections[bodySections.length - 1]);
+    function ignoresObstacle(g, o) {
+      return HIDE && o.i === HIDE.ob.i && (g.mode === 'hidePeek' || !HIDE.tunnel && (g.sleeping || g.mode === 'toHide'));
+    }
+    function poseClearance(g) {
+      const S = 0.95 * g.size, sy = Math.sin(g.yaw), cy = Math.cos(g.yaw);
+      let gap = Infinity;
+      for (const [k, width] of BODY_CONTACTS) {
+        const x = g.x + sy * k * S, z = g.z + cy * k * S, r = width * S;
+        gap = Math.min(gap, TK.hw - 0.08 - Math.abs(x) - r, TK.hd - 0.08 - Math.abs(z) - r);
+        for (const o of obstacles) if (!ignoresObstacle(g, o)) gap = Math.min(gap, sdObstacle(o, x, z).d - r);
+      }
+      // 胴が収まっていても、横へ開いた脚と踏み出す指がガラスを越えないようにする。
+      for (const foot of MODEL.feet || []) {
+        const x = g.x + (foot.x * cy + foot.z * sy) * S, z = g.z + (-foot.x * sy + foot.z * cy) * S, r = 0.6 * S;
+        gap = Math.min(gap, TK.hw - 0.08 - Math.abs(x) - r, TK.hd - 0.08 - Math.abs(z) - r);
+      }
+      return gap;
+    }
+    // 一度に移動・旋回した先だけで判定すると、細い家具を飛び越えてしまう。
+    // 通過する姿勢を小さく区切り、最後に安全だった位置で止める。
+    function sweepContact(g, before) {
+      if (poseClearance({ ...g, ...before }) < -0.001) return false;
+      const dx = g.x - before.x, dz = g.z - before.z, da = angleTo(before.yaw, g.yaw);
+      const n = Math.max(1, Math.ceil((Math.hypot(dx, dz) + Math.abs(da) * 4.48 * 0.95 * g.size) / (0.08 * g.size)));
+      let safe = before;
+      for (let i = 1; i <= n; i++) {
+        const q = { ...g, x: before.x + dx * i / n, z: before.z + dz * i / n, yaw: before.yaw + da * i / n };
+        if (poseClearance(q) < 0) {
+          let lo = (i - 1) / n, hi = i / n;
+          for (let j = 0; j < 7; j++) {
+            const mid = (lo + hi) / 2;
+            if (poseClearance({ ...g, x: before.x + dx * mid, z: before.z + dz * mid, yaw: before.yaw + da * mid }) >= 0) lo = mid;
+            else hi = mid;
+          }
+          safe = { x: before.x + dx * lo, z: before.z + dz * lo, yaw: before.yaw + da * lo };
+          Object.assign(g, safe); g.spd = 0;
+          return true;
+        }
+        safe = q;
+      }
+      return true;
+    }
     // 家具にめりこまないように、体にそって押し出す
-    function resolveObstacles(g) {
+    function resolveObstacles(g, before) {
       g = g || st;
+      const scripted = g !== st || st.hand || st.pair || st.hidePeek || st.sleeping || st.mode === 'toHide';
+      if (!scripted && before && sweepContact(g, before)) return;
       const S = 0.95 * g.size;
       // 鼻先から尻尾の先まで、体にそって点を取る（尻尾は細いので余裕を小さく）
-      const pts = [[2.0, 0.22], [1.4, 0.34], [0.6, 0.4], [-0.2, 0.4], [-1.0, 0.34], [-1.8, 0.3], [-2.6, 0.2], [-3.4, 0.12]];
+      const pts = scripted ? [[2.0, 0.22], [1.4, 0.34], [0.6, 0.4], [-0.2, 0.4], [-1.0, 0.34], [-1.8, 0.3], [-2.6, 0.2], [-3.4, 0.12]] : BODY_CONTACTS;
       for (let it = 0; it < 4; it++) {
         for (const o of obstacles) {
-          if (HIDE && o.i === HIDE.ob.i && (g.mode === 'hidePeek' || !HIDE.tunnel && (g.sleeping || g.mode === 'toHide'))) continue;
+          if (ignoresObstacle(g, o)) continue;
           for (const [k, w] of pts) {
             const px = g.x + Math.sin(g.yaw) * k * S, pz = g.z + Math.cos(g.yaw) * k * S;
             const r = sdObstacle(o, px, pz), min = w * S;
             if (r.d < min) { g.x += r.wx * (min - r.d); g.z += r.wz * (min - r.d); }
           }
         }
-        const m = 1.4 * g.size;
-        g.x = clamp(g.x, -BOUNDS.x + m, BOUNDS.x - m);
-        g.z = clamp(g.z, BOUNDS.zMin + m, BOUNDS.zMax - m * 0.6);
+        if (scripted) {
+          const m = 1.4 * g.size;
+          g.x = clamp(g.x, -BOUNDS.x + m, BOUNDS.x - m);
+          g.z = clamp(g.z, BOUNDS.zMin + m, BOUNDS.zMax - m * 0.6);
+        } else for (const [k, w] of pts) {
+          const x = g.x + Math.sin(g.yaw) * k * S, z = g.z + Math.cos(g.yaw) * k * S;
+          g.x += clamp(x, -TK.hw + 0.08 + w * S, TK.hw - 0.08 - w * S) - x;
+          g.z += clamp(z, -TK.hd + 0.08 + w * S, TK.hd - 0.08 - w * S) - z;
+        }
+        if (!scripted) for (const foot of MODEL.feet || []) {
+          const c = Math.cos(g.yaw), s = Math.sin(g.yaw), x = g.x + (foot.x * c + foot.z * s) * S, z = g.z + (-foot.x * s + foot.z * c) * S, r = 0.6 * S;
+          g.x += clamp(x, -TK.hw + 0.08 + r, TK.hw - 0.08 - r) - x;
+          g.z += clamp(z, -TK.hd + 0.08 + r, TK.hd - 0.08 - r) - z;
+        }
       }
     }
     const freeAt = (x, z, pad) => obstacles.every(o => sdObstacle(o, x, z).d > pad);
@@ -3363,6 +3428,7 @@
       if (look.id !== st.id) {
         Object.assign(st, { x: rand(-1.5, 2), z: rand(-0.5, 1.5), yaw: rand(-1, 1), mode: 'idle', wait: rand(8, 14), sleeping: false, stalk: 0, hidePeek: null, act: null, target: null });
         st.gait = null; st.phase = 0; st.walkW = 0; st.spd = 0; st.prevYaw = null; st.walkProgress = null; st.pauseT = 0; st.burst = null; st.idleT = null;
+        st.nav = null;
       }
       st.profile = behaviorProfile(look.seed);
       st.tame = look.tame || 0;
@@ -3647,28 +3713,91 @@
     // ---------- 動き
     const _m = new T.Vector3();
     function mouthWorld() { st.gk.mouth.getWorldPosition(_m); return _m; }
+    // 家具の外側の角を結んで迂回する。毎フレーム探索せず、目的地・家具が変わった時だけ作る。
+    function routeToward(g, tx, tz) {
+      if (g !== st || st.hand || st.pair || st.hidePeek || st.mode === 'toHide' || !obstacles.length) return { x: tx, z: tz };
+      const pad = 0.85 * 0.95 * g.size;
+      const inside = p => Math.abs(p.x) < TK.hw - pad && Math.abs(p.z) < TK.hd - pad;
+      const clear = (a, b) => inside(a) && inside(b) && obstacles.every(o => {
+        const c = Math.cos(o.rot), s = Math.sin(o.rot), B = o.box;
+        const ax = (a.x - o.x) * c - (a.z - o.z) * s - B.cx, az = (a.x - o.x) * s + (a.z - o.z) * c - B.cz;
+        const dx = (b.x - a.x) * c - (b.z - a.z) * s, dz = (b.x - a.x) * s + (b.z - a.z) * c;
+        let lo = 0, hi = 1;
+        for (const [p, d, h] of [[ax, dx, B.hx + pad], [az, dz, B.hz + pad]]) {
+          if (Math.abs(d) < 1e-8) { if (Math.abs(p) >= h) return true; }
+          else { const u = (-h - p) / d, v = (h - p) / d; lo = Math.max(lo, Math.min(u, v)); hi = Math.min(hi, Math.max(u, v)); }
+        }
+        return lo >= hi;
+      });
+      const goal = { x: tx, z: tz };
+      // 家具を置き直した直後など、経路用の余裕の内側にいる時は、まず外へ出る。
+      for (const o of obstacles) {
+        const r = sdObstacle(o, g.x, g.z);
+        if (r.d < pad) return { x: g.x + r.wx * (pad - r.d + 0.12), z: g.z + r.wz * (pad - r.d + 0.12) };
+      }
+      if (clear(g, goal)) { g.nav = null; return goal; }
+      let nav = g.nav;
+      if (!nav || nav.key !== decorKey || Math.hypot(nav.tx - tx, nav.tz - tz) > 0.35 || nav.size !== g.size) {
+        const nodes = [{ x: g.x, z: g.z }, goal];
+        for (const o of obstacles) for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+          const x = o.box.cx + sx * (o.box.hx + pad + 0.06), z = o.box.cz + sz * (o.box.hz + pad + 0.06);
+          const c = Math.cos(o.rot), s = Math.sin(o.rot), p = { x: o.x + x * c + z * s, z: o.z - x * s + z * c };
+          if (inside(p) && freeAt(p.x, p.z, pad)) nodes.push(p);
+        }
+        const costs = nodes.map(() => Infinity), previous = [], done = new Set(); costs[0] = 0;
+        while (done.size < nodes.length) {
+          let at = -1;
+          for (let i = 0; i < nodes.length; i++) if (!done.has(i) && (at < 0 || costs[i] < costs[at])) at = i;
+          if (at < 0 || !Number.isFinite(costs[at]) || at === 1) break;
+          done.add(at);
+          for (let i = 1; i < nodes.length; i++) if (!done.has(i) && clear(nodes[at], nodes[i])) {
+            const cost = costs[at] + Math.hypot(nodes[at].x - nodes[i].x, nodes[at].z - nodes[i].z);
+            if (cost < costs[i]) { costs[i] = cost; previous[i] = at; }
+          }
+        }
+        const path = [];
+        if (Number.isFinite(costs[1])) for (let i = 1; i; i = previous[i]) path.unshift(nodes[i]);
+        nav = g.nav = { tx, tz, key: decorKey, size: g.size, path };
+      }
+      while (nav.path.length > 1 && (Math.hypot(g.x - nav.path[0].x, g.z - nav.path[0].z) < 0.35 || clear(g, nav.path[1]))) nav.path.shift();
+      return nav.path[0] || { x: g.x, z: g.z };
+    }
     function moveToward(tx, tz, speed, dt, g, turnLimit = 2.2) {
       g = g || st;
-      const dx = tx - g.x, dz = tz - g.z;
+      const aim = routeToward(g, tx, tz);
+      g.navAim = aim;
+      const dx = aim.x - g.x, dz = aim.z - g.z;
       const d = Math.hypot(dx, dz);
       if (d < 0.05) return 0;
       const diff = angleTo(g.yaw, Math.atan2(dx, dz));
+      const oldYaw = g.yaw;
       g.yaw += clamp(diff * (1 - Math.exp(-dt * 5)), -dt * turnLimit, dt * turnLimit);
       // 大きな旋回では前進を控えて踏み替える。到着直前にも小さく減速する。
       const alignment = Math.max(0.08, Math.pow(Math.max(0, Math.cos(diff)), 2));
       const desired = speed * alignment * clamp(d / 0.65, 0.12, 1);
       g.spd = lerp(g.spd || 0, desired, 1 - Math.exp(-dt * (desired > (g.spd || 0) ? 3 : 7)));
       const step = Math.min(d, g.spd * dt);
+      // 壁ぎわで向きを変える余地がなければ、少し後ずさってから曲がる。
+      if (g === st && !st.hand && !st.pair && !st.hidePeek && st.mode !== 'toHide' && Math.abs(diff) > 0.08) {
+        const proposed = { ...g, x: g.x + Math.sin(g.yaw) * step, z: g.z + Math.cos(g.yaw) * step };
+        if (poseClearance(proposed) < 0.025) {
+          const room = speed * dt * 0.65;
+          for (const yaw of [g.yaw, oldYaw]) for (const sign of [1, -1]) {
+            const x = g.x + Math.sin(oldYaw) * room * sign, z = g.z + Math.cos(oldYaw) * room * sign;
+            const gap = poseClearance({ ...g, x, z, yaw });
+            if (gap >= 0 && (yaw !== oldYaw || gap > poseClearance({ ...g, yaw: oldYaw }) + 1e-6)) {
+              g.x = x; g.z = z; g.yaw = yaw; g.spd = 0; return room;
+            }
+          }
+        }
+      }
       g.x += Math.sin(g.yaw) * step;
       g.z += Math.cos(g.yaw) * step;
       return step;
     }
-    function clampPos(dt) {
+    function clampPos(dt, before) {
       if (st.hand && st.hand.phase !== 'offer' && st.hand.phase !== 'shy') return;
-      resolveObstacles();
-      const m = 1.4 * st.size;
-      st.x = clamp(st.x, -BOUNDS.x + m, BOUNDS.x - m);
-      st.z = clamp(st.z, BOUNDS.zMin + m, BOUNDS.zMax - m * 0.6);
+      resolveObstacles(st, before);
       // 歩いている時間ではなく、実際に進めない時間だけを数える。
       // 立ち止まって周囲を見る間や旋回中に、行き先を選び直さない。
       if (['walk', 'toHide', 'toDrink', 'toBask'].includes(st.mode) && !st.hand && !st.pair && !st.hunt && !st.act) {
@@ -4571,6 +4700,7 @@
       const nf = st.night ? 1.35 : 1;
       const S = 0.95 * st.size;
       const before = { x: st.x, z: st.z, yaw: st.yaw };
+      st.navAim = null;
 
       st.eatLook = 0; st.eatPitch = 0;
       if (st.hand) {
@@ -4719,7 +4849,7 @@
           }
         }
       }
-      clampPos(dt);
+      clampPos(dt, before);
 
       // 歩いた距離で足を動かす（足がすべらないように）
       const motion = { dx: st.x - before.x, dz: st.z - before.z, dyaw: angleTo(before.yaw, st.yaw) };
@@ -4763,7 +4893,7 @@
         }
       }
       if (st.peekT > 0) st.peekT -= dt;
-      const route = st.act && st.act.ph === 'go' ? st.act.to : st.target;
+      const route = st.navAim || (st.act && st.act.ph === 'go' ? st.act.to : st.target);
       if (st.pair) {
         wantLook = st.pair.fLook;
       } else if (!st.sleeping && !food && st.peekT > 0) {
