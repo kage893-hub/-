@@ -157,7 +157,15 @@
     { t: 29.5, label: '29.5℃', note: 'オスメス半々', days: 58, pMale: 0.5 },
     { t: 32, label: '32℃', note: 'オスが多い', days: 40, pMale: 0.9 },
   ];
-  const NAMES = ['きなこ', 'マロン', 'ゆず', 'こはく', 'ぽてと', 'みかん', 'だいず', 'あんず', 'ごま', 'ちくわ', 'むぎ', 'ぷりん', 'すず', 'こむぎ', 'はな', 'そら', 'くるみ', 'おもち', 'たまき', 'ぽん', 'レモン', 'ココア', 'しらたま', 'のり', 'べに'];
+  const NAME_THEMES = {
+    white: ['ゆき', 'ゆきみ', 'こゆき', 'しろ', 'しろくま', 'みるく', 'ばにら', 'ほいっぷ', 'めれんげ', 'ましゅ', 'とうふ', 'はく', 'ぱーる', 'こっとん', 'わたあめ', 'すふれ', 'まゆ', 'ふわり', 'あわゆき', 'こなゆき', 'もち', 'もちこ', 'もちまる', 'しろまる', 'しろた', 'しろみ', 'ゆきまる', 'ゆきだま', 'ゆきの', 'ふぶき', 'しも', 'しもばしら', 'つらら', 'ひょう', 'こおり', 'こおりん', 'まふゆ', 'すのー', 'ぶらん', 'しふぉん', 'くりーむ', 'みるきー', 'らて', 'ふぉーむ', 'しゅがー', 'さとう', 'こな', 'こめ', 'おこめ', 'おかゆ', 'しろあん', 'はんぺん', 'だいふく', 'こめこ', 'わた'],
+    dark: ['くろ', 'くろまめ', 'くろみつ', 'すみ', 'よる', 'よぞら', 'かげ', 'おはぎ', 'ちょこ', 'びたー', 'くろごま', 'あんこ', 'かかお', 'もか', 'くろすけ', 'くろた', 'ねろ', 'おれお', 'くろまる', 'つきかげ', 'くろぼう', 'くろべえ', 'くろこ', 'くろみ', 'まっくろ', 'こくとう', 'こくまろ', 'かりんとう', 'ひじき', 'こんぶ', 'わかめ', 'のりまき', 'のりたま', 'すみまる', 'すみか', 'すみぞめ', 'すずり', 'ぼくじゅ', 'こくよう', 'おぶしだん', 'おにきす', 'たん', 'たんぽ', 'たんたん', 'ちゃこーる', 'びーん', 'えすぷれっそ', 'ぶらうにー', 'がとー', 'とりゅふ', 'ちょこまる', 'ちょこた', 'くろっぷ', 'やみ', 'こくう'],
+    orange: ['おれんじ', 'ぽんかん', 'いよかん', 'でこぽん', 'まんごー', 'ぱぱいや', 'あぷりこっと', 'きんかん', 'だいだい', 'もみじ', 'さふらん', 'はっさく', 'ひなた', 'たいよう', 'はちみつ', 'めーぷる', 'きゃらめる', 'かぼちゃ', 'にんじん', 'びわ', 'みかんまる', 'みかんこ', 'こみかん', 'なつみかん', 'いちご', 'あかね', 'あかり', 'ひかり', 'ひだまり', 'ひまわり', 'こはる', 'こなつ', 'あさひ', 'ゆうひ', 'ゆうやけ', 'あけぼの', 'こがね', 'きんいろ', 'きんちゃ', 'こーん', 'ばたー', 'ばたこ', 'はにー', 'あんばー', 'おひさま', 'ぱぷりか', 'ちり', 'あんずもち', 'ぱえりあ', 'ぱんぷきん', 'やきいも', 'すいーと', 'ぽめろ', 'ぐあば', 'きいろ'],
+    soft: ['すみれ', 'ふじ', 'らいら', 'りら', 'らべ', 'りりー', 'ぴの', 'もも', 'さくら', 'ぴんく', 'ふらん', 'たろ', 'るぴなす', 'あじさい', 'むらさき', 'みやび', 'あめじすと', 'らん', 'かすみ', 'こもも', 'さくらこ', 'さくらもち', 'ももこ', 'こもれび', 'はる', 'はるか', 'はるな', 'はるいろ', 'ふわもも', 'ももまる', 'ぴーち', 'あまいろ', 'ふじこ', 'ふじまる', 'ふじの', 'むらさきもち', 'すみれこ', 'すみれまる', 'らいらっく', 'らべん', 'らべる', 'るぴ', 'あめじす', 'しおん', 'ききょう', 'あやめ', 'あすたー', 'ぼたん', 'れんげ', 'むくげ', 'まりー', 'はなびら', 'こでまり', 'こはな', 'はなこ'],
+    pattern: ['ほし', 'すばる', 'ほくと', 'こすも', 'こめっと', 'べが', 'すぴか', 'ぎんが', 'おりおん', 'るな', 'みずたま', 'どっと', 'てんてん', 'ちょこちっぷ', 'しま', 'とら', 'たいが', 'まだら', 'ぽるか', 'ごましお', 'ぽち', 'ぽちこ', 'ぽっけ', 'ちっぷ', 'まめ', 'まめた', 'しまこ', 'しまじろう', 'とらまる', 'ぱっち', 'まーぶる', 'ぽるぽる', 'もざいく', 'ぴっけ', 'てまり'],
+    stars: ['しりうす', 'あるたいる', 'でねぶ', 'ぷれあです', 'あんどろめだ', 'ねびゅら', 'くえーさー', 'せいら', 'るみな', 'ほしぞら', 'ほしみ', 'きらら', 'きらり', 'きら', 'すてら', 'のば', 'るちあ', 'りゅうせい', 'ながれぼし', 'あかつき'],
+  };
+  const NAMES = ['きなこ', 'マロン', 'ゆず', 'こはく', 'ぽてと', 'みかん', 'だいず', 'あんず', 'ごま', 'ちくわ', 'むぎ', 'ぷりん', 'すず', 'こむぎ', 'はな', 'そら', 'くるみ', 'おもち', 'たまき', 'ぽん', 'レモン', 'ココア', 'しらたま', 'のり', 'べに', ...Object.values(NAME_THEMES).flat()];
   const TIPS = [
     'レオパ（ヒョウモントカゲモドキ）にはまぶたがあるので、まばたきができます。',
     'レオパはトイレの場所を決める習性があります。フンはいつもケースの同じ隅に。',
@@ -377,10 +385,28 @@
     return fresh.map(id => G.DEX.find(d => d.id === id).name);
   }
   const unseen = x => G.dexMatches(x.genes, x.tang, x.poly).some(id => !S.dex[id]);
-  function unusedName() {
-    const used = new Set(S.geckos.map(g => g.name));
-    const free = NAMES.filter(n => !used.has(n));
-    return free.length ? pick(free) : 'レオパ' + S.nextId;
+  // 呼び名の候補だけを選ぶ。すでに付いている名前や、見た目の数値は変えない。
+  const nameKey = name => String(name).normalize('NFKC').trim().replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60)).toLowerCase();
+  function unusedName(look = {}) {
+    const used = new Set(S.geckos.map(g => nameKey(g.name))), genes = G.normGenes(look.genes), p = look.poly || {};
+    let preferred;
+    if ((p.mel || 0) >= 75 && genes.alb !== 2 && genes.bell !== 2) preferred = NAME_THEMES.dark.concat(['ココア', 'ごま', 'のり']);
+    else if (G.isGalaxy(genes, p)) preferred = NAME_THEMES.pattern.slice(0, 10).concat(NAME_THEMES.stars);
+    else if (genes.bliz === 2 || genes.snow > 0) preferred = NAME_THEMES.white.concat(['しらたま', 'おもち']);
+    else if ((look.tang || 0) >= 65) preferred = NAME_THEMES.orange.concat(['みかん', 'あんず', 'べに']);
+    else if ((p.lav || 0) >= 65) preferred = NAME_THEMES.soft;
+    else if (genes.alb === 2 || genes.bell === 2) preferred = NAME_THEMES.soft.concat(NAME_THEMES.white);
+    else if ((p.aberrant || 0) >= 60) preferred = ['しま', 'とら', 'たいが', 'ぽるか'];
+    else if ((p.spots || 0) >= 60) preferred = ['ごま', 'ごましお', 'みずたま', 'どっと', 'てんてん', 'ちょこちっぷ', 'まだら', 'ぽるか'];
+    else preferred = ['きなこ', 'マロン', 'ゆず', 'こはく', 'ぽてと', 'だいず', 'ちくわ', 'むぎ', 'ぷりん', 'こむぎ', 'くるみ', 'レモン'];
+    // 合う名前を使い切ったら、色を限定しない呼び名、そのほかの未使用候補へ。
+    for (const pool of [preferred, ['すず', 'はな', 'そら', 'たまき', 'ぽん', 'まゆ', 'ふわり', 'かすみ'], NAMES]) {
+      const free = pool.filter(n => !used.has(nameKey(n)));
+      if (free.length) return pick(free);
+    }
+    let suffix = S.nextId;
+    while (used.has(nameKey('レオパ' + suffix))) suffix++;
+    return 'レオパ' + suffix;
   }
 
   // ---------- 時間の流れ（アプリを閉じていた間もまとめて進める）
@@ -1094,7 +1120,7 @@
       return;
     }
     S.eggs = S.eggs.filter(x => x !== e);
-    const g = newGecko({ name: unusedName(), sex: e.sex, genes: e.genes, tang: e.tang, poly: e.poly, growth: 0, hunger: 60, gen: e.gen, hatched: true });
+    const g = newGecko({ name: unusedName(e), sex: e.sex, genes: e.genes, tang: e.tang, poly: e.poly, growth: 0, hunger: 60, gen: e.gen, hatched: true });
     g.parents = e.pmom ? { mom: e.pmom, dad: e.pdad } : { mom: { name: e.mom, sex: 'F' }, dad: { name: e.dad, sex: 'M' } };
     S.geckos.push(g);
     S.stats.hatched++;
@@ -1773,7 +1799,7 @@
       if (S.coins < o.price) { toast('コインが足りません'); return; }
       S.coins -= o.price;
       takeOffer(i);
-      const g = newGecko({ name: unusedName(), sex: o.sex, genes: o.genes, tang: o.tang, poly: o.poly, growth: o.growth, hunger: 70 });
+      const g = newGecko({ name: unusedName(o), sex: o.sex, genes: o.genes, tang: o.tang, poly: o.poly, growth: o.growth, hunger: 70 });
       g.seed = o.seed;
       S.geckos.push(g);
       const fresh = register(g);
@@ -1986,8 +2012,9 @@
     const g = selected();
     $('#caseTools').hidden = !g || !!editing;
     syncObserveControls();
-    setHTML($('#geckoTabs'), S.geckos.map(x => `<button class="chip${x.id === S.selected ? ' on' : ''}" data-action="select" data-id="${x.id}" aria-pressed="${x.id === S.selected}">${A.swatch(x)}<span>${esc(x.name)}</span><span class="sex ${x.sex}">${sexMark(x)}</span>${needsCare(x) ? '<i class="dot" aria-label="お世話が必要"></i>' : ''}</button>`).join('') +
+    setHTML($('#geckoTabs'),
       (S.geckos.length > 1 ? '<button class="chip ghost sort-chip" data-action="sortMenu" aria-label="ならびかえ">⇅ ならびかえ</button>' : '') +
+      S.geckos.map(x => `<button class="chip${x.id === S.selected ? ' on' : ''}" data-action="select" data-id="${x.id}" aria-pressed="${x.id === S.selected}">${A.swatch(x)}<span>${esc(x.name)}</span><span class="sex ${x.sex}">${sexMark(x)}</span>${needsCare(x) ? '<i class="dot" aria-label="お世話が必要"></i>' : ''}</button>`).join('') +
       (S.geckos.length < S.cases ? `<span class="chip ghost">空きケース ${S.cases - S.geckos.length}</span>` : ''));
     sceneMount();
     if (!g) { setHTML($('#caseInfo'), ''); setHTML($('#tankName'), ''); return; }
@@ -2467,7 +2494,7 @@
       const o = S.starters[Number(t.dataset.i)];
       if (!o || S.geckos.length >= 2) return;
       S.starters.splice(Number(t.dataset.i), 1);
-      const g = newGecko({ name: unusedName(), sex: o.sex, genes: o.genes, tang: o.tang, poly: o.poly, growth: o.growth, hunger: 65 });
+      const g = newGecko({ name: unusedName(o), sex: o.sex, genes: o.genes, tang: o.tang, poly: o.poly, growth: o.growth, hunger: 65 });
       g.seed = o.seed;
       g.starter = true; // 最初の2匹は「おむかえ直後はそっと」の対象外
       S.geckos.push(g);
@@ -3481,23 +3508,64 @@
       img.src = dataUrl;
     });
   }
+  // 並べた順番は既存の S.geckos に保存する。条件はこの画面だけで使う。
+  const GECKO_SORTS = [
+    { id: 'weight', label: '体重', value: weightOf, high: '重い順', low: '軽い順', unit: 'g' },
+    { id: 'tang', label: 'オレンジの濃さ', value: g => g.tang, high: '濃い順', low: '薄い順' },
+    ...G.POLY.map(p => ({ id: p.key, label: p.key === 'lav' ? 'ラベンダーの濃さ' : p.name, value: g => traitRows(g).find(t => t.name === p.name).v, high: ['mel', 'lav', 'carrot'].includes(p.key) ? '濃い順' : p.key === 'blotch' ? '大きい順' : '多い順', low: ['mel', 'lav', 'carrot'].includes(p.key) ? '薄い順' : p.key === 'blotch' ? '小さい順' : '少ない順' })),
+    { id: 'growth', label: '成長', value: g => g.growth, high: '成長している順', low: '幼い順', format: g => `${STAGE_LABEL[stageOf(g)]} ・ ${Math.floor(g.growth)}` },
+    { id: 'name', label: '名前', value: g => g.name, high: 'わ→あ', low: 'あ→わ', format: g => g.name },
+    { id: 'adopted', label: 'おむかえした日', value: g => g.adopted || g.born || 0, high: '新しい順', low: '古い順', format: g => (g.adopted || g.born) ? new Date(g.adopted || g.born).toLocaleDateString('ja-JP') : '記録なし' },
+  ];
+  let geckoSortKey = 'weight', geckoSortAsc = false, geckoSortNotice = '';
+  const currentGeckoSort = () => GECKO_SORTS.find(s => s.id === geckoSortKey) || GECKO_SORTS[0];
+  const sortText = text => window.LKids && LKids.on ? LKids.conv(text) : text;
+  function renderGeckoSort(scrollTop) {
+    const spec = currentGeckoSort(), numeric = g => { const n = Number(spec.value(g)); return Number.isFinite(n) ? n : 0; };
+    openSheet(`<h3 class="sheet-title">レオパのならびかえ</h3>
+      <div class="sort-controls">
+        <label class="sort-key">項目<select id="geckoSortKey">${GECKO_SORTS.map(s => `<option value="${s.id}" ${s.id === spec.id ? 'selected' : ''}>${esc(sortText(s.label))}</option>`).join('')}</select></label>
+        <label>順番<select id="geckoSortDirection"><option value="desc" ${!geckoSortAsc ? 'selected' : ''}>${esc(sortText(spec.high))}</option><option value="asc" ${geckoSortAsc ? 'selected' : ''}>${esc(sortText(spec.low))}</option></select></label>
+        <button class="act primary" data-action="sortApply">この順に並べる</button>
+      </div>
+      <p class="muted small">並べた順番は保存されます。▲▼で1匹ずつ調整もできます。</p>
+      ${['tang', ...G.POLY.map(p => p.key)].includes(spec.id) ? '<p class="muted small">色や模様は、特徴の数値で比べます。モルフによって見え方は異なります。</p>' : ''}
+      ${geckoSortNotice ? `<p class="notice small" role="status">${esc(geckoSortNotice)}</p>` : ''}
+      <div class="list sort-list">${S.geckos.map((g, i) => `<div class="row static" data-gecko-id="${esc(g.id)}">
+        <span class="row-art">${A.swatch(g)}</span>
+        <span class="row-main"><b>${esc(g.name)} ${sexMark(g)}</b><small>${esc(nameOf(g))}</small><small>${esc(spec.label)}：${esc(spec.format ? spec.format(g) : numeric(g) + (spec.unit || ''))}</small></span>
+        <span class="sort-btns"><button class="act sm" data-action="sortMove" data-i="${i}" data-d="-1" ${i === 0 ? 'disabled' : ''} aria-label="上へ">▲</button><button class="act sm" data-action="sortMove" data-i="${i}" data-d="1" ${i === S.geckos.length - 1 ? 'disabled' : ''} aria-label="下へ">▼</button></span>
+      </div>`).join('')}</div>
+      <button class="act primary wide" data-action="closeSheet">できた</button>`, { focus: scrollTop === undefined });
+    if (scrollTop !== undefined) $('#sheetBody').scrollTop = scrollTop;
+  }
+  document.addEventListener('change', ev => {
+    if (ev.target.id === 'geckoSortKey' && GECKO_SORTS.some(s => s.id === ev.target.value)) {
+      geckoSortKey = ev.target.value; geckoSortNotice = ''; renderGeckoSort(0); $('#geckoSortKey').focus();
+    } else if (ev.target.id === 'geckoSortDirection') geckoSortAsc = ev.target.value === 'asc';
+  });
   Object.assign(ACTIONS, {
-    // 上のレオパの名前の順番をかえる
-    sortMenu() {
-      openSheet(`<h3 class="sheet-title">レオパのならびかえ</h3>
-        <p class="muted small">▲▼で、上の名前の順番をかえられます。</p>
-        <div class="list sort-list">${S.geckos.map((g, i) => `<div class="row static">
-          <span class="row-art">${A.swatch(g)}</span>
-          <span class="row-main"><b>${esc(g.name)} ${sexMark(g)}</b><small>${esc(nameOf(g))}</small></span>
-          <span class="sort-btns"><button class="act sm" data-action="sortMove" data-i="${i}" data-d="-1" ${i === 0 ? 'disabled' : ''} aria-label="上へ">▲</button><button class="act sm" data-action="sortMove" data-i="${i}" data-d="1" ${i === S.geckos.length - 1 ? 'disabled' : ''} aria-label="下へ">▼</button></span>
-        </div>`).join('')}</div>
-        <button class="act primary" data-action="closeSheet">できた</button>`);
+    sortMenu() { geckoSortNotice = ''; renderGeckoSort(); },
+    sortApply() {
+      if (otherSavedNewer()) { reloadForNewer(); return; }
+      const spec = currentGeckoSort(), direction = geckoSortAsc ? 1 : -1;
+      const rows = S.geckos.map((g, i) => ({ g, i, value: spec.value(g) }));
+      rows.sort((a, b) => {
+        const numeric = v => Number.isFinite(Number(v)) ? Number(v) : 0;
+        const diff = spec.id === 'name' ? String(a.value).localeCompare(String(b.value), 'ja', { numeric: true }) : numeric(a.value) - numeric(b.value);
+        return diff * direction || a.i - b.i;
+      });
+      S.geckos.splice(0, S.geckos.length, ...rows.map(r => r.g));
+      geckoSortNotice = `${spec.label}・${geckoSortAsc ? spec.low : spec.high}に並べました。`;
+      saveNow(); renderView(); renderGeckoSort(0);
     },
     sortMove(t) {
-      const i = Number(t.dataset.i), j = i + Number(t.dataset.d);
-      if (j < 0 || j >= S.geckos.length) return;
+      const i = Number(t.dataset.i), d = Number(t.dataset.d), j = i + d;
+      if (!Number.isInteger(i) || ![-1, 1].includes(d) || i < 0 || i >= S.geckos.length || j < 0 || j >= S.geckos.length) return;
+      if (otherSavedNewer()) { reloadForNewer(); return; }
+      const top = $('#sheetBody').scrollTop;
       [S.geckos[i], S.geckos[j]] = [S.geckos[j], S.geckos[i]];
-      save(); renderView(); ACTIONS.sortMenu();
+      geckoSortNotice = ''; saveNow(); renderView(); renderGeckoSort(top);
     },
     camera() { const g = selected(); if (!g || !tank) return; cameraSheet(g); },
     camCancel() { camClose(); if (tank) tank.setClose(!!window._camWasClose); },
