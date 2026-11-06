@@ -12,7 +12,7 @@
 | ファイル | 中身 |
 |---|---|
 | index.html / style.css | 画面 |
-| sw.js | オフライン用キャッシュ。**ファイルを変えたら `VERSION` を上げる**（いまは `leopa-v126`）。新しいファイルは `FILES` にも足す |
+| sw.js | オフライン用キャッシュ。**ファイルを変えたら `VERSION` を上げる**（いまは `leopa-v127`）。新しいファイルは `FILES` にも足す |
 | js/app.js | ゲーム本体（状態 `S`、`simulate`、各画面、`ACTIONS`、ショー、ライセンス、カード、クレジット `credits()`） |
 | js/scene3d.js | 3D（`createTank`・`createViewer`・`hatchScene`・`photo`、ケース `makeCage`・`CAGE_THEMES`、家具 `DECOR`、模様 `skinCanvas`） |
 | js/genetics.js | 遺伝（`DEX` 図鑑30種、ライン遺伝のポリジェニック値） |
