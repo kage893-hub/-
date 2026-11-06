@@ -218,6 +218,12 @@
     // ジャイアントは大きさだけの遺伝子なので、色や模様のモルフの判定ではのぞく
     test: (g, t) => mendelName(Object.assign({}, g, { giant: 0 }), t) === name,
   });
+  // 赤い目のアルビノ系は、追加のスノーで図鑑から外さない。
+  // ラプターとの濃さの境界や、ディアブロブランコとの区別は従来どおり。
+  const eyeAlbinoEntry = (name, hint, tang) => ({
+    ...mendelEntry(name, { alb: 2, ecl: 2 }, hint, tang),
+    test: (g, t) => mendelName(Object.assign({}, g, { snow: 0, giant: 0 }), t) === name,
+  });
   const DEX = [
     { id: 'ノーマル', name: 'ノーマル', hint: 'いちばん基本の色。野生のレオパに近い姿', rep: { genes: {}, tang: 15, poly: P({}) }, test: g => noVisual(g) },
     { id: 'ハイイエロー', name: 'ハイイエロー', hint: '黄色が強いノーマル。タンジェリン度40以上', rep: { genes: {}, tang: 52, poly: P({}) }, test: (g, t) => noVisual(g) && t >= TANG_MID },
@@ -239,8 +245,8 @@
     mendelEntry('スーパーマックスノー トレンパーアルビノ', { snow: 2, alb: 2 }, 'スーパーマックスノー＋アルビノ'),
     mendelEntry('マックスノー エクリプス', { snow: 1, ecl: 2 }, 'マックスノー＋エクリプス'),
     mendelEntry('トータルエクリプス', { snow: 2, ecl: 2 }, 'スーパーマックスノー＋エクリプス'),
-    mendelEntry('レッドアイアルビノ', { alb: 2, ecl: 2 }, 'アルビノ＋エクリプス。目がルビー色に'),
-    mendelEntry('ラプター', { alb: 2, ecl: 2 }, 'レッドアイアルビノで、タンジェリン度70以上', 85),
+    eyeAlbinoEntry('レッドアイアルビノ', 'アルビノ＋エクリプス。目がルビー色に'),
+    eyeAlbinoEntry('ラプター', 'レッドアイアルビノで、タンジェリン度70以上', 85),
     mendelEntry('ブレイジングブリザード', { alb: 2, bliz: 2 }, 'アルビノ＋ブリザード'),
     mendelEntry('ディアブロブランコ', { alb: 2, ecl: 2, bliz: 2 }, 'アルビノ＋エクリプス＋ブリザード。最難関'),
     { id: 'ジャイアント', name: 'ジャイアント', hint: '共優性。体が大きく育つ。ジャイアント×ノーマルで50%', rep: { genes: { giant: 1 }, tang: 20, poly: P({}) }, test: g => g.giant >= 1 },

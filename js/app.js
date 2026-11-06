@@ -236,6 +236,14 @@
       s.v = 2;
     }
     s.names = s.names || {};
+    // 名前にスノーが付いて登録されなかった赤い目のアルビノ系を補完する。
+    // 所持中の子と、すでに出会ったモルフ名だけを対象にし、卵・店頭の候補は含めない。
+    s.dex = s.dex || {};
+    const knownMorphs = Object.keys(s.names).filter(n => s.names[n]).map(n => n.split(' '));
+    for (const id of ['レッドアイアルビノ', 'ラプター']) {
+      const entry = G.DEX.find(d => d.id === id);
+      if (knownMorphs.some(tokens => tokens.includes(id)) || s.geckos.some(g => entry.test(G.normGenes(g.genes), g.tang))) s.dex[id] = true;
+    }
     movePhotosOut(s);
     if (!s.tut) s.tut = { step: 99 }; // 前から遊んでいる人にはガイドを出さない
     s.decorInv = s.decorInv || {};

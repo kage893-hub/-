@@ -11,7 +11,7 @@
 | ファイル | 中身 |
 |---|---|
 | index.html / style.css | 画面 |
-| sw.js | オフライン用キャッシュ。**ファイルを変えたら `VERSION` を上げる**（いまは `leopa-v127`）。新しいファイルは `FILES` にも足す |
+| sw.js | オフライン用キャッシュ。**ファイルを変えたら `VERSION` を上げる**（いまは `leopa-v128`）。新しいファイルは `FILES` にも足す |
 | js/app.js | ゲーム本体（状態 `S`、`simulate`、各画面の描画、`ACTIONS`、ショー、ライセンス、カードなど） |
 | js/scene3d.js | 3D（`createTank`・`createViewer`・`hatchScene`・`photo`、変形シェーダー、行動 `startAct` など） |
 | js/genetics.js | 遺伝（`DEX` 図鑑30種、ライン遺伝のポリジェニック値） |
@@ -49,8 +49,9 @@
 - Playwright と Chromium（`/opt/pw-browsers`）。swiftshader なので 3D はとても遅い。
   - 起動の引数：`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`
   - 画面サイズ：390×844
-- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition・study・family・behavior・movement・pairplan・sitter・sorting・names）。最後の行が `[]` ならエラーなし。
-  - **ふだんは、変更に関係するテストと画面の確認だけを流す**（2026-11-04 からの決まり）。全15本は、家具・3D・セーブの形など広く影響する変更のときに流す。
+- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition・study・family・behavior・movement・pairplan・sitter・sorting・names・dex）。最後の行が `[]` ならエラーなし。
+  - **ふだんは、変更に関係するテストと画面の確認だけを流す**（2026-11-04 からの決まり）。全16本は、家具・3D・セーブの形など広く影響する変更のときに流す。
+  - dex は追加スノーのあるレッドアイアルビノ・ラプターの登録、旧セーブの補完、未入手の候補を登録しないこと、保存と孵化を検査する。
   - sorting は体重・色・名前・日付の並び替え、同値順序、選択維持、手動調整、保存、100匹、ひらがなを検査する。names は300種類、モルフ別の候補、重複回避、おむかえ・購入・孵化での仮名と手動変更を検査する。
   - sitter は実時間の期限・全員の給餌と在庫・留守中と分割処理・延長と課金・移行・保存・自動報酬なしを検査する。
   - pairplan は逆引きの遺伝確率・色や模様の目安・30匹の候補・親の条件・たまごからの開始・保存を検査する。
