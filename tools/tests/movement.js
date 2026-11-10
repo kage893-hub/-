@@ -91,9 +91,10 @@ const result=await p.evaluate(()=>{
  gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER,feedback);gl.bufferData(gl.TRANSFORM_FEEDBACK_BUFFER,N*12,gl.DYNAMIC_READ);gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER,0,feedback);
  const base=Array.from({length:N},(_,i)=>new THREE.Vector3().fromBufferAttribute(G.attributes.position,i));
  const cases=[{name:'歩行',extra:{mode:'walk',target:{x:0,z:2.7},burst:999}},{name:'方向転換',extra:{mode:'walk',target:{x:0,z:-2.5},burst:999}},{name:'休む',act:'settle'},{name:'伸び',act:'stretch'},{name:'岩の上り下り',extra:{mode:'walk',target:{x:2,z:2},burst:999},rock:true},{name:'後ずさり',act:'startle'},{name:'手の上',hand:true},{name:'小さい個体の歩行',size:.5,extra:{mode:'walk',target:{x:1,z:2},burst:999}},{name:'大きい個体の歩行',size:1.2,extra:{mode:'walk',target:{x:1,z:2},burst:999}},{name:'壁ぎわの平行歩行',wall:true,extra:{x:5.7,z:.7,yaw:0,mode:'walk',target:{x:5.7,z:2.5},burst:999}},{name:'壁ぎわの方向転換',wall:true,extra:{x:4,z:0,yaw:Math.PI/2,mode:'walk',target:{x:-3,z:0},burst:999}}];
+ cases.push(...['knFlatRock','knSteps','knBridge','knStump','knPath'].map(decor=>({name:'追加家具 '+decor,decor,extra:{x:-2,z:0,yaw:Math.PI/2,mode:'walk',target:{x:2,z:0},burst:999}})));
  metrics.mesh=[];
  for(const c of cases){
-  st.size=c.size||1;st.gk.root.scale.setScalar(.95*st.size);tank.setDecor(c.rock?[{t:'stone',x:0,z:0,rot:0}]:[]);resetMotion(c.extra||{});if(c.act)tank.startAct(c.act);if(c.hand)tank.startHandling(100);
+  st.size=c.size||1;st.gk.root.scale.setScalar(.95*st.size);tank.setDecor(c.rock||c.decor?[{t:c.decor||'stone',x:0,z:0,rot:0}]:[]);resetMotion(c.extra||{});if(c.act)tank.startAct(c.act);if(c.hand)tank.startHandling(100);
   let maxRatio=0,minFloor=0,minBody=0,bodyPoint=null,minWall=Infinity;
   for(let frame=0;frame<(c.hand?420:180);frame++){
    if(c.hand&&frame===330)tank.handCmd('down');st.t+=1/30;tank._step(1/30);if(st.mode==='idle')st.wait=999;if(frame%6)continue;

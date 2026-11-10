@@ -2558,6 +2558,34 @@
     starLamp: { name: '星のランプ', price: 120, r: 0.6, expo: 'night', desc: 'やさしく光る星のランプ（レプタイルズショー限定）', build: () => starLamp() },
     planet: { name: '輪のある惑星', price: 150, r: 0.9, expo: 'night', desc: '土星のような輪のある惑星の置物（レプタイルズショー限定）', build: () => ringedPlanet() },
   });
+  // Kenney Nature Kit 2.1（CC0）。低ポリゴンの原モデルを、ケース用の大きさに調整。
+  Object.assign(DECOR, {
+    knCactus: { name: '小さなサボテン', price: 18, r: 0.55, soft: true, desc: '丸い枝が広がるサボテンの飾り', build: () => kitOr('KN_cactus_short', 1.1, null, () => OLD_DECOR.plant.build()) },
+    knPalm: { rewardOnly: true, name: '小さなヤシ', price: 30, r: 0.8, soft: true, desc: '南国の庭のような、葉を広げたヤシの飾り', build: () => kitOr('KN_tree_palmShort', 2.3, null, () => OLD_DECOR.plant.build()) },
+    knBush: { name: '葉っぱの茂み', price: 18, r: 0.7, soft: true, desc: '重なる葉っぱがアクセントになる緑の飾り', build: () => kitOr('KN_plant_bushDetailed', 1.7, null, () => OLD_DECOR.plant.build()) },
+    knPurple: { name: '紫の花壇', price: 20, r: 0.5, soft: true, desc: '小さな紫の花が集まった花壇の飾り', build: () => { const g = new T.Group(); for (const [x, z, size] of [[-0.3, 0.12, 0.55], [0.3, 0.08, 0.6], [0, -0.32, 0.65]]) { const f = kitOr('KN_flower_purpleC', size, null, () => OLD_DECOR.plant.build()); f.position.set(x, 0, z); g.add(f); } return g; } },
+    knYellow: { name: '黄色の花壇', price: 20, r: 0.5, soft: true, desc: '明るい黄色の花が集まった花壇の飾り', build: () => { const g = new T.Group(); for (const [x, z, size] of [[-0.3, 0.12, 0.55], [0.3, 0.08, 0.6], [0, -0.32, 0.65]]) { const f = kitOr('KN_flower_yellowC', size, null, () => OLD_DECOR.plant.build()); f.position.set(x, 0, z); g.add(f); } return g; } },
+    knMushroom: { name: 'きのこの小さな森', price: 22, r: 0.65, soft: true, desc: '赤いかさのきのこが並んだ飾り', build: () => kitOr('KN_mushroom_redGroup', 1.4, null, () => OLD_DECOR.plant.build()) },
+    knFlatRock: { name: '草の平たい岩', price: 25, r: 1.15, climb: true, desc: '上で休める、草色の低い岩', build: () => kitOr('KN_rock_smallFlatC', 2.6, null, () => OLD_DECOR.rock.build()) },
+    knSteps: { name: '草の小さな階段', price: 35, r: 1.35, climb: true, desc: 'ゆるい段差を上れる、草色の階段', build: () => kitOr('KN_cliff_steps_rock', 2.7, { h: 0.26 }, () => OLD_DECOR.stone.build()) },
+    knBridge: { name: '庭の木橋', price: 40, r: 1.4, climb: true, desc: '上を歩ける、低い木の橋', build: () => kitOr('KN_bridge_wood', 3.1, { h: 0.55 }, () => OLD_DECOR.stone.build()) },
+    knStump: { name: '年輪の切り株', price: 25, r: 1.1, climb: true, desc: '丸い年輪が見える、低い切り株', build: () => kitOr('KN_stump_roundDetailed', 2.3, { h: 0.48 }, () => OLD_DECOR.rock.build()) },
+    knSign: { rewardOnly: true, name: 'お庭の道しるべ', price: 18, r: 0.45, desc: 'お庭の入口に置ける木の看板', build: () => kitOr('KN_sign', 0.9, null, () => OLD_DECOR.log.build()) },
+    knObelisk: { rewardOnly: true, name: '古代の石碑', price: 35, r: 0.45, desc: '古い遺跡のような小さな石碑', build: () => kitOr('KN_statue_obelisk', 0.9, null, () => OLD_DECOR.rock.build()) },
+    knBamboo: { name: '小さな竹林', price: 25, r: 0.5, soft: true, desc: 'すっと伸びる竹の飾り。和風の庭にも', build: () => kitOr('KN_crops_bambooStageB', 0.9, { h: 0.8 }, () => OLD_DECOR.plant.build()) },
+    knPumpkin: { name: 'かぼちゃの置物', price: 20, r: 0.6, desc: '丸いオレンジ色のかぼちゃの飾り', build: () => kitOr('KN_crop_pumpkin', 1.3, null, () => OLD_DECOR.stone.build()) },
+    knRing: { name: '輪の遺跡', price: 35, r: 0.65, desc: '丸い輪が目印の、石のオブジェ', build: () => kitOr('KN_statue_ring', 1.4, null, () => OLD_DECOR.rock.build()) },
+    knPath: { name: '木の小道', price: 20, r: 1.1, climb: true, desc: '歩きやすい、低い板の小道', build: () => kitOr('KN_path_wood', 2.7, null, () => OLD_DECOR.stone.build()) },
+    corkTunnel: { name: 'コルクのトンネル', price: 30, r: 1.8, tunnel: true, shelter: { x: 0, z: 0 }, desc: '両側が開いて、通り抜けられる隠れ家', build: () => {
+      const shape = new T.Shape();
+      shape.moveTo(-1.8, 0); shape.lineTo(-1.8, 0.2); shape.absarc(0, 0.2, 1.8, Math.PI, 0, true);
+      shape.lineTo(1.8, 0); shape.lineTo(1.35, 0); shape.lineTo(1.35, 0.2); shape.absarc(0, 0.2, 1.35, 0, Math.PI, false); shape.lineTo(-1.35, 0); shape.closePath();
+      const geo = new T.ExtrudeGeometry(shape, { depth: 3.4, bevelEnabled: false, curveSegments: 16 }); geo.translate(0, 0, -1.7);
+      const mat = phys('#986640', { roughness: 0.95, bumpMap: sandTex(), bumpScale: 0.05 }); mat.color.convertSRGBToLinear();
+      return new T.Mesh(geo, mat);
+    } },
+  });
+
   const DEFAULT_DECOR = [{ t: 'wet', x: -4.4, z: -2.6, rot: 0 }, { t: 'dish', x: -5.0, z: 3.2, rot: 0 }, { t: 'plant', x: 1.8, z: -3.8, rot: 0 }];
   // ケースの広さ（床の半分の幅・奥行き）
   const TANK = { hw: 6.5, hd: 4.5 };
@@ -3342,7 +3370,7 @@
       const scripted = g !== st || st.hand || st.pair || st.hidePeek || st.sleeping || st.mode === 'toHide';
       const S = 0.95 * g.size;
       // 鼻先から尻尾の先まで、体にそって点を取る（尻尾は細いので余裕を小さく）
-      const pts = [[2.0, 0.22], [1.4, 0.34], [0.6, 0.4], [-0.2, 0.4], [-1.0, 0.34], [-1.8, 0.3], [-2.6, 0.2], [-3.4, 0.12]];
+      const pts = [[2.0, 0.22], [1.4, 0.34], [0.6, 0.4], [-0.2, 0.4], [-1.0, 0.34], [-1.8, 0.3], [-2.6, 0.2], [-3.4, 0.12], [-3.9, 0.10], [-4.48, 0.06]];
       for (let it = 0; it < 4; it++) {
         for (const o of obstacles) {
           if (ignoresObstacle(g, o)) continue;
@@ -3624,7 +3652,7 @@
     }, { passive: false });
     el.addEventListener('pointerdown', e => {
       if (st.tw && !edit) { st.twDrag = { x: e.clientX, y: e.clientY }; try { el.setPointerCapture(e.pointerId); } catch (err) { /* noop */ } return; }
-      if (st.hand) { st.strokeDrag = { x: e.clientX, y: e.clientY }; try { el.setPointerCapture(e.pointerId); } catch (err) { /* noop */ } return; }
+      if (st.hand) { if (!st.strokeDrag) st.strokeDrag = { x: e.clientX, y: e.clientY, id: e.pointerId }; try { el.setPointerCapture(e.pointerId); } catch (err) { /* noop */ } return; }
       touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.size === 2) { const [a, b] = [...touches.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
       down = { lx: e.clientX, ly: e.clientY, moved: 0 };
@@ -3633,11 +3661,12 @@
     el.addEventListener('pointermove', e => {
       if (st.twDrag && st.tw) { wiggleTweezers(e.clientX - st.twDrag.x, e.clientY - st.twDrag.y); st.twDrag = { x: e.clientX, y: e.clientY }; return; }
       if (st.strokeDrag && st.hand) {
+        if (e.pointerId !== st.strokeDrag.id) return;
         const r = el.getBoundingClientRect();
         ray.setFromCamera({ x: (e.clientX - r.left) / r.width * 2 - 1, y: -(e.clientY - r.top) / r.height * 2 + 1 }, camera);
         const a = new T.Vector3(); st.gk.bones.mid.getWorldPosition(a);
         if (ray.ray.distanceToPoint(a) < 1.4 * st.size) strokeGecko(Math.hypot(e.clientX - st.strokeDrag.x, e.clientY - st.strokeDrag.y));
-        st.strokeDrag = { x: e.clientX, y: e.clientY };
+        st.strokeDrag = { x: e.clientX, y: e.clientY, id: e.pointerId };
         return;
       }
       if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -3660,7 +3689,7 @@
     });
     el.addEventListener('pointerup', e => {
       if (st.twDrag) { st.twDrag = null; return; }
-      if (st.strokeDrag) { st.strokeDrag = null; if (st.hand && st.gk) { st.lick = 0.9; st.tiltT = 1.2; } return; }
+      if (st.strokeDrag) { if (e.pointerId !== st.strokeDrag.id) return; st.strokeDrag = null; if (st.hand && st.gk) { st.lick = 0.9; st.tiltT = 1.2; } return; }
       touches.delete(e.pointerId);
       if (touches.size < 2) pinch = 0;
       if (!down) return;
@@ -3674,6 +3703,11 @@
         if (hit && hit.object.userData.index != null) { handlers.onDecorTap && handlers.onDecorTap(hit.object.userData.index); return; }
         const f = ray.intersectObject(floor)[0];
         if (f) handlers.onFloorTap && handlers.onFloorTap(f.point.x, f.point.z);
+        return;
+      }
+      if (st.playpen) {
+        const hit = ray.intersectObject(floor)[0];
+        if (hit) walkTo(hit.point.x, hit.point.z);
         return;
       }
       for (let i = st.foods.length - 1; i >= 0; i--) {
@@ -3703,7 +3737,32 @@
         }
       }
     });
-    el.addEventListener('pointercancel', e => { touches.delete(e.pointerId); pinch = 0; down = null; });
+    function cancelPointer(e) {
+      touches.delete(e.pointerId); pinch = 0; down = null;
+      if (st.strokeDrag?.id === e.pointerId) st.strokeDrag = null;
+      st.twDrag = null;
+    }
+    el.addEventListener('pointercancel', cancelPointer);
+    el.addEventListener('lostpointercapture', cancelPointer);
+
+    function walkTo(x, z) {
+      if (!st.playpen || !st.gk) return false;
+      const pad = 1.5 * st.size;
+      x = clamp(x, -BOUNDS.x + pad, BOUNDS.x - pad);
+      z = clamp(z, BOUNDS.zMin + pad, BOUNDS.zMax - pad);
+      if (!freeAt(x, z, 0.7 * st.size)) return false;
+      if (st.sleeping || st.hidePeek) wake();
+      st.act = null; st.mode = 'walk'; st.target = { x, z }; st.burst = rand(8, 12); st.pauseT = 0;
+      return true;
+    }
+    function setPlaypen(on) {
+      if (!!on === !!st.playpen) return;
+      if (on) st.walkHome = { x: st.x, z: st.z, yaw: st.yaw };
+      else if (st.walkHome) { Object.assign(st, st.walkHome); st.walkHome = null; }
+      st.playpen = !!on;
+      st.act = null; st.hidePeek = null; st.sleeping = false; st.target = null;
+      st.mode = 'idle'; st.wait = on ? 1.5 : calmRest(); st.gait = null; st.walkProgress = null;
+    }
 
     // ---------- 動き
     const _m = new T.Vector3();
@@ -4074,29 +4133,41 @@
       if (st.pair && st.pair.hand && !st.pair.handUp) { const v = handHeightAt(st.pair.hand, x, z); if (v > y) y = v; }
       return y;
     }
-    const handFwd = () => new T.Vector3(Math.sin(st.yaw), 0, Math.cos(st.yaw));
     function placeHand(h, cx, cz, yaw, y) { h.position.set(cx, y, cz); h.rotation.y = yaw - Math.PI / 2; }
     function startHandling(tame) {
       endHandling(true);
       if (st.sleeping || st.hidePeek) wake();
       const S = 0.95 * st.size, len = 5.4 * S;
+      // 家具の上に手を差し出すと、乗り口で押し返され続ける。空いた床と近づける向きを探す。
+      let offer = null;
+      for (const dist of [4.9 * S, 3.2 * S]) {
+        for (const turn of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8, Math.PI]) {
+          const yaw = st.yaw + turn, sx = Math.sin(yaw), sz = Math.cos(yaw);
+          const cx = clamp(st.x + sx * dist, -BOUNDS.x + len * 0.35, BOUNDS.x - len * 0.35);
+          const cz = clamp(st.z + sz * dist, BOUNDS.zMin + len * 0.35, BOUNDS.zMax - len * 0.35);
+          const facing = Math.atan2(cx - st.x, cz - st.z), sn = Math.sin(facing), cs = Math.cos(facing);
+          const clear = [-0.32, 0, 0.32].every(k => [-0.16, 0, 0.16].every(side => freeAt(cx + (sn * k + cs * side) * len, cz + (cs * k - sn * side) * len, 0.12 * S)));
+          const approach = [0.3, 0.6, 0.9].every(k => freeAt(lerp(st.x, cx, k), lerp(st.z, cz, k), 0.45 * S));
+          if (clear && approach && Math.hypot(cx - st.x, cz - st.z) > 1.5 * S) { offer = { x: cx, z: cz, yaw: facing }; break; }
+        }
+        if (offer) break;
+      }
+      if (!offer) return false;
       const h = buildHand(len);
       scene.add(h);
-      const f = handFwd();
-      // 鼻先の少し前に、手のひらを置く（指先はレオパと同じ向き）
-      let cx = st.x + f.x * (2.0 * S + len * 0.55), cz = st.z + f.z * (2.0 * S + len * 0.55);
-      cx = clamp(cx, -BOUNDS.x + len * 0.3, BOUNDS.x - len * 0.3); cz = clamp(cz, BOUNDS.zMin + len * 0.3, BOUNDS.zMax - len * 0.3);
-      placeHand(h, cx, cz, Math.atan2(cx - st.x, cz - st.z), 0);
-      st.act = null;
+      placeHand(h, offer.x, offer.z, offer.yaw, 0);
+      st.act = null; st.gait = null; st.strokeDrag = null;
       st.hand = { phase: 'offer', hands: [h], cur: 0, t: 0, tame, shy: tame < 25 && Math.random() < 0.5, onT: 0, prevClose: st.close, stroke: 0 };
       st.mode = 'idle'; st.wait = 999;
       setClose(true); st.zoom = 1.35; st.elev = 0.5;
+      return true;
     }
     function endHandling(silent) {
       const H = st.hand;
       if (!H) return;
       for (const h of H.hands) { scene.remove(h); disposeTree(h); }
       st.hand = null;
+      st.strokeDrag = null; st.gait = null;
       st.mode = 'idle'; st.wait = rand(1, 3);
       st.x = clamp(st.x, -BOUNDS.x + 1, BOUNDS.x - 1); st.z = clamp(st.z, BOUNDS.zMin + 1, BOUNDS.zMax - 1);
       setClose(H.prevClose);
@@ -4921,6 +4992,7 @@
       blob.position.z = st.z;
       blob.scale.set(2.2 * S, 5.0 * S, 1);
       blob.rotation.z = st.yaw;
+      if (st.playpen && handlers.onExplore) handlers.onExplore(dt, Math.hypot(st.x - before.x, st.z - before.z));
     }
 
     const _t = new T.Vector3(), _c = new T.Vector3();
@@ -5005,7 +5077,7 @@
       },
       setShed(p) { st.shedP = p; },
       setStuck(on) { st.stuck = !!on; },
-      toilet, startAct, startWalkAct, peekFromHide,
+      toilet, startAct, startWalkAct, peekFromHide, setPlaypen, walkTo,
       setLeftovers,
       // 水のよごれ（0：きれい 〜 1：よごれ）
       setWaterDirty(k) {

@@ -12,9 +12,14 @@
   - 脱皮中は「しっとりケア」で手伝えます
 - **ならびかえ**：ケースの名前一覧の先頭にある「ならびかえ」から、体重、オレンジの濃さ、黒さ、斑点などの特徴、成長、名前、おむかえした日で並べられます。順番を選んで「この順に並べる」を押すと保存され、▲▼で1匹ずつ調整もできます。
 - **名前**：おむかえ・ふ化のときの仮の名前は300種類。モルフの特徴に合う候補を優先し、今いる子との同名を避けます。名前欄で好きな名前に変更でき、すでに付けた名前はそのままです。
+- **みんなのお世話**：ケースの「みんなのお世話」から、全員の状態を一覧で確認できます。名前・モルフ検索、お世話別の絞り込み、☆のお気に入りに対応します。
+- **おさんぽ**：ケースの「おさんぽ」から1匹ずつ広い囲いへ。床をタップして行き先を示し、「配置を変える」で3か所の家具と向きを選べます。持っている家具の一部もおさんぽ用の見本として使えます。「ケースに戻る」で終了します。
+- **繁殖の目標**：「たまご → 生まれる子から探す」や図鑑の詳細から最大5つ保存できます。候補の親も保存でき、保存後に目標の子がふ化すると達成になります。
+- **みんなのお願い**：ケースのお世話欄の下から、3人×3話の連続依頼を受けられます。期限はなく、各話で10・20・30コイン、最後に限定家具と称号を受け取れます。シッターのお世話は依頼には数えません。
+- **追加家具**：KenneyのCC0素材16種類と、コルクのトンネルを追加しました。ショップで14種類、連続依頼の報酬で3種類を入手できます。植物・登れる家具・隠れ家・飾りのタブから選べます。
 - **ペアリング**：アダルトのオスとメスで。生まれる子のモルフの確率を見てから選べます
 - **たまご**：インキュベーターの温度で性別が決まります（27℃だとメスが多く、32℃だとオスが多い）
-- **図鑑**：16種類のモルフを集めよう
+- **図鑑**：30種類のモルフを集めよう
 - **ショップ**：ごはん・ケースの追加・新しいレオパのおむかえ
 
 アプリを閉じていても時間は流れます（おなかが減る・卵がかえる など）。
@@ -45,7 +50,7 @@
 
 ```sh
 npx http-server -p 8123 .   # http://localhost:8123 で確認
-node tests/genetics.test.js # 遺伝ロジックのテスト
+sh tools/tests/run.sh /tmp/leopa-tests # 回帰テスト18本（CHROME・PLAYWRIGHT・BASEで環境を指定）
 ```
 
 | ファイル | 中身 |
@@ -62,6 +67,7 @@ node tests/genetics.test.js # 遺伝ロジックのテスト
 
 - 家具の3Dモデル：[Quaternius「Stylized Nature MegaKit」](https://quaternius.com/packs/stylizednaturemegakit.html)（CC0）。使うものだけを `tools/pack_decor.py` で `assets/decor-kit.bin` にまとめています。
 - 恐竜フィギュア：[Quaternius「Animated Dinosaur Pack」](https://quaternius.com/packs/animateddinosaurs.html)（CC0）
+- 追加の植物・橋・岩・置物：[Kenney「Nature Kit 2.1」](https://kenney.nl/assets/nature-kit)（CC0）。大きさ・高さ・配色を調整。元のライセンスとモデル一覧は `assets/licenses/` に保存しています。
 - おかしの飾り：[Kenney「Food Kit」](https://kenney.nl/assets/food-kit)（CC0）
 - ウェットシェルター・水入れ：Meshy AI で作成したモデル
 - 手のモデル："Hand Topology (CC0)" (https://sketchfab.com/3d-models/hand-topology-cc0-acdc0137ee6246ffbdebb88b69c6fff7) by Nanoglyph (https://sketchfab.com/nanoglyph), licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)。形を軽くして使用

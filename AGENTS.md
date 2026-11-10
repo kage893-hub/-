@@ -12,11 +12,12 @@
 | ファイル | 中身 |
 |---|---|
 | index.html / style.css | 画面 |
-| sw.js | オフライン用キャッシュ。**ファイルを変えたら `VERSION` を上げる**（いまは `leopa-v128`）。新しいファイルは `FILES` にも足す |
+| sw.js | オフライン用キャッシュ。**ファイルを変えたら `VERSION` を上げる**（いまは `leopa-v129`）。新しいファイルは `FILES` にも足す |
 | js/app.js | ゲーム本体（状態 `S`、`simulate`、各画面、`ACTIONS`、ショー、ライセンス、カード、クレジット `credits()`） |
 | js/scene3d.js | 3D（`createTank`・`createViewer`・`hatchScene`・`photo`、ケース `makeCage`・`CAGE_THEMES`、家具 `DECOR`、模様 `skinCanvas`） |
 | js/genetics.js | 遺伝（`DEX` 図鑑30種、ライン遺伝のポリジェニック値） |
 | js/art.js | 2D の絵と体の色（`colors`） |
+| js/activities.js | お世話一覧・繁殖目標・おさんぽ・連続依頼の保存項目と内容 |
 | js/family.js | 家系の記録・親子孫のつながり（個体ごとに1件保存） |
 | js/study.js | 小学1年生向けの自作問題（さんすう・こくご） |
 | js/kids.js | ひらがなモード（MutationObserver で変換。辞書は `D.w`・`EASY`） |
@@ -44,12 +45,22 @@
 - 家系の記録は `S.familyRecords` に個体ごとに保存し、親のIDでつなぐ。古い親の写しは `seed` で同じ個体を識別し、名前だけでは結び付けない。里親・販売の前にも記録を保存する。新しい親の写しには `id` を含める。
 - 行動の傾向は `Leopa3D.behaviorProfile(seed)` で決め、同じ個体では変わらない。行動の傾向の説明は「くわしく見る」の中だけに表示し、ケース画面には表示しない。隠れ家のぞきは捕食・ふれあい・ペアリング・家具変更・個体切り替えで中断できるようにする。
 
+- お世話一覧は `favorites`（個体ID）を保存し、検索・絞り込みは画面を開いている間だけ保持する。100匹の一覧で3D画像を一斉生成しない。
+- 繁殖の目標は `breedingGoals` に最大5件保存する。親のID・目標のモルフ・保存日・達成した子を記録し、保存後に実際にふ化した子で達成する。親が旅立っても目標は残す。
+- おさんぽは1匹ずつ。`playpen.slots` に3か所の家具と向きを保存し、元のケースの家具やエサは移動しない。おさんぽ中の位置・時間は保存しない。体調不良・脱皮・抱卵中・空腹時は休ませる。配置パネルを開いている間は探索を止める。
+- 連続依頼は `stories` に3人×3話の進捗を保存する。段階を受けてからの手動の行動だけを数え、シッターはお世話依頼を進めない。各話の報酬は1回のみ。最後にもらえる `rewardOnly` の家具3種はショップ・ショーの割引候補に入れない。
+- 上記の保存項目は `js/activities.js` の `normalize()` を `migrate()` から呼んで旧データに補完する。保存キーは引き続き `leopa-together-v1`。
+- 家具を避けるために歩行頻度を落としたり、以前戻した家具全身の厳しい経路探索を再導入したりしない。ふれあいでは家具のない乗り口を探し、タッチ中断・複数指の入力を区別する。
+
+- Kenney「Nature Kit 2.1」（CC0）の16モデルを追加。出典・モデル名・配色は `assets/licenses/kenney-nature-models.json`、配布元のライセンスは `assets/licenses/kenney-nature.txt`。コルクのトンネルはコードで作る。追加家具は17種類（ショップ14種、連続依頼限定3種）。
+
 ## 動作確認
 - サーバー：`npx http-server -p 8123 -s -c-1 .`（つながらなくなったら起動しなおす）
 - Playwright ＋ Chromium、画面サイズ 390×844。swiftshader で 3D はとても遅い。
   - 起動の引数：`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`
-- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition・study・family・behavior・movement・pairplan・sitter・sorting・names・dex）。最後の行が `[]` ならエラーなし。
-  - **ふだんは、変更に関係するテストと画面の確認だけを流す**（2026-11-04 からの決まり）。全16本は、家具・3D・セーブの形など広く影響する変更のときに流す。
+- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition・study・family・behavior・movement・pairplan・sitter・sorting・names・dex・activities・playpen）。最後の行が `[]` ならエラーなし。
+  - **ふだんは、変更に関係するテストと画面の確認だけを流す**（2026-11-04 からの決まり）。全18本は、家具・3D・セーブの形など広く影響する変更のときに流す。
+  - activities は100匹の検索・絞り込み、お気に入り、繁殖目標の保存と孵化、連続依頼、重複報酬防止、限定家具、旧セーブ、ひらがなを検査する。playpen は探索・配置・ケースの保持・依頼の写真報酬・家具のある場所のふれあい・指の中断・トンネル通過・追加家具17種を検査する。
   - dex は追加スノーのあるレッドアイアルビノ・ラプターの登録、旧セーブの補完、未入手の候補を登録しないこと、保存と孵化を検査する。
   - sorting は体重・色・名前・日付の並び替え、同値順序、選択維持、手動調整、保存、100匹、ひらがなを検査する。names は300種類、モルフ別の候補、重複回避、おむかえ・購入・孵化での仮名と手動変更を検査する。
   - sitter は実時間の期限・全員の給餌と在庫・留守中と分割処理・延長と課金・移行・保存・自動報酬なしを検査する。
@@ -67,6 +78,7 @@
 - 試遊版ではホーム画面への追加の案内は出ない。写真の「ダウンロード」は動かないことがある（共有・長押しで保存）。
 
 ## 家具とケースの作り方（最近の作業）
+
 - **家具を足す**：Poly Haven の glTF（1k）を取り、`npx gltfpack -i in.gltf -o out.gltf -si <率> -sa -noq -km` で 1,500〜3,000 ポリゴンに減らし、`python3 tools/add_decor.py assets/decor-kit.bin assets/decor-kit.bin out.gltf:PH_名前` で足す。
   - 植物は、別ファイルの alpha 画像を色の画像にまぜて RGBA の PNG にしてから使う。
   - そのあと js/scene3d.js の `DECOR` に項目を足す（`kitOr('PH_名前', 横幅, opt, 代わりの形)`）。`climb`（乗れる）、`soft`（植物）、`drink`（水入れ）、`expo: 'gold'|'night'`（ショー限定）などの印がある。

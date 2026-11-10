@@ -257,6 +257,7 @@
     for (const g of s.geckos) if (g.gravid && g.gravid.dad && g.gravid.dad.poly && g.gravid.dad.poly.mel == null) g.gravid.dad.poly.mel = 8;
     s.learned = s.learned || {};
     s.sitter = normalizeSitter(s.sitter);
+    window.LeopaActivities.normalize(s);
     for (const g of s.geckos) if (!Number.isFinite(g.emptyH) || g.emptyH < 0) g.emptyH = 0;
     const study = s.study || {};
     s.study = { day: typeof study.day === 'string' ? study.day : '', rewarded: Number.isInteger(study.rewarded) ? clamp(study.rewarded, 0, 10) : 0, total: Number.isInteger(study.total) ? Math.max(0, study.total) : 0 };
@@ -354,7 +355,7 @@
       lastTick: Date.now(), nextId: 1, welcomed: false, stats: { hatched: 0, rehomed: 0 },
       calc: 10, dust: true, layBox: [], learned: {}, starterFlag: true,
       clinicApology: { visits: 0, coins: 0, at: Date.now(), announced: true },
-      sitter: null,
+      sitter: null, favorites: [], breedingGoals: [], stories: {}, playpen: { slots: window.LeopaActivities.DEFAULT_PEN.map(t => ({ t, rot: 0 })) },
     };
     // はじめはショップでレオパを選ぶところから
     S.starters = makeStarters();
@@ -459,7 +460,7 @@
       if (g.poopAt && now >= g.poopAt) {
         // 見ているケースなら、いつものトイレの場所へ歩いていってからフンをする
         const doPoop = () => { if (!g.poopAt) return; g.poop = Math.min(3, g.poop + 1); g.clean = clamp(g.clean - 10); g.poopAt = 0; g._toilet = 0; mile(g, 'poop', 'はじめてのフンをした（元気なしるし！）', false); };
-        if (!automatic && !g._toilet && tank && tank.toilet && g.id === tankGid && view === 'case' && !document.hidden && tank.toilet(() => { doPoop(); renderView(); save(); })) g._toilet = now;
+        if (!automatic && !playSession && !g._toilet && tank && tank.toilet && g.id === tankGid && view === 'case' && !document.hidden && tank.toilet(() => { doPoop(); renderView(); save(); })) g._toilet = now;
         else if (!g._toilet || now - g._toilet > 25000) doPoop();
       }
       if (g.shedUntil && now >= g.shedUntil) finishShed(g);
@@ -660,6 +661,7 @@
     if (wrap.hidden) sheetReturnFocus = document.activeElement;
     $('#sheetBody').classList.toggle('photo-sheet', !!(options && options.photo));
     $('#sheetBody').innerHTML = html;
+    if (playSession && tank) tank.setActive(false);
     wrap.hidden = false;
     $('#sheetBody').scrollTop = 0;
     $('#app').inert = true;
@@ -675,6 +677,7 @@
     $('#app').inert = false; document.body.classList.remove('sheet-open');
     if (sheetReturnFocus && sheetReturnFocus.isConnected) sheetReturnFocus.focus({ preventScroll: true });
     sheetReturnFocus = null;
+    if (playSession && tank) tank.setActive(view === 'case');
   }
 
   // ======================================================
@@ -712,6 +715,7 @@
       onHandling: type => onHandling(type),
       onPairing: ev => onPairing(ev),
       onObserve: on => syncObserveControls(on),
+      onExplore: walkProgress,
     });
   }
   function sceneMount() {
@@ -721,15 +725,15 @@
     $('#tankEmpty').hidden = !!g;
     if (!tank) return;
     tank.setGecko(g ? lookOf(g) : null);
-    tank.setCage(g ? cageOf(g) : null);
-    tank.setDecor(g ? decorOf(g) : []);
-    tank.setPoops(g ? g.poop : 0);
+    tank.setCage(playSession ? { size: 'big', theme: 'wood' } : g ? cageOf(g) : null);
+    tank.setDecor(playSession ? penDecor() : g ? decorOf(g) : []);
+    tank.setPoops(!playSession && g ? g.poop : 0);
     if (tank.setLeftovers) {
-      tank.setLeftovers(g ? g.left || [] : []);
+      tank.setLeftovers(!playSession && g ? g.left || [] : []);
       tank.setStuck(!!(g && g.stuckShed));
       tank.setWaterDirty(g && waterDirty(g, Date.now()) ? 1 : 0);
     }
-    tank.setDirty(!!g && g.clean < 35);
+    tank.setDirty(!playSession && !!g && g.clean < 35);
     tankCondition(g);
     tank.setClock(clockNow(), seasonNow());
     if (g && tank.setHeat) tank.setHeat(heatOf(g));
@@ -1033,12 +1037,13 @@
     const focusId = ['pairPlanMom', 'pairPlanDad', 'pairPlanTarget'].includes(document.activeElement?.id) ? document.activeElement.id : '';
     const now = Date.now(), moms = S.geckos.filter(g => g.sex === 'F'), dads = S.geckos.filter(g => g.sex === 'M');
     const tabs = `<div class="seg pair-tabs" role="tablist" aria-label="ペアの探し方">${[['parents', '親からえらぶ'], ['target', '生まれる子から探す']].map(([mode, label]) => `<button role="tab" aria-selected="${pairPlan.mode === mode}" class="${pairPlan.mode === mode ? 'on' : ''}" data-action="pairPlanMode" data-mode="${mode}">${label}</button>`).join('')}</div>`;
+    const saveGoalButton = '<button class="act primary wide" data-action="goalSave">この目標を保存する</button>';
     const help = `<details class="pair-help"><summary>ペアリングの進め方</summary><ol class="small"><li>アダルトのオスとメスをえらびます。ごはんと、おやすみの状態も確認しよう。</li><li>生まれる子の予想を見て、組み合わせを決めます。</li><li>ペアリングのあと、メスが卵を産むのを待ちます。卵にしるしをつけて、インキュベーターへ移そう。</li></ol><p class="small">空きケースは${Math.max(0, S.cases - S.geckos.length)}こ。ふ化した子は1匹ずつ別のケースで育てます。</p></details>`;
     let body = '';
     if (pairPlan.mode === 'parents') {
       const options = (list, id) => `<option value="">えらんでください</option>${list.map(g => `<option value="${esc(g.id)}" ${g.id === id ? 'selected' : ''}>${esc(pairOptionLabel(g.name + ' ・ ' + nameOf(g) + (pairBlock(g, now) ? '（いまは組めません）' : '')))}</option>`).join('')}`;
       const mom = moms.find(g => g.id === pairPlan.mom), dad = dads.find(g => g.id === pairPlan.dad);
-      body = `<p class="small">① 親をえらぶ → ② 予想を見る → ③ ペアリング</p><div class="pair-fields"><label for="pairPlanMom">♀ おかあさん<select id="pairPlanMom">${options(moms, pairPlan.mom)}</select></label><label for="pairPlanDad">♂ おとうさん<select id="pairPlanDad">${options(dads, pairPlan.dad)}</select></label></div>
+      body = `<p class="small">① 親をえらぶ → ② 予想を見る → ③ ペアリング</p>${pairPlan.fromTarget ? `<p class="small">目標：${esc(pairPlan.target)}</p>${saveGoalButton}` : ''}<div class="pair-fields"><label for="pairPlanMom">♀ おかあさん<select id="pairPlanMom">${options(moms, pairPlan.mom)}</select></label><label for="pairPlanDad">♂ おとうさん<select id="pairPlanDad">${options(dads, pairPlan.dad)}</select></label></div>
         ${mom && dad ? `<div class="pair-card">${pairParentHTML(mom)}${pairParentHTML(dad)}${pairPlan.fromTarget ? `<div class="pair-chance"><span>${esc(pairPlan.target)}の予想</span><b>${pairChance(mom, dad).approximate ? '目安 約' : ''}${pct(pairChance(mom, dad).p)}</b></div>` : ''}${pairForecastHTML(mom, dad)}${pairStartHTML(mom, dad, now)}</div>` : '<p class="notice">オスとメスを1匹ずつえらぶと、子の予想が見られます。</p>'}`;
     } else {
       const entry = G.DEX.find(d => d.id === pairPlan.target) || G.DEX[0];
@@ -1049,14 +1054,14 @@
       }
       candidates.sort((a, b) => Number(b.ready) - Number(a.ready) || b.chance.p - a.chance.p || a.mom.name.localeCompare(b.mom.name, 'ja') || a.dad.name.localeCompare(b.dad.name, 'ja'));
       body = `<label class="pair-target" for="pairPlanTarget">生まれてほしいモルフ<select id="pairPlanTarget">${G.DEX.map(d => `<option value="${esc(d.id)}" ${d.id === entry.id ? 'selected' : ''}>${esc(pairOptionLabel(d.name))}</option>`).join('')}</select></label>
-        <p class="small">${esc(entry.hint)}</p><p class="muted small">飼っている子から探します。いま組めるペアを優先して、予想の高い順に表示します。</p>
+        <p class="small">${esc(entry.hint)}</p>${saveGoalButton}<p class="muted small">飼っている子から探します。いま組めるペアを優先して、予想の高い順に表示します。</p>
         <p class="muted small">「目安」は色や模様のばらつきを含む予想です。結果を保証するものではありません。図鑑の条件に当てはまる子を探すので、別のモルフの特徴も一緒に出ることがあります。</p>
         <p class="small"><b>候補 ${candidates.length}組</b></p><div class="pair-candidates">${candidates.slice(0, pairPlan.limit).map(({ mom, dad, chance }) => `<div class="pair-card">${pairParentHTML(mom)}${pairParentHTML(dad)}<div class="pair-chance"><span>${esc(entry.name)}の予想</span><b>${chance.approximate ? '目安 約' : ''}${pct(chance.p)}</b></div>
           <button class="act ghost" data-action="pairPlanChoose" data-mom="${esc(mom.id)}" data-dad="${esc(dad.id)}">この親で予想を見る</button>${pairStartHTML(mom, dad, now)}</div>`).join('')}</div>
         ${candidates.length > pairPlan.limit ? '<button class="act wide" data-action="pairPlanMore">ほかの候補も見る</button>' : ''}
         ${!candidates.length ? '<p class="notice">この予想では候補が見つかりませんでした。上のヒントを見て、親からえらぶ画面で別の組み合わせも比べてみよう。色や模様は個体差があるため、目安に出ない結果になることもあります。</p>' : ''}`;
     }
-    openSheet(`<div class="pair-plan"><h3 class="sheet-title">ペアリング</h3>${tabs}${!moms.length || !dads.length ? `<p class="notice">${!moms.length ? 'メス' : 'オス'}がまだいません。ショップでおむかえすると、組み合わせを探せます。</p>` : ''}${body}${help}<button class="act" data-action="closeSheet">とじる</button></div>`, { focus: !focusId });
+    openSheet(`<div class="pair-plan"><h3 class="sheet-title">ペアリング</h3>${tabs}${!moms.length || !dads.length ? `<p class="notice">${!moms.length ? 'メス' : 'オス'}がまだいません。ショップでおむかえすると、組み合わせを探せます。</p>` : ''}${body}<button class="act wide" data-action="breedingGoals">保存した繁殖の目標</button>${help}<button class="act" data-action="closeSheet">とじる</button></div>`, { focus: !focusId });
     if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
   }
   document.addEventListener('change', ev => {
@@ -1132,6 +1137,7 @@
     g.parents = e.pmom ? { mom: e.pmom, dad: e.pdad } : { mom: { name: e.mom, sex: 'F' }, dad: { name: e.dad, sex: 'M' } };
     S.geckos.push(g);
     S.stats.hatched++;
+    recordGoalBirth(g); ACTIVITIES.record(S, 'hatched');
     S.coins += 5;
     const fresh = register(g);
     memo(g, `${e.mom} × ${e.dad} の子として、${e.temp}℃の卵から生まれた`, true);
@@ -1327,7 +1333,7 @@
       if (tank.handling()) { tank.handCmd('down'); return; }
       careCheck(g, () => {
         if (!tank || tank.handling()) return;
-        tank.startHandling(g.tame);
+        if (tank.startHandling(g.tame) === false) { toast('手を置く場所が足りないみたい。家具の少ない場所で試そう'); return; }
         showHandBar(true);
         handSession = { id: g.id, strokes: 0 };
       });
@@ -1368,6 +1374,7 @@
           <li>流木・岩・植物・置物など：Poly Haven（CC0）</li>
           <li>月の地球儀の月の画像：NASA Scientific Visualization Studio（パブリックドメイン）</li>
           <li>おかしの飾り：Kenney「Food Kit」（CC0）</li>
+          <li>追加の植物・橋・石・置物：<a href="https://kenney.nl/assets/nature-kit" target="_blank" rel="noopener">Kenney「Nature Kit 2.1」</a>（<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0</a>）。大きさと高さを調整</li>
           <li>レオパ・ウェットシェルター・水入れ・ピンセット：Meshy AI で作成</li>
           <li>岩ウェットシェルター：ユーザー作成・生成の提供モデル。スマホ向けに形を軽量化し、3色に調整</li>
           <li>品評会の1位トロフィー3種類・追加の記念品3種類：ユーザーの依頼によりOpenAIの画像生成で作成</li>
@@ -1855,7 +1862,12 @@
     // 押したときの小さな手ごたえ（対応している端末だけ）
     if (t.classList.contains('act') && navigator.vibrate) { try { navigator.vibrate(8); } catch (e) { /* noop */ } }
     const fn = ACTIONS[t.dataset.action];
-    if (fn) { ev.preventDefault(); fn(t, ev); }
+    if (fn) {
+      ev.preventDefault();
+      if (saveLocked || otherSavedNewer()) { reloadForNewer(); return; }
+      if (playSession && ['tab', 'select', 'feedMenu', 'camera', 'fullShoot', 'heater', 'handle'].includes(t.dataset.action)) finishWalk(true);
+      fn(t, ev);
+    }
   });
   // ---------- ギフトコード（コードそのものはソースに書かず、ハッシュで照合する）
   const GIFTS = {
@@ -1898,7 +1910,7 @@
     ev.preventDefault();
     const g = S.geckos.find(x => x.id === ev.target.dataset.id);
     const v = $('#renameInput').value.trim().slice(0, 10);
-    if (g && v) g.name = v;
+    if (g && v) { g.name = v; for (const goal of S.breedingGoals) if (goal.childId === g.id) goal.child = v; }
     if (g && ev.target.dataset.goto) { S.selected = g.id; switchView('case'); }
     closeSheet();
     renderView();
@@ -2026,6 +2038,11 @@
       (S.geckos.length < S.cases ? `<span class="chip ghost">空きケース ${S.cases - S.geckos.length}</span>` : ''));
     sceneMount();
     if (!g) { setHTML($('#caseInfo'), ''); setHTML($('#tankName'), ''); return; }
+    if (playSession) {
+      setHTML($('#tankName'), `<b>${esc(g.name)}</b><span class="pill good">おさんぽ中</span>`);
+      setHTML($('#caseInfo'), `<div class="card walk-card"><h2 class="h2">おさんぽスペース</h2><p id="walkNote">行ってほしい床をタップすると、そちらへ向かいます。休んでいる様子も見守ろう。</p><div class="actions"><button class="act" data-action="walkLayout">配置を変える</button><button class="act primary" data-action="walkEnd">ケースに戻る</button></div><p class="muted small">1匹ずつ、広い囲いの中でゆっくり探索します。</p></div>`);
+      return;
+    }
     const st = stageOf(g);
     const morph = nameOf(g);
     const hets = G.hets(g.genes);
@@ -2045,6 +2062,7 @@
         <button class="act" data-action="album">アルバム</button>
         <button class="act" data-action="profileCard">カード</button>
       </div>
+      <div class="activity-entry"><button class="act" data-action="careMenu">みんなのお世話</button><button class="act" data-action="walkStart">おさんぽ</button></div>
       ${sitterCard(now)}
       ${tutCoach()}
       ${g.shedUntil ? '<button class="act wide mist" data-action="mist">しっとりケアで脱皮をうながす</button>' : ''}
@@ -2081,6 +2099,7 @@
       </div>
       ${dailyCard()}
       ${studyCard()}
+      <button class="sitter-card" data-action="stories"><span><b>みんなのお願い ${storyBadge()}</b><small>3人とつながる、9つのお願い</small></span><span aria-hidden="true">›</span></button>
 
       <div class="actions sub">
         <button class="act ghost" data-action="viewGecko" data-id="${g.id}">${ic('look')}くわしく見る</button>
@@ -2122,6 +2141,7 @@
     }).join('');
     setHTML($('#view-eggs'), `
       <div class="card pair-entry"><h2 class="h2">ペアリング</h2><p class="small">親の組み合わせと、生まれる子の予想をここから確認できます。</p><div class="pair-entry-actions"><button class="act primary" data-action="pairPlanner" data-mode="parents">親からえらぶ</button><button class="act" data-action="pairPlanner" data-mode="target">生まれる子から探す</button></div></div>
+      <button class="act wide" data-action="breedingGoals">保存した繁殖の目標（${S.breedingGoals.length}/5）</button>
       ${layCard}
       <h2 class="h2">インキュベーター <small class="muted">${S.eggs.length} / ${EGG_CAP}</small></h2>
       <div class="card">
@@ -2259,7 +2279,7 @@
       <p class="muted small">${got ? '代表的な成体の見た目です。同じモルフでも、色や柄には個体差があります。' : 'おむかえやふ化で登録すると、姿をじっくり見られます。'}</p>
       <div class="card guide"><h4 class="h3">見た目の特徴</h4><p>${esc(d.hint)}</p></div>
       ${M ? `<div class="card guide"><h4 class="h3">条件と作り方</h4><p><b>${esc(M.type)}</b> · ${esc(M.cond)}</p><ol>${M.how.map(h => `<li>${esc(h)}</li>`).join('')}</ol>${M.tip ? `<p>${esc(M.tip)}</p>` : ''}</div>` : ''}
-      <button class="act wide" data-action="closeSheet">図鑑に戻る</button></div>`);
+      <button class="act primary wide" data-action="dexGoal" data-target="${esc(d.id)}">繁殖の目標にする</button><button class="act wide" data-action="closeSheet">図鑑に戻る</button></div>`);
     if (got && L3.supported) viewer = L3.createViewer($('#dexViewer'), look);
   };
   function renderDex() {
@@ -2533,6 +2553,146 @@
   });
 
   // ======================================================
+  // ---- みんなのお世話（開いたときだけ一覧を表示）
+  const ACTIVITIES = window.LeopaActivities;
+  let careFilter = 'all', careQuery = '';
+  const CARE_FILTERS = [['all', '全員'], ['need', 'お世話が必要'], ['food', 'ごはん'], ['clean', 'おそうじ'], ['shed', '脱皮'], ['health', '体調'], ['favorite', 'お気に入り']];
+  function careTags(g) {
+    const tags = [];
+    if (g.sick) tags.push(['health', '体調を確認']);
+    if (g.hunger < 60) tags.push(['food', 'ごはん']);
+    if (g.poop > 0 || g.clean < 70 || g.left?.length) tags.push(['clean', 'おそうじ']);
+    if (waterDirty(g, Date.now())) tags.push(['water', '水替え']);
+    if (g.shedUntil || g.stuckShed) tags.push(['shed', g.stuckShed ? '皮がのこっている' : '脱皮中']);
+    return tags;
+  }
+  function careRows() {
+    const query = nameKey(careQuery);
+    const rows = S.geckos.map(g => ({ g, tags: careTags(g) })).filter(({ g, tags }) =>
+      (!query || nameKey(g.name + ' ' + nameOf(g)).includes(query)) &&
+      (careFilter === 'all' || careFilter === 'favorite' && S.favorites.includes(g.id) || careFilter === 'need' && tags.length || tags.some(([key]) => key === careFilter)));
+    $('#careCount').textContent = `${rows.length} / ${S.geckos.length}匹`;
+    $('#careRows').innerHTML = rows.map(({ g, tags }) => `<div class="care-person">
+      <button class="care-person-main" data-action="careSelect" data-id="${esc(g.id)}">${A.swatch(g)}<span><b>${esc(g.name)} ${sexMark(g)}</b><small>${esc(nameOf(g))}</small><small>おなか ${Math.round(g.hunger)} ・ きれい ${Math.round(g.clean)} ・ ${weightOf(g)}g</small><span class="tags">${tags.length ? tags.map(([, n]) => `<span class="tag warn">${n}</span>`).join('') : '<span class="tag good">のんびり見守ろう</span>'}</span></span><span aria-hidden="true">›</span></button>
+      <button class="favorite-button" data-action="favorite" data-id="${esc(g.id)}" aria-label="${esc(g.name)}のお気に入り" aria-pressed="${S.favorites.includes(g.id)}">${S.favorites.includes(g.id) ? '★' : '☆'}</button></div>`).join('') || '<p class="notice">当てはまる子はいません。</p>';
+  }
+  function careMenu() {
+    ACTIVITIES.normalize(S);
+    openSheet(`<h3 class="sheet-title">みんなのお世話</h3><p class="small">名前を押すと、その子のケースへ。☆でお気に入りにできます。</p><label class="field-label" for="careSearch">名前・モルフで探す</label><input id="careSearch" type="search" value="${esc(careQuery)}" placeholder="名前・モルフ" autocomplete="off"><div class="activity-filters" role="group" aria-label="お世話の種類">${CARE_FILTERS.map(([key, n]) => `<button class="chip" data-action="careFilter" data-filter="${key}" aria-pressed="${key === careFilter}">${n}</button>`).join('')}</div><p class="muted small" id="careCount" aria-live="polite"></p><div id="careRows"></div><button class="act wide" data-action="closeSheet">とじる</button>`, { focus: false });
+    careRows();
+  }
+  document.addEventListener('input', ev => { if (ev.target.id === 'careSearch') { careQuery = ev.target.value; careRows(); } });
+
+  // ---- 繁殖の目標。親が旅立っても目標は残す。
+  function saveBreedingGoal(target, mom = '', dad = '') {
+    if (!G.DEX.some(d => d.id === target)) return;
+    const existing = S.breedingGoals.find(g => g.target === target);
+    if (!existing && S.breedingGoals.length >= 5) { toast('目標は5つまで。達成した目標を整理しよう'); return; }
+    if (existing) { existing.mom = mom || existing.mom; existing.dad = dad || existing.dad; }
+    else S.breedingGoals.push({ target, mom, dad, createdAt: Date.now(), achievedAt: 0, child: '', childId: '' });
+    ACTIVITIES.record(S, 'goal');
+    saveNow(); renderView(); toast('繁殖の目標を保存しました');
+  }
+  function recordGoalBirth(g) {
+    for (const goal of S.breedingGoals) if (!goal.achievedAt && g.born >= goal.createdAt && G.dexMatches(g.genes, g.tang, g.poly).includes(goal.target)) {
+      goal.achievedAt = Date.now(); goal.child = g.name; goal.childId = g.id;
+      toast(`繁殖の目標「${goal.target}」を達成！`);
+    }
+  }
+  function breedingGoalsMenu() {
+    const goals = S.breedingGoals;
+    openSheet(`<h3 class="sheet-title">繁殖の目標 <small>${goals.length} / 5</small></h3><p class="small">「生まれる子から探す」や図鑑から保存できます。保存したあとに生まれた子で達成します。</p>
+      ${goals.map(goal => {
+        const entry = G.DEX.find(d => d.id === goal.target), mom = S.geckos.find(g => g.id === goal.mom), dad = S.geckos.find(g => g.id === goal.dad);
+        const both = mom && dad, chance = both ? G.targetChance(mom, dad, goal.target) : null;
+        return `<div class="card goal-card"><b>${esc(goal.target)}</b>${goal.achievedAt ? `<p class="good">✓ ${esc(S.geckos.find(g => g.id === goal.childId)?.name || goal.child)}が生まれて達成</p>` : '<p class="muted small">目標に向けて育成中</p>'}<p class="small">${esc(entry.hint)}</p>
+          ${both ? `<p class="small">${esc(mom.name)} × ${esc(dad.name)}<br>${chance.approximate ? '目安 約' : ''}${pct(chance.p)}${pairProblems(mom, dad, Date.now()).length ? `<br>${pairProblems(mom, dad, Date.now()).join('<br>')}` : ' ・ いま組めます'}</p>` : `<p class="small">${goal.mom || goal.dad ? '保存した親がそろっていません。' : '親はまだ決めていません。'}候補を探してみよう。</p>`}
+          <div class="actions"><button class="act primary" data-action="goalOpen" data-target="${esc(goal.target)}">${both ? '親と予想を見る' : '候補を探す'}</button><button class="act ghost" data-action="goalRemove" data-target="${esc(goal.target)}">目標を外す</button></div></div>`;
+      }).join('') || '<p class="notice">会いたいモルフを、最初の目標にしよう。</p>'}<button class="act wide" data-action="pairPlanner" data-mode="target">生まれる子から探す</button><button class="act wide" data-action="closeSheet">とじる</button>`);
+  }
+
+  // ---- おさんぽ。ケースの家具・エサ・選択中の個体は入れ替えず、表示だけ切り替える。
+  let playSession = null;
+  function penDecor() { return S.playpen.slots.flatMap((d, i) => d.t ? [{ t: d.t, x: ACTIVITIES.SPOTS[i].x, z: ACTIVITIES.SPOTS[i].z, rot: d.rot }] : []); }
+  function walkBlock(g) { return !g ? 'レオパをえらぼう' : g.sick ? '体調が戻ってからおさんぽしよう' : g.gravid ? '卵を産んで、ひと休みしてからにしよう' : g.shedUntil || g.stuckShed ? '脱皮が落ち着いてからにしよう' : g.hunger < 25 ? 'ごはんを食べてからにしよう' : ''; }
+  function openWalk() {
+    const g = selected(), block = walkBlock(g);
+    if (block) { toast(block); return; }
+    if (!tank) { toast('おさんぽは3D表示に対応した端末で遊べます'); return; }
+    if (pairScene || tank.handling()) { toast('ペアリングやふれあいが終わってからにしよう'); return; }
+    closeSheet(); flushFoods();
+    playSession = { id: g.id, elapsed: 0, distance: 0 };
+    tank.setPlaypen(true); renderView();
+    tank.setObserve(false);
+  }
+  function finishWalk(quiet = false) {
+    if (!playSession) return;
+    const run = playSession; playSession = null;
+    tank?.setPlaypen(false);
+    if (run.elapsed >= 15 && run.distance >= 3) {
+      ACTIVITIES.record(S, 'walk'); saveNow();
+      if (!quiet) toast('おさんぽを見守りました。ケースでひと休みしよう');
+    }
+    renderView();
+  }
+  function walkProgress(dt, distance) {
+    if (!playSession || document.hidden) return;
+    playSession.elapsed += dt; playSession.distance += distance;
+    const ready = playSession.elapsed >= 15 && playSession.distance >= 3;
+    const note = $('#walkNote');
+    if (note && note.dataset.ready !== String(ready)) { note.dataset.ready = String(ready); note.textContent = ready ? 'ゆっくり探索できたね。いつでもケースに戻れます。' : '行ってほしい床をタップすると、そちらへ向かいます。休んでいる様子も見守ろう。'; }
+  }
+  function walkLayout() {
+    if (!playSession) return;
+    const owned = new Set(Object.entries(S.decorInv || {}).filter(([, n]) => n > 0).map(([id]) => id));
+    for (const g of S.geckos) for (const d of decorOf(g)) owned.add(d.t);
+    const options = ACTIVITIES.PEN_ITEMS.filter(id => ACTIVITIES.DEFAULT_PEN.includes(id) || owned.has(id) || S.playpen.slots.some(d => d.t === id));
+    openSheet(`<h3 class="sheet-title">おさんぽの配置</h3><p class="small">トンネル・植物・石は備え付けです。持っている家具も、おさんぽ用の見本として置けます。</p>${ACTIVITIES.SPOTS.map((spot, i) => `<div class="pen-slot"><label for="penSlot${i}">${spot.name}<select id="penSlot${i}" data-pen-slot="${i}"><option value="">${esc(pairOptionLabel('置かない'))}</option>${options.map(id => `<option value="${id}" ${S.playpen.slots[i].t === id ? 'selected' : ''}>${esc(pairOptionLabel(L3.DECOR[id].name))}</option>`).join('')}</select></label><button class="act" data-action="penRotate" data-i="${i}" aria-label="${spot.name}の家具を回す">↻ 回す</button></div>`).join('')}<p class="muted small">配置は保存されます。ケースの家具は移動しません。</p><button class="act primary wide" data-action="closeSheet">おさんぽに戻る</button>`);
+  }
+  document.addEventListener('change', ev => {
+    if (!ev.target.matches('[data-pen-slot]') || !playSession) return;
+    const i = Number(ev.target.dataset.penSlot), t = ev.target.value;
+    if (!Number.isInteger(i) || !S.playpen.slots[i] || t !== '' && !ACTIVITIES.PEN_ITEMS.includes(t)) return;
+    S.playpen.slots[i].t = t; saveNow(); sceneMount();
+  });
+
+  // ---- 3人からの連続依頼。各段階を受けてからの行動だけを数える。
+  function storyReady(story, state) {
+    const step = story.steps[state.step], c = state.counts;
+    if (!step) return false;
+    if (step.kind === 'home') return S.geckos.some(g => decorOf(g).some(d => L3.DECOR[d.t]?.shelter) && decorOf(g).some(d => L3.DECOR[d.t]?.drink));
+    if (step.kind === 'decor') return S.geckos.some(g => new Set(decorOf(g).map(d => d.t)).size >= 3);
+    if (step.kind === 'care') return c.fed >= 3 && c.cleaned >= 1;
+    return (c[step.kind] || 0) >= step.need;
+  }
+  function storyBadge() { const n = ACTIVITIES.STORIES.filter(story => S.stories[story.id] && storyReady(story, S.stories[story.id])).length; return n ? `<span class="record-badge">${n}</span>` : ''; }
+  function storiesMenu() {
+    openSheet(`<p class="eyebrow">3人とつながる、9つのお願い</p><h3 class="sheet-title">みんなのお願い</h3><p class="small">期限はありません。途中の記録は保存され、3段階を終えると家具と称号がもらえます。</p>${ACTIVITIES.STORIES.map(story => {
+      const r = S.stories[story.id], done = r && r.step >= story.steps.length, step = story.steps[r?.step || 0], ready = r && !done && storyReady(story, r);
+      const count = !r || done ? '' : step.kind === 'care' ? `ごはん ${Math.min(3, r.counts.fed || 0)}/3 ・ おそうじ ${Math.min(1, r.counts.cleaned || 0)}/1` : ['home', 'decor'].includes(step.kind) ? (ready ? 'お部屋の準備ができました' : 'もようがえで準備しよう') : `${Math.min(step.need, r.counts[step.kind] || 0)} / ${step.need}`;
+      return `<article class="card story-card"><small class="muted">${story.person}</small><h4>${story.title}</h4>${done ? `<p class="good">✓ 全3話達成</p><p>「${story.badge}」</p><p class="small">「ありがとう。またレオパの話を聞かせてね」</p>` : `<p class="eyebrow">第${(r?.step || 0) + 1}話 ・ ${step.title}</p><p>${step.text}</p>${r ? `<p class="story-progress">${count}</p>` : ''}<p class="small">お礼 ${step.coins}コイン${(r?.step || 0) === 2 ? ` ＋ ${L3.DECOR[story.gift].name}` : ''}</p>${!r ? `<button class="act primary" data-action="storyStart" data-id="${story.id}">お願いを受ける</button>` : `<button class="act ${ready ? 'primary' : ''}" data-action="storyClaim" data-id="${story.id}" data-step="${r.step}" ${ready ? '' : 'disabled'}>${ready ? '報告してお礼を受け取る' : 'お願いを進めよう'}</button>${!ready ? `<button class="act ghost" data-action="storyGo" data-kind="${step.kind}">やってみる</button>` : ''}`}`}</article>`;
+    }).join('')}<button class="act wide" data-action="closeSheet">とじる</button>`);
+  }
+  Object.assign(ACTIONS, {
+    careMenu,
+    careFilter(t) { if (!CARE_FILTERS.some(([k]) => k === t.dataset.filter)) return; careFilter = t.dataset.filter; for (const b of document.querySelectorAll('[data-action=careFilter]')) b.setAttribute('aria-pressed', String(b.dataset.filter === careFilter)); careRows(); },
+    favorite(t) { const id = t.dataset.id; if (!S.geckos.some(g => g.id === id)) return; S.favorites = S.favorites.includes(id) ? S.favorites.filter(x => x !== id) : S.favorites.concat(id); saveNow(); careRows(); },
+    careSelect(t) { if (!S.geckos.some(g => g.id === t.dataset.id)) return; finishWalk(true); if (editing) setEditing(null); S.selected = t.dataset.id; closeSheet(); switchView('case'); saveNow(); },
+    goalSave() { saveBreedingGoal(pairPlan.target, pairPlan.mode === 'parents' ? pairPlan.mom : '', pairPlan.mode === 'parents' ? pairPlan.dad : ''); },
+    dexGoal(t) { saveBreedingGoal(t.dataset.target); },
+    breedingGoals: breedingGoalsMenu,
+    goalOpen(t) { const goal = S.breedingGoals.find(g => g.target === t.dataset.target); if (!goal) return; const parents = S.geckos.some(g => g.id === goal.mom) && S.geckos.some(g => g.id === goal.dad); pairPlan = { mode: parents ? 'parents' : 'target', target: goal.target, mom: goal.mom, dad: goal.dad, limit: 6, fromTarget: true }; pairChanceCache.clear(); renderPairPlanner(); },
+    goalRemove(t) { S.breedingGoals = S.breedingGoals.filter(g => g.target !== t.dataset.target); saveNow(); breedingGoalsMenu(); renderView(); },
+    walkStart: openWalk,
+    walkEnd() { closeSheet(); finishWalk(); },
+    walkLayout,
+    penRotate(t) { const i = Number(t.dataset.i); if (!playSession || !Number.isInteger(i) || !S.playpen.slots[i]) return; S.playpen.slots[i].rot = (S.playpen.slots[i].rot + Math.PI / 2) % (Math.PI * 2); saveNow(); sceneMount(); },
+    stories: storiesMenu,
+    storyStart(t) { if (!ACTIVITIES.STORIES.some(s => s.id === t.dataset.id) || S.stories[t.dataset.id]) return; S.stories[t.dataset.id] = { step: 0, counts: {} }; saveNow(); storiesMenu(); renderView(); },
+    storyClaim(t) { const story = ACTIVITIES.STORIES.find(s => s.id === t.dataset.id), r = S.stories[t.dataset.id]; if (!story || !r || r.step !== Number(t.dataset.step) || !storyReady(story, r)) return; const reward = story.steps[r.step].coins; r.step++; r.counts = {}; S.coins += reward; if (r.step === story.steps.length) { S.decorInv[story.gift] = (S.decorInv[story.gift] || 0) + 1; toast(`「${story.badge}」の称号と家具を受け取りました`); } saveNow(); sfx('coin'); storiesMenu(); renderView(); },
+    storyGo(t) { const kind = t.dataset.kind; closeSheet(); if (kind === 'goal') openPairPlanner('target'); else if (kind === 'hatched') switchView('eggs'); else if (kind === 'family') ACTIONS.family({ dataset: {} }); else { switchView('case'); if (kind === 'walk') openWalk(); else if (['home', 'decor'].includes(kind)) ACTIONS.editStart(); else if (kind === 'photo') ACTIONS.camera(); else if (kind === 'handled') ACTIONS.handle(); else careMenu(); } },
+  });
+
   // 目標：今日のおせわ・ブリーダー依頼・実績
   // ======================================================
   const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
@@ -2575,6 +2735,7 @@
   }
   function daily(key) {
     tutAdvance(key);
+    ACTIVITIES.record(S, key);
     const d = dailyState();
     const was = DAILY.every(t => d[t.key] >= t.need);
     d[key] = (d[key] || 0) + 1;
@@ -2958,6 +3119,7 @@
     return focus ? `<div class="lineage-node focus">${inner}</div>` : `<button class="lineage-node" data-action="family" data-id="${esc(g.id)}">${inner}<small class="lineage-link">この子の家系を見る →</small></button>`;
   }
   ACTIONS.family = function (t) {
+    ACTIVITIES.record(S, 'family');
     const all = window.LeopaFamily.sync(S), id = t && t.dataset.id || (selected() || {}).id, f = window.LeopaFamily.relatives(S, id);
     if (!f) return;
     const grandparents = [['父方の祖父', f.dad && all[f.dad.parents.dad]], ['父方の祖母', f.dad && all[f.dad.parents.mom]], ['母方の祖父', f.mom && all[f.mom.parents.dad]], ['母方の祖母', f.mom && all[f.mom.parents.mom]]];
@@ -3018,11 +3180,11 @@
   let decorCategory = 'all'; // 表示用の選択。セーブの項目は増やさない。
   const decorCategoryOf = (id, d) => (d.shelter || d.drink) ? 'care' : (d.soft || /^(plant|grass|flower|mushroom)/.test(id)) ? 'plant' : d.climb ? 'climb' : 'ornament';
   function interiorShop() {
-    const items = Object.entries(L3.DECOR).filter(([, d]) => !d.expo);
+    const items = Object.entries(L3.DECOR).filter(([, d]) => !d.expo && !d.rewardOnly);
     const filtered = items.filter(([id, d]) => decorCategory === 'all' || decorCategoryOf(id, d) === decorCategory);
     return `<h3 class="h3">家具 <small class="muted">買った家具は「もようがえ」で置けます</small></h3>
       <div class="decor-tabs" role="group" aria-label="家具の用途">${DECOR_CATEGORIES.map(([key, label]) => `<button type="button" aria-pressed="${decorCategory === key}" aria-controls="decorItems" class="${decorCategory === key ? 'on' : ''}" data-action="decorCategory" data-category="${key}">${label}<small>${items.filter(([id, d]) => key === 'all' || decorCategoryOf(id, d) === key).length}</small></button>`).join('')}</div>
-      <div id="decorItems" class="item-grid" aria-label="${DECOR_CATEGORIES.find(([key]) => key === decorCategory)[1]}">${filtered.map(([t, d]) => itemCard('decor', t, d, String(d.price))).join('')}</div>`;
+      <div id="decorItems" class="item-grid" aria-label="${DECOR_CATEGORIES.find(([key]) => key === decorCategory)[1]}">${filtered.map(([t, d]) => itemCard('decor', t, d, String(d.price))).join('')}</div><button class="act wide" data-action="stories">お願いでもらえる限定家具も見る</button>`;
   }
   Object.assign(ACTIONS, {
     interiorSection(t) {
@@ -3090,7 +3252,7 @@
       if (kind === 'decor') {
         const pr = decorPriceNow(id);
         info = `${S.decorInv[id] ? `手持ち ${S.decorInv[id]}個 ・ ` : ''}${v.shelter ? 'もぐって眠れるシェルター' : 'ケースに置ける家具'}${pr < v.price ? ` ・ ショー特価（いつもは ${v.price}）` : ''}`;
-        btn = `<button class="act primary" data-action="buyDecor" data-t="${id}" ${S.coins < pr ? 'disabled' : ''}>${pr} コインで買う</button>`;
+        btn = v.rewardOnly ? '<button class="act primary" data-action="stories">みんなのお願いで手に入れる</button>' : `<button class="act primary" data-action="buyDecor" data-t="${id}" ${S.coins < pr ? 'disabled' : ''}>${pr} コインで買う</button>`;
       } else {
         const has = cageOwn()[id], on = g && cageOf(g)[kind] === id;
         info = kind === 'size' ? '同じ大きさのレオパと並べた見本です' : 'レギュラーサイズの見本です';
@@ -3109,6 +3271,7 @@
     },
     buyDecor(t) {
       const d = L3.DECOR[t.dataset.t];
+      if (d?.rewardOnly) { toast('この家具は、みんなのお願いでもらえます'); return; }
       const pr = d ? decorPriceNow(t.dataset.t) : 0;
       if (!d || S.coins < pr) { toast('コインが足りません'); return; }
       S.coins -= pr;
@@ -3182,6 +3345,7 @@
         try { img = tank.snapshot(); } catch (e) { toast('写真をとれませんでした'); return; }
         let pid;
         try { pid = putPhoto(img); } catch (err) { toast('保存できる写真がいっぱいです。いらない写真を消してね'); return; }
+        ACTIVITIES.record(S, 'photo');
         a.entries.push({ t: Date.now(), text: `${stageOf(g) === 'baby' ? 'ベビー' : stageOf(g) === 'young' ? 'ヤング' : 'アダルト'}のころの一枚`, pid });
         sfx('tap');
         try { save(); } catch (e) { /* 保存がいっぱいでも遊べる */ }
@@ -3599,6 +3763,7 @@
       if (a.entries.filter(e => e.img || e.pid).length >= MAX_PHOTOS) { toast(`アルバムは${MAX_PHOTOS}枚までです。いらない写真を消してね`); return; }
       let pid;
       try { pid = putPhoto(shot.img); } catch (err) { toast('保存できる写真がいっぱいです'); return; }
+      ACTIVITIES.record(S, 'photo');
       a.entries.push({ t: Date.now(), text: `${weightOf(g)}g のころの一枚`, pid });
       save(); toast('アルバムに残しました'); sfx('coin'); closeSheet();
     },
@@ -4114,7 +4279,7 @@
         return o;
       });
       // 用品：家具10種類がいつもの半額
-      const ids = Object.keys(L3.DECOR).filter(t => !L3.DECOR[t].expo).sort((a, b) => strHash(info.key + a) - strHash(info.key + b)).slice(0, 10);
+      const ids = Object.keys(L3.DECOR).filter(t => !L3.DECOR[t].expo && !L3.DECOR[t].rewardOnly).sort((a, b) => strHash(info.key + a) - strHash(info.key + b)).slice(0, 10);
       // ほかのお客さんがおむかえしていく順番
       const order = [0, 1, 2, 3, 4, 5].sort((a, b) => strHash(info.key + 'o' + a) - strHash(info.key + 'o' + b));
       S.expo = { day: info.key, ticket: false, stock, order, others: 0, decor: ids, theme: EXPO_THEMES[strHash(info.key) % EXPO_THEMES.length], booth: [], sold: [], champ: false, seminar: false, noticed: false, done: false };

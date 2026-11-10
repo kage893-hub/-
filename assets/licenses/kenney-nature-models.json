@@ -1,0 +1,43 @@
+{
+  "source": "https://kenney.nl/assets/nature-kit",
+  "author": "Kenney",
+  "package": "Nature Kit 2.1",
+  "license": "CC0-1.0",
+  "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "models": [
+    "cactus_short",
+    "tree_palmShort",
+    "cliff_steps_rock",
+    "plant_bushDetailed",
+    "flower_purpleC",
+    "mushroom_redGroup",
+    "rock_smallFlatC",
+    "sign",
+    "statue_obelisk",
+    "flower_yellowC",
+    "bridge_wood",
+    "stump_roundDetailed",
+    "path_wood",
+    "statue_ring",
+    "crop_pumpkin",
+    "crops_bambooStageB"
+  ],
+  "changes": "glTFメッシュをdecor-kit.binに格納。大きさ・一部の高さ・配色をゲームに合わせて調整。花は3株ずつ組み合わせ。",
+  "paletteSRGB": {
+    "leafsGreen": "527a39",
+    "grass": "698848",
+    "woodBark": "745036",
+    "wood": "a87443",
+    "woodDark": "5a3d2b",
+    "woodInner": "d2ac71",
+    "dirt": "8d6449",
+    "dirtDark": "68503d",
+    "stone": "a1a29a",
+    "stoneDark": "686c69",
+    "colorPurple": "8a62b1",
+    "colorYellow": "e9b135",
+    "colorRed": "ad493b",
+    "leafsFall": "c9832d",
+    "_defaultMat": "eae2d3"
+  }
+}

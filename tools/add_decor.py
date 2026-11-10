@@ -85,6 +85,8 @@ for spec in SPECS:
                 uri = j['images'][j['textures'][ti]['source']]['uri']
                 if not uri.startswith('data:'): img, alpha = add_image(os.path.join(d, uri))
             mats[mname] = {'img': img, 'alpha': alpha or mt.get('alphaMode') == 'MASK', 'double': bool(mt.get('doubleSided'))}
+            if img is None:
+                mats[mname]['color'] = mt.get('pbrMetallicRoughness', {}).get('baseColorFactor', [1, 1, 1, 1])[:3]
             if mt.get('alphaMode') == 'BLEND': mats[mname]['glass'] = True
         big = len(P) > 65535
         prims.append({'mat': mname,
