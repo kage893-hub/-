@@ -18,11 +18,12 @@
     { x: 1, name: '1倍速', note: '実際のレオパの成長速度', cost: 0 },
     { x: 3, name: '3倍速', note: 'おすすめの速度', cost: 0 },
     { x: 12, name: '12倍速', note: 'ブリーダーモード', cost: 300 },
+    { x: 36, name: '36倍速', note: '100コインで実時間24時間。アプリを閉じていても期限は進みます', cost: 100, timed: true },
   ];
   const speedX = () => (S && S.speed) || 3;
   // 実際の日数をゲーム内の時間に直す（抱卵・ふ化・おやすみも成長と同じ速さで進む）
   const realDays = d => d * DAYMS / speedX();
-  const EGG_CAP = 12, CASE_MAX = 100;
+  const EGG_CAP = 12, CASE_MAX = 500;
 
   const FOODS = {
     cricketS: { name: 'コオロギS', hunger: 9, growth: 2, price: 4, pack: 10, desc: '小さめのコオロギ。ベビーにちょうどいい大きさ' },
@@ -257,6 +258,9 @@
     for (const g of s.geckos) if (g.gravid && g.gravid.dad && g.gravid.dad.poly && g.gravid.dad.poly.mel == null) g.gravid.dad.poly.mel = 8;
     s.learned = s.learned || {};
     s.sitter = normalizeSitter(s.sitter);
+    s.speed36Until = Number.isFinite(s.speed36Until) && s.speed36Until > 0 ? s.speed36Until : 0;
+    s.speedBefore36 = [1, 3, 12].includes(s.speedBefore36) && (s.speedBefore36 !== 12 || s.speedOpen) ? s.speedBefore36 : 3;
+    if (s.speed === 36 && !s.speed36Until) s.speed = s.speedBefore36;
     window.LeopaActivities.normalize(s);
     for (const g of s.geckos) if (!Number.isFinite(g.emptyH) || g.emptyH < 0) g.emptyH = 0;
     const study = s.study || {};
@@ -355,6 +359,7 @@
       lastTick: Date.now(), nextId: 1, welcomed: false, stats: { hatched: 0, rehomed: 0 },
       calc: 10, dust: true, layBox: [], learned: {}, starterFlag: true,
       clinicApology: { visits: 0, coins: 0, at: Date.now(), announced: true },
+      speed36Until: 0, speedBefore36: 3,
       sitter: null, favorites: [], breedingGoals: [], stories: {}, playpen: { slots: window.LeopaActivities.DEFAULT_PEN.map(t => ({ t, rot: 0 })) },
     };
     // はじめはショップでレオパを選ぶところから
@@ -419,7 +424,25 @@
   }
 
   // ---------- 時間の流れ（アプリを閉じていた間もまとめて進める）
+  // 倍速の期限で分割し、留守中も36倍速を期限後に適用しない。
+  function changeSpeed(next, at) {
+    const ratio = speedX() / next;
+    const rescale = (o, key) => { if (o && o[key] > at) o[key] = at + (o[key] - at) * ratio; };
+    for (const g of S.geckos) { rescale(g.gravid, 'layAt'); rescale(g, 'restUntil'); }
+    for (const e of S.eggs) rescale(e, 'hatchAt');
+    for (const e of S.layBox || []) e.hatchAt = e.laidAt + (e.hatchAt - e.laidAt) * ratio;
+    S.speed = next;
+  }
   function simulate(now) {
+    if (S.speed36Until && now >= S.speed36Until) {
+      const until = S.speed36Until;
+      if (S.lastTick < until) simulateWithSitter(until);
+      if (S.speed === 36) changeSpeed(S.speedBefore36 || 3, until);
+      S.speed36Until = 0;
+    }
+    simulateWithSitter(now);
+  }
+  function simulateWithSitter(now) {
     const sitter = S.sitter;
     if (!sitter || sitter.finished || now < sitter.startedAt || S.lastTick >= sitter.until || now < S.lastTick) {
       simulateCore(now);
@@ -1723,16 +1746,25 @@
         <button class="act primary" data-action="closeSheet">とじる</button>`);
     },
     setSpeed(t) {
-      settleSitter();
+      const now = Date.now(); simulate(now);
       const v = SPEEDS.find(x => x.x === Number(t.dataset.x));
-      if (!v) return;
-      if (v.cost && !S.speedOpen) {
-        if (S.coins < v.cost) { toast('コインが足りません'); return; }
-        S.coins -= v.cost; S.speedOpen = true;
+      if (!v || speedX() === v.x) return;
+      if (v.timed) {
+        if (!(S.speed36Until > now)) {
+          if (S.coins < v.cost) { toast('コインが足りません'); return; }
+          S.coins -= v.cost; S.speed36Until = now + DAYMS;
+        }
+        S.speedBefore36 = speedX();
+      } else {
+        if (v.cost && !S.speedOpen) {
+          if (S.coins < v.cost) { toast('コインが足りません'); return; }
+          S.coins -= v.cost; S.speedOpen = true;
+        }
+        S.speedBefore36 = v.x;
       }
-      S.speed = v.x;
+      changeSpeed(v.x, now);
       toast(`せいちょうの速さを${v.name}にしました`);
-      renderView(); save();
+      renderView(); saveNow();
     },
     buyCalc() {
       settleSitter();
@@ -3135,14 +3167,14 @@
   function speedShop() {
     return `<h3 class="h3">せいちょうの速さ <small class="muted">ごはん・抱卵・ふ化の進み方もかわります</small></h3>
       <div class="list">${SPEEDS.map(v => {
-        const open = !v.cost || S.speedOpen;
+        const open = v.timed ? S.speed36Until > Date.now() : !v.cost || S.speedOpen;
         const on = speedX() === v.x;
         return `<button class="row${on ? ' on' : ''}" data-action="setSpeed" data-x="${v.x}" ${on || (!open && S.coins < v.cost) ? 'disabled' : ''}>
-          <span class="row-main"><b>${v.name}${on ? '（いま）' : ''}</b><small>${v.note}</small></span>
+          <span class="row-main"><b>${v.name}${on ? '（いま）' : ''}</b><small>${v.note}${v.timed && open ? `<br>のこり ${fmtLeft(S.speed36Until - Date.now())}` : ''}</small></span>
           ${open ? '' : `<span class="row-side price">${v.cost}</span>`}
         </button>`;
       }).join('')}</div>
-      <p class="muted small">速いほど、おなかも早くすきます（3倍速で約1.7倍、12倍速で約3.5倍）。</p>`;
+      <p class="muted small">速いほど、おなかも早くすきます（3倍速で約1.7倍、12倍速で約3.5倍、36倍速で6倍）。36倍速は期限が来ると、直前に選んだ通常の速度に戻ります。自動で購入しません。</p>`;
   }
   // 見本写真：撮りおわっていればそのまま、まだなら後で1枚ずつ撮って差しこむ
   function thumb(kind, id, cls) {

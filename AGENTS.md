@@ -12,7 +12,7 @@
 | ファイル | 中身 |
 |---|---|
 | index.html / style.css | 画面 |
-| sw.js | オフライン用キャッシュ。**ファイルを変えたら `VERSION` を上げる**（いまは `leopa-v129`）。新しいファイルは `FILES` にも足す |
+| sw.js | オフライン用キャッシュ。**ファイルを変えたら `VERSION` を上げる**（いまは `leopa-v130`）。新しいファイルは `FILES` にも足す |
 | js/app.js | ゲーム本体（状態 `S`、`simulate`、各画面、`ACTIONS`、ショー、ライセンス、カード、クレジット `credits()`） |
 | js/scene3d.js | 3D（`createTank`・`createViewer`・`hatchScene`・`photo`、ケース `makeCage`・`CAGE_THEMES`、家具 `DECOR`、模様 `skinCanvas`） |
 | js/genetics.js | 遺伝（`DEX` 図鑑30種、ライン遺伝のポリジェニック値） |
@@ -54,12 +54,15 @@
 
 - Kenney「Nature Kit 2.1」（CC0）の16モデルを追加。出典・モデル名・配色は `assets/licenses/kenney-nature-models.json`、配布元のライセンスは `assets/licenses/kenney-nature.txt`。コルクのトンネルはコードで作る。追加家具は17種類（ショップ14種、連続依頼限定3種）。
 
+- ケースの上限は500匹。拡張価格の上限は200コイン。36倍速は100コインで実時間24時間、`speed36Until` と `speedBefore36` を保存し `migrate()` で補完する。期限をまたぐ留守時間は分割し、期限後は直前の通常速度に戻す。自動購入はしない。速度変更時は卵・抱卵・繁殖休憩の残り時間も換算する。
+
 ## 動作確認
 - サーバー：`npx http-server -p 8123 -s -c-1 .`（つながらなくなったら起動しなおす）
 - Playwright ＋ Chromium、画面サイズ 390×844。swiftshader で 3D はとても遅い。
   - 起動の引数：`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`
-- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition・study・family・behavior・movement・pairplan・sitter・sorting・names・dex・activities・playpen）。最後の行が `[]` ならエラーなし。
-  - **ふだんは、変更に関係するテストと画面の確認だけを流す**（2026-11-04 からの決まり）。全18本は、家具・3D・セーブの形など広く影響する変更のときに流す。
+- 回帰テスト：`sh tools/tests/run.sh [出力先]`（first・kids2・pairfast・card・expo3・img・nutrition・study・family・behavior・movement・pairplan・sitter・sorting・names・dex・activities・playpen・speed36）。最後の行が `[]` ならエラーなし。
+  - **ふだんは、変更に関係するテストと画面の確認だけを流す**（2026-11-04 からの決まり）。全19本は、家具・3D・セーブの形など広く影響する変更のときに流す。
+  - speed36 は100コインの購入、実時間の期限、切替と再購入、留守時間の分割、卵・抱卵・休憩の換算、旧セーブ、保存、500匹を検査する。
   - activities は100匹の検索・絞り込み、お気に入り、繁殖目標の保存と孵化、連続依頼、重複報酬防止、限定家具、旧セーブ、ひらがなを検査する。playpen は探索・配置・ケースの保持・依頼の写真報酬・家具のある場所のふれあい・指の中断・トンネル通過・追加家具17種を検査する。
   - dex は追加スノーのあるレッドアイアルビノ・ラプターの登録、旧セーブの補完、未入手の候補を登録しないこと、保存と孵化を検査する。
   - sorting は体重・色・名前・日付の並び替え、同値順序、選択維持、手動調整、保存、100匹、ひらがなを検査する。names は300種類、モルフ別の候補、重複回避、おむかえ・購入・孵化での仮名と手動変更を検査する。
