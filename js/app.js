@@ -1785,6 +1785,16 @@
       toast(`せいちょうの速さを${v.name}にしました`);
       renderView(); saveNow();
     },
+    extendSpeed36() {
+      const now = Date.now(); simulate(now);
+      const cost = SPEEDS.find(v => v.x === 36).cost;
+      if (!(S.speed36Until > now)) { toast('36倍速を購入してから延長できます'); renderView(); saveNow(); return; }
+      if (S.coins < cost) { toast('コインが足りません'); return; }
+      S.coins -= cost;
+      S.speed36Until += DAYMS;
+      toast('36倍速の期限を実時間24時間延長しました');
+      renderView(); saveNow();
+    },
     buyCalc() {
       settleSitter();
       if (S.coins < CALC.price) { toast('コインが足りません'); return; }
@@ -3175,7 +3185,7 @@
         return `<button class="row${on ? ' on' : ''}" data-action="setSpeed" data-x="${v.x}" ${on || (!open && S.coins < v.cost) ? 'disabled' : ''}>
           <span class="row-main"><b>${v.name}${on ? '（いま）' : ''}</b><small>${v.note}${v.timed && open ? `<br>のこり ${fmtLeft(S.speed36Until - Date.now())}` : ''}</small></span>
           ${open ? '' : `<span class="row-side price">${v.cost}</span>`}
-        </button>`;
+        </button>${v.timed && open ? `<button class="row" data-action="extendSpeed36" ${S.coins < v.cost ? 'disabled' : ''}><span class="row-main"><b>36倍速を24時間延長する</b><small>残り時間に実時間24時間を追加。何度でも延長できます</small></span><span class="row-side price">${v.cost}</span></button>` : ''}`;
       }).join('')}</div>
       <p class="muted small">速いほど、おなかも早くすきます（3倍速で約1.7倍、12倍速で約3.5倍、36倍速で6倍）。36倍速は期限が来ると、直前に選んだ通常の速度に戻ります。自動で購入しません。</p>`;
   }

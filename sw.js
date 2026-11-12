@@ -1,6 +1,6 @@
 /* オフラインでも遊べるように、アプリ本体をキャッシュする。
  * ファイルを変えたら VERSION を上げること。 */
-const VERSION = 'leopa-v135';
+const VERSION = 'leopa-v136';
 const FILES = [
   'assets/img/cage-zen-back.webp', 'assets/img/cage-zen-floor.webp', 'assets/img/cage-zen-frame.webp', 'assets/img/cage-greenhouse-back.webp', 'assets/img/cage-greenhouse-floor.webp', 'assets/img/cage-greenhouse-frame.webp', 'assets/img/cage-coast-back.webp', 'assets/img/cage-coast-floor.webp', 'assets/img/cage-coast-frame.webp', 'assets/img/cage-loft-back.webp', 'assets/img/cage-loft-floor.webp', 'assets/img/cage-loft-frame.webp', 'assets/img/cage-birch-back.webp', 'assets/img/cage-birch-floor.webp', 'assets/img/cage-birch-frame.webp',
   'assets/licenses/generated-cages.json',
