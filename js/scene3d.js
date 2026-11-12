@@ -2040,7 +2040,7 @@
           return Promise.all(KIT.data.images.map((im, i) => new Promise(res => {
             const url = URL.createObjectURL(new Blob([new Uint8Array(buf, KIT.base + im.data[0], im.data[1])], { type: im.mime }));
             const img = new Image();
-            img.onload = () => { const t = new T.Texture(img); t.encoding = T.sRGBEncoding; t.flipY = false; t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 4; t.needsUpdate = true; KIT.tex[i] = t; res(); };
+            img.onload = () => { const t = new T.Texture(img); t.encoding = im.linear ? T.LinearEncoding : T.sRGBEncoding; t.flipY = false; t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 4; t.needsUpdate = true; KIT.tex[i] = t; URL.revokeObjectURL(url); res(); };
             img.onerror = () => res();
             img.src = url;
           })));
@@ -2055,6 +2055,16 @@
     if (KIT.mats[name]) return KIT.mats[name];
     const m = KIT.data.mats[name] || {};
     let map = m.img != null ? KIT.tex[m.img] : null;
+    if (m.pbr) {
+      const normal = m.normal != null ? KIT.tex[m.normal] : null, arm = m.arm != null ? KIT.tex[m.arm] : null;
+      const mat = new T.MeshStandardMaterial({ map, normalMap: normal, normalScale: new T.Vector2(.7, .7).multiplyScalar(m.normalScale == null ? 1 : m.normalScale),
+        roughnessMap: arm, metalnessMap: arm, roughness: m.roughness, metalness: m.metalness,
+        alphaTest: m.alpha ? .45 : 0, side: m.alpha || m.double ? T.DoubleSide : T.FrontSide,
+        transparent: !!m.glass, opacity: m.glass ? .22 : 1, depthWrite: !m.glass });
+      mat.color.setRGB(...(m.color || [1, 1, 1]));
+      mat.userData.shared = true;
+      return (KIT.mats[name] = mat);
+    }
     if (!map && /Bark|Wood/i.test(name)) {
       // 樹皮のテクスチャは同梱されていないので、白っぽい流木の木肌を描く
       const c = document.createElement('canvas'); c.width = 256; c.height = 512;
@@ -2561,7 +2571,7 @@
   // Kenney Nature Kit 2.1（CC0）。低ポリゴンの原モデルを、ケース用の大きさに調整。
   Object.assign(DECOR, {
     knCactus: { name: '小さなサボテン', price: 18, r: 0.55, soft: true, desc: '丸い枝が広がるサボテンの飾り', build: () => kitOr('KN_cactus_short', 1.1, null, () => OLD_DECOR.plant.build()) },
-    knPalm: { rewardOnly: true, name: '小さなヤシ', price: 30, r: 0.8, soft: true, desc: '南国の庭のような、葉を広げたヤシの飾り', build: () => kitOr('KN_tree_palmShort', 2.3, null, () => OLD_DECOR.plant.build()) },
+    knPalm: { name: '小さなヤシ', price: 30, r: 0.8, soft: true, desc: '南国の庭のような、葉を広げたヤシの飾り', build: () => kitOr('KN_tree_palmShort', 2.3, null, () => OLD_DECOR.plant.build()) },
     knBush: { name: '葉っぱの茂み', price: 18, r: 0.7, soft: true, desc: '重なる葉っぱがアクセントになる緑の飾り', build: () => kitOr('KN_plant_bushDetailed', 1.7, null, () => OLD_DECOR.plant.build()) },
     knPurple: { name: '紫の花壇', price: 20, r: 0.5, soft: true, desc: '小さな紫の花が集まった花壇の飾り', build: () => { const g = new T.Group(); for (const [x, z, size] of [[-0.3, 0.12, 0.55], [0.3, 0.08, 0.6], [0, -0.32, 0.65]]) { const f = kitOr('KN_flower_purpleC', size, null, () => OLD_DECOR.plant.build()); f.position.set(x, 0, z); g.add(f); } return g; } },
     knYellow: { name: '黄色の花壇', price: 20, r: 0.5, soft: true, desc: '明るい黄色の花が集まった花壇の飾り', build: () => { const g = new T.Group(); for (const [x, z, size] of [[-0.3, 0.12, 0.55], [0.3, 0.08, 0.6], [0, -0.32, 0.65]]) { const f = kitOr('KN_flower_yellowC', size, null, () => OLD_DECOR.plant.build()); f.position.set(x, 0, z); g.add(f); } return g; } },
@@ -2570,8 +2580,8 @@
     knSteps: { name: '草の小さな階段', price: 35, r: 1.35, climb: true, desc: 'ゆるい段差を上れる、草色の階段', build: () => kitOr('KN_cliff_steps_rock', 2.7, { h: 0.26 }, () => OLD_DECOR.stone.build()) },
     knBridge: { name: '庭の木橋', price: 40, r: 1.4, climb: true, desc: '上を歩ける、低い木の橋', build: () => kitOr('KN_bridge_wood', 3.1, { h: 0.55 }, () => OLD_DECOR.stone.build()) },
     knStump: { name: '年輪の切り株', price: 25, r: 1.1, climb: true, desc: '丸い年輪が見える、低い切り株', build: () => kitOr('KN_stump_roundDetailed', 2.3, { h: 0.48 }, () => OLD_DECOR.rock.build()) },
-    knSign: { rewardOnly: true, name: 'お庭の道しるべ', price: 18, r: 0.45, desc: 'お庭の入口に置ける木の看板', build: () => kitOr('KN_sign', 0.9, null, () => OLD_DECOR.log.build()) },
-    knObelisk: { rewardOnly: true, name: '古代の石碑', price: 35, r: 0.45, desc: '古い遺跡のような小さな石碑', build: () => kitOr('KN_statue_obelisk', 0.9, null, () => OLD_DECOR.rock.build()) },
+    knSign: { name: 'お庭の道しるべ', price: 18, r: 0.45, desc: 'お庭の入口に置ける木の看板', build: () => kitOr('KN_sign', 0.9, null, () => OLD_DECOR.log.build()) },
+    knObelisk: { name: '古代の石碑', price: 35, r: 0.45, desc: '古い遺跡のような小さな石碑', build: () => kitOr('KN_statue_obelisk', 0.9, null, () => OLD_DECOR.rock.build()) },
     knBamboo: { name: '小さな竹林', price: 25, r: 0.5, soft: true, desc: 'すっと伸びる竹の飾り。和風の庭にも', build: () => kitOr('KN_crops_bambooStageB', 0.9, { h: 0.8 }, () => OLD_DECOR.plant.build()) },
     knPumpkin: { name: 'かぼちゃの置物', price: 20, r: 0.6, desc: '丸いオレンジ色のかぼちゃの飾り', build: () => kitOr('KN_crop_pumpkin', 1.3, null, () => OLD_DECOR.stone.build()) },
     knRing: { name: '輪の遺跡', price: 35, r: 0.65, desc: '丸い輪が目印の、石のオブジェ', build: () => kitOr('KN_statue_ring', 1.4, null, () => OLD_DECOR.rock.build()) },
@@ -2584,6 +2594,55 @@
       const mat = phys('#986640', { roughness: 0.95, bumpMap: sandTex(), bumpScale: 0.05 }); mat.color.convertSRGBToLinear();
       return new T.Mesh(geo, mat);
     } },
+  });
+
+  // Poly Haven（CC0）の実物モデルを飼育用品に加工した、ケージ別の家具。
+  function themedDecor(id, role) {
+    const key = 'THM_' + id;
+    if (!kitHas(key)) return role === 'dish' ? OLD_DECOR.dish.build() : role === 'wet' ? OLD_DECOR.wet.build() : OLD_DECOR.stone.build();
+    const it = KIT.data.items[key], g = new T.Group();
+    g.add(buildKit(key, Math.max(it.size[0], it.size[2])));
+    const care = it.care;
+    if (care && care.water) {
+      const w = care.water;
+      let geo;
+      if (w.points) {
+        const shape = new T.Shape(w.points.map(([x, z]) => new T.Vector2(x, -z)));
+        geo = new T.ShapeGeometry(shape); geo.rotateX(-Math.PI / 2);
+      } else geo = new T.CircleGeometry(w.r, 48).rotateX(-Math.PI / 2);
+      const water = new T.Mesh(geo, phys('#5D9CB6', { roughness: .035, clearcoat: 1, transparent: true, opacity: .82, depthWrite: false }));
+      water.material.color.convertSRGBToLinear(); water.position.y = w.y;
+      water.name = role === 'dish' ? 'water' : 'wetWater'; water.userData.r = w.r;
+      g.add(water);
+    }
+    return g;
+  }
+  Object.assign(DECOR, {
+    dishZen: { name: '木彫りの水鉢', price: 35, r: 1, drink: true, climb: true, theme: 'zenGarden', desc: '細かな彫りのある、浅い木の水鉢。和の庭によく合います', build: () => themedDecor('dishZen', 'dish') },
+    wetZen: { name: '木目のウェットシェルター', price: 65, r: 1.65, shelter: {x:0,z:.35}, theme: 'zenGarden', desc: '古い木の器を使った隠れ家。木を削った屋根のくぼみに水をためて中をしっとり', build: () => themedDecor('wetZen', 'wet') },
+    zenLantern: { name: '木枠の灯籠', price: 35, r: .55, theme: 'zenGarden', desc: '木目と金具が味わい深い、小さな灯籠の飾り', build: () => themedDecor('zenLantern') },
+    zenMossRock: { name: '苔むした庭石', price: 30, r: 1.1, climb: true, theme: 'zenGarden', desc: '苔と岩肌が見える、ひと休み用の低い庭石', build: () => themedDecor('zenMossRock') },
+    zenVase: { name: '古陶の花びん', price: 30, r: .45, theme: 'zenGarden', desc: '青い絵付けのある陶器。石庭に静かな彩りを添える飾り', build: () => themedDecor('zenVase') },
+    dishRain: { name: 'ホーローの水入れ', price: 35, r: 1, drink: true, climb: true, theme: 'rainGarden', desc: '持ち手のついたホーローの器を、浅い水入れにしました', build: () => themedDecor('dishRain', 'dish') },
+    wetRain: { name: '素焼きのウェットシェルター', price: 60, r: 1.65, shelter: {x:0,z:.35}, theme: 'rainGarden', desc: '植木鉢を使った素焼きの隠れ家。本体とつながる屋根のくぼみに水をためられます', build: () => themedDecor('wetRain', 'wet') },
+    rainPlant: { name: '温室の鉢植え', price: 30, r: .8, soft: true, theme: 'rainGarden', desc: '葉の模様と丸い素焼き鉢が楽しめる、温室の植物の飾り', build: () => themedDecor('rainPlant') },
+    rainFern: { name: 'しっとりシダ', price: 25, r: .8, soft: true, theme: 'rainGarden', desc: '細かな葉がふんわり広がるシダの飾り', build: () => themedDecor('rainFern') },
+    rainBranch: { name: '温室の横たわる枝', price: 35, r: 1.5, climb: true, theme: 'rainGarden', desc: '雨の庭に似合う、上を歩ける低い枝', build: () => themedDecor('rainBranch') },
+    dishCoast: { name: '砂色の陶器の水鉢', price: 35, r: 1, drink: true, climb: true, theme: 'coralCoast', desc: '古い陶器を使った、海辺の砂になじむ浅い水鉢', build: () => themedDecor('dishCoast', 'dish') },
+    wetCoast: { name: '海岸岩のウェットシェルター', price: 65, r: 1.7, shelter: {x:0,z:.35}, theme: 'coralCoast', desc: '海岸の岩に入口を作った隠れ家。岩を削った屋根のくぼみで湿度を保ちます', build: () => themedDecor('wetCoast', 'wet') },
+    coastShell: { name: '海辺の巻き貝', price: 25, r: .75, theme: 'coralCoast', desc: '細かな筋と淡い色合いの巻き貝の飾り', build: () => themedDecor('coastShell') },
+    coastRock: { name: '海岸の平たい岩', price: 30, r: 1.2, climb: true, theme: 'coralCoast', desc: '砂と岩が重なった、低いひなたぼっこの場所', build: () => themedDecor('coastRock') },
+    coastWood: { name: '海辺の白い流木', price: 35, r: 1.6, climb: true, theme: 'coralCoast', desc: '白く風化した流木を低く横たえた、海辺の飾り', build: () => themedDecor('coastWood') },
+    dishLoft: { name: '真ちゅうの水鉢', price: 40, r: 1, drink: true, climb: true, theme: 'brickLoft', desc: '使い込んだ真ちゅうの器。ロフトの金属の枠によく合います', build: () => themedDecor('dishLoft', 'dish') },
+    wetLoft: { name: '木箱のウェットシェルター', price: 65, r: 1.65, shelter: {x:0,z:.35}, theme: 'brickLoft', desc: '古い木箱を使った隠れ家。天板をくりぬいた水ためで中をしっとり', build: () => themedDecor('wetLoft', 'wet') },
+    loftLamp: { name: 'パイプのランプ', price: 40, r: .6, theme: 'brickLoft', desc: 'パイプと古い電球を組み合わせたランプの飾り', build: () => themedDecor('loftLamp') },
+    loftCrate: { name: '小さな木箱の台', price: 30, r: .95, climb: true, theme: 'brickLoft', desc: '古い金具と木目が見える、上に乗れる低い木箱', build: () => themedDecor('loftCrate') },
+    loftToolbox: { name: '古い工具箱', price: 30, r: .9, theme: 'brickLoft', desc: '緑の塗装と真ちゅうの留め具が残る、工具箱の飾り', build: () => themedDecor('loftToolbox') },
+    dishBirch: { name: '丸太色の水鉢', price: 35, r: 1, drink: true, climb: true, theme: 'birchForest', desc: '木の節や自然なふちが残る、森に似合う浅い水鉢', build: () => themedDecor('dishBirch', 'dish') },
+    wetBirch: { name: '切り株のウェットシェルター', price: 65, r: 1.65, shelter: {x:0,z:.35}, theme: 'birchForest', desc: '切り株をくりぬいた森の隠れ家。切り株の上をくりぬいた水ためで湿度を保ちます', build: () => themedDecor('wetBirch', 'wet') },
+    birchStump: { name: '森の低い切り株', price: 30, r: 1.15, climb: true, theme: 'birchForest', desc: '樹皮と切り口の残る、上で休める低い切り株', build: () => themedDecor('birchStump') },
+    birchRoots: { name: '森の根のかくれ道', price: 30, r: 1.3, climb: true, theme: 'birchForest', desc: '地面に広がる木の根。低い段差をのんびり探検できます', build: () => themedDecor('birchRoots') },
+    birchMossRock: { name: '木陰の苔石', price: 30, r: 1, climb: true, theme: 'birchForest', desc: '木陰になじむ苔の岩。森の小さな休憩場所に', build: () => themedDecor('birchMossRock') },
   });
 
   const DEFAULT_DECOR = [{ t: 'wet', x: -4.4, z: -2.6, rot: 0 }, { t: 'dish', x: -5.0, z: 3.2, rot: 0 }, { t: 'plant', x: 1.8, z: -3.8, rot: 0 }];
@@ -2603,6 +2662,11 @@
     desert: { name: 'デザート', price: 120, desc: '赤い砂と岩の背景で、ふるさとの荒野ふうに', floor: 'sand', tint: '#E7AE7E', frame: '#3A2E26', back: 'rock', backImg: 'assets/img/cage-desert-back.webp', floorImg: 'assets/img/cage-desert-floor.webp' },
     dino: { name: '恐竜時代', price: 150, desc: '火山の背景とシダの森、足あとの残る大地。太古の世界へタイムスリップ', floor: 'dinofloor', tint: '#ffffff', frame: '#5B4A3A', back: 'volcano', thick: true, dino: true, backFull: true, backImg: 'assets/img/cage-dino-back.webp', floorImg: 'assets/img/cage-dino-floor.webp' },
     candy: { name: 'おかしの家', price: 150, desc: 'クッキーの床、チョコの壁、キャンディの柱。あまーいおうち', floor: 'cookie', tint: '#ffffff', frame: '#F7A8C4', back: 'choco', thick: true, candy: true, backImg: 'assets/img/cage-candy-back.webp', floorImg: 'assets/img/cage-candy-floor.webp', floorScale: 6 },
+    zenGarden: { name: '和の石庭', price: 300, furniture: ['dishZen', 'wetZen', 'zenLantern', 'zenMossRock', 'zenVase'], desc: 'ひのきの枠と砂紋の床。苔と紅葉を眺める、静かな和の庭', floor: 'sand', tint: '#ffffff', frame: '#B28A52', back: 'wood', thick: true, backFull: true, backTint: '#E1DCD3', floorScale: 4.8, trimStyle: 'zen', frameScale: 1.8, frameMetal: 0, frameRough: 0.8, frameTint: '#DDD3C3', backImg: 'assets/img/cage-zen-back.webp', floorImg: 'assets/img/cage-zen-floor.webp', frameImg: 'assets/img/cage-zen-frame.webp' },
+    rainGarden: { name: '雨の温室', price: 300, furniture: ['dishRain', 'wetRain', 'rainPlant', 'rainFern', 'rainBranch'], desc: '深緑の金属フレームと真ちゅう。雨の窓越しにシダを眺める温室', floor: 'sand', tint: '#ffffff', frame: '#214B3B', back: 'wood', thick: true, backFull: true, floorScale: 4, trimStyle: 'rain', frameScale: 2, frameMetal: 0.25, frameRough: 0.55, frameTint: '#BFCDBF', backImg: 'assets/img/cage-greenhouse-back.webp', floorImg: 'assets/img/cage-greenhouse-floor.webp', frameImg: 'assets/img/cage-greenhouse-frame.webp' },
+    coralCoast: { name: '珊瑚の海辺', price: 300, furniture: ['dishCoast', 'wetCoast', 'coastShell', 'coastRock', 'coastWood'], desc: '白い流木の枠と貝殻まじりの砂。珊瑚色とターコイズで彩る海辺', floor: 'sand', tint: '#ffffff', frame: '#E0DBCC', glass: '#D7EBEF', back: 'wood', thick: true, backFull: true, floorScale: 4.4, trimStyle: 'coast', frameScale: 2.2, frameMetal: 0, frameRough: 0.8, frameTint: '#D9DFDB', backImg: 'assets/img/cage-coast-back.webp', floorImg: 'assets/img/cage-coast-floor.webp', frameImg: 'assets/img/cage-coast-frame.webp' },
+    brickLoft: { name: 'レンガのロフト', price: 300, furniture: ['dishLoft', 'wetLoft', 'loftLamp', 'loftCrate', 'loftToolbox'], desc: '黒い鉄枠と銅の金具。レンガの壁とヘリンボーンの木の床があるロフト', floor: 'sand', tint: '#ffffff', frame: '#302E29', back: 'wood', thick: true, backFull: true, floorScale: 4.2, trimStyle: 'loft', frameScale: 2.4, frameMetal: 0.4, frameRough: 0.6, frameTint: '#CECECE', backImg: 'assets/img/cage-loft-back.webp', floorImg: 'assets/img/cage-loft-floor.webp', frameImg: 'assets/img/cage-loft-frame.webp' },
+    birchForest: { name: '白樺の森', price: 300, furniture: ['dishBirch', 'wetBirch', 'birchStump', 'birchRoots', 'birchMossRock'], desc: '白樺の樹皮の枠と葉もようのリネン。木漏れ日の森に包まれるケージ', floor: 'sand', tint: '#ffffff', frame: '#D4CEC1', back: 'wood', thick: true, backFull: true, backTint: '#E6E0D5', floorScale: 5.4, trimStyle: 'birch', frameScale: 1.8, frameMetal: 0, frameRough: 0.9, frameTint: '#D9D5CD', backImg: 'assets/img/cage-birch-back.webp', floorImg: 'assets/img/cage-birch-floor.webp', frameImg: 'assets/img/cage-birch-frame.webp' },
     // レプタイルズショーの会場でだけ買える
     expoGold: { name: 'ショー限定・ゴールド', price: 500, desc: 'チャンピオンの気分。金彩の岩壁とアールデコの飾り枠、黄金の砂と水晶のきらめき（レプタイルズショー限定）', floor: 'sand', tint: '#FFF1D2', frame: '#9A6A0E', back: 'wood', thick: true, expo: true, backFull: true, backTint: '#94733F', luxe: { metal: '#A8740E', trim: '#D9A52A', gem: '#E8F6FF', emblem: 'trophy', trimTint: '#A87A30' }, backImg: 'assets/img/cage-gold-back.webp', floorImg: 'assets/img/cage-gold-floor.webp', frameImg: 'assets/img/cage-gold-trim.webp' },
     expoNight: { name: 'ショー限定・ミッドナイト', price: 500, desc: '星降る紫晶の洞窟と、星くずの黒い砂。夜空のような紺色のフレーム（レプタイルズショー限定）', floor: 'sand', tint: '#C8D2F0', frame: '#1F2C4C', back: 'rock', thick: true, expo: true, backFull: true, luxe: { metal: '#C9CED8', trim: '#9AA6C4', gem: '#7FB2FF', glow: true, emblem: 'star' }, backImg: 'assets/img/cage-night-back.webp', floorImg: 'assets/img/cage-night-floor.webp', frameImg: 'assets/img/cage-night-trim.webp' },
@@ -2772,6 +2836,49 @@
     g.add(em);
   }
   // ケージ本体（床・ガラス・枠・背面・飾り）を作る。ケースの中とショップの見本で共用
+  // 新しいケージの飾りは枠の外側だけ。床面・家具・レオパの接触範囲は変えない。
+  function themedFrameBits(th, hw, hd, front) {
+    const g = new T.Group(), style = th.trimStyle;
+    const color = style === 'zen' ? '#91613D' : style === 'rain' ? '#9A8048' : style === 'coast' ? '#408F91' : style === 'loft' ? '#9B6745' : '#766E55';
+    const mat = phys(color, { roughness: style === 'zen' || style === 'birch' ? 0.8 : 0.5, metalness: ['loft', 'rain'].includes(style) ? 0.55 : 0.1 });
+    mat.color.convertSRGBToLinear();
+    const bar = (x, y, z, w, h, d) => { const m = new T.Mesh(new T.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
+    for (const x of [-hw - 0.12, hw + 0.12]) for (const z of [-hd - 0.12, hd + 0.12]) {
+      const high = z < 0 ? 2.25 : 0.6;
+      const post = bar(x, high / 2, z, style === 'zen' ? 0.26 : 0.18, high, 0.22);
+      const cap = bar(x, high + 0.04, z, 0.38, 0.10, 0.32);
+      if (z > 0) front.push(post, cap);
+      if (style === 'loft') for (const y of [0.18, high - 0.12]) {
+        const bolt = new T.Mesh(new T.SphereGeometry(0.075, 8, 6), mat); bolt.scale.z = 0.45; bolt.position.set(x, y, z + 0.14); g.add(bolt);
+        if (z > 0) front.push(bolt);
+      }
+    }
+    if (style === 'zen') {
+      for (const side of [-1, 1]) for (let i = 0; i < 3; i++) bar(side * (hw - 0.16 - i * 0.22), 1.22, -hd + 0.03, 0.07, 1.85, 0.08);
+      bar(0, 2.36, -hd - 0.12, hw * 2 + 0.7, 0.14, 0.48);
+    } else if (style === 'rain') {
+      // 奥の窓だけに、細い金属のアーチを添える。
+      const pts = []; for (let i = 0; i <= 32; i++) { const a = i / 32 * Math.PI; pts.push(new T.Vector3(-Math.cos(a) * hw, 2.24 + Math.sin(a) * 0.62, -hd - 0.12)); }
+      const arch = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), 32, 0.045, 6, false), mat); g.add(arch);
+      for (const x of [-hw / 3, hw / 3]) bar(x, 1.13, -hd + 0.015, 0.045, 2.2, 0.05);
+    } else if (style === 'coast') {
+      const band = bar(0, 0.17, hd + 0.20, hw * 2, 0.10, 0.06); front.push(band);
+      const coral = phys('#D3A28B', { roughness: 0.85 }); coral.color.convertSRGBToLinear();
+      for (const side of [-1, 1]) for (let i = 0; i < 3; i++) {
+        const shell = new T.Mesh(new T.SphereGeometry(0.11 + i * 0.015, 10, 7), coral); shell.scale.set(1, 0.45, 0.75); shell.position.set(side * (hw - 0.4 - i * 0.22), 0.11, hd + 0.25); g.add(shell); front.push(shell);
+      }
+    } else if (style === 'loft') {
+      for (const x of [-hw * 0.5, hw * 0.5]) { bar(x, 1.15, -hd + 0.02, 0.085, 2.2, 0.08); bar(x, 2.30, -hd - 0.08, 0.45, 0.10, 0.30); }
+      const band = bar(0, 0.15, hd + 0.2, hw * 2, 0.055, 0.05); front.push(band);
+    } else if (style === 'birch') {
+      // 小さな葉の意匠。樹皮の画像と組み合わせる。
+      for (const side of [-1, 1]) for (let i = 0; i < 3; i++) {
+        const leaf = new T.Mesh(new T.SphereGeometry(0.12, 10, 6), mat); leaf.scale.set(1.5, 0.35, 0.65); leaf.rotation.y = side * (0.6 + i * 0.2); leaf.position.set(side * (hw - 0.45 - i * 0.25), 0.15, hd + 0.25); g.add(leaf); front.push(leaf);
+      }
+    }
+    return g;
+  }
+
   function makeCage(theme, hw, hd, sand) {
     const g = new T.Group(), front = [];
     const th = CAGE_THEMES[theme] || CAGE_THEMES.glass;
@@ -2781,9 +2888,10 @@
     floor.receiveShadow = true;
     g.add(floor);
     // ガラスと枠（手前は低くして中が見えるように）
-    const glass = phys('#D5E4DD', { transparent: true, opacity: 0.28, roughness: 0.05, clearcoat: 1 });
+    const glass = phys(th.glass || '#D5E4DD', { transparent: true, opacity: 0.28, roughness: 0.05, clearcoat: 1 });
     const lx = th.luxe;
     const frame = phys(th.frame, lx ? { roughness: 0.32, metalness: 0.5, clearcoat: 0.8 } : { roughness: th.candy ? 0.35 : 0.4, clearcoat: th.candy ? 0.6 : 0 });
+    if (th.frameRough != null) frame.roughness = th.frameRough;
     const ft = th.luxe ? 0.32 : th.thick ? 0.22 : 0.1, rails = [];
     for (const [x, z, w, d, h] of [[0, -hd - 0.1, hw * 2 + 0.3, 0.1, 2.2], [-hw - 0.1, 0, 0.1, hd * 2 + 0.2, 2.2], [hw + 0.1, 0, 0.1, hd * 2 + 0.2, 2.2], [0, hd + 0.1, hw * 2 + 0.3, 0.1, 0.5]]) {
       const m = new T.Mesh(new T.BoxGeometry(w, h, d), glass);
@@ -2802,6 +2910,7 @@
       if (z > 0) front.push(m, f);
     }
     if (lx) luxeBits(g, front, th, hw, hd, ft);
+    if (th.trimStyle) g.add(themedFrameBits(th, hw, hd, front));
     if (th.back) {
       const bt = cageTex(th.back);
       bt.wrapS = T.RepeatWrapping; bt.repeat.set(Math.max(1, hw / 6.5), 1);
@@ -2834,8 +2943,8 @@
       const im = t.image || {}, ia = im.width && im.height ? im.width / im.height : 10;
       for (const [m, L] of rails) {
         const h = m.geometry.parameters.height, tt = t.clone(); tt.needsUpdate = true;
-        tt.wrapS = T.RepeatWrapping; tt.repeat.set(Math.max(1, Math.round(L / (h * ia))), 1); tt.anisotropy = 4;
-        const mat = m.material.clone(); mat.map = tt; mat.color.set(th.luxe && th.luxe.trimTint || '#ffffff'); mat.metalness = 0.25; mat.needsUpdate = true;
+        tt.wrapS = T.RepeatWrapping; tt.repeat.set(Math.max(1, Math.round(L / (th.frameScale || h * ia))), 1); tt.anisotropy = 4;
+        const mat = m.material.clone(); mat.map = tt; mat.color.set(th.frameTint || th.luxe && th.luxe.trimTint || '#ffffff'); mat.metalness = th.frameMetal == null ? 0.25 : th.frameMetal; mat.needsUpdate = true;
         m.material = mat;
       }
     });

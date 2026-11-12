@@ -9,10 +9,10 @@ module.exports = async function start(p, SP) {
   await p.waitForSelector('#renameInput', { timeout: 30000 });
   await p.fill('#renameInput', 'レオ');
   if (SP) await p.screenshot({ path: SP + '/start-2.png' });
-  await click('#renameForm button');
+  await click('#renameForm button[type=submit]');
   await click('[data-action=starterPick]');
   await p.waitForSelector('#renameInput', { timeout: 30000 });
   await p.fill('#renameInput', 'もち');
-  await click('#renameForm button');
+  await click('#renameForm button[type=submit]');
   await p.waitForTimeout(800);
 };

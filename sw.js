@@ -1,7 +1,10 @@
 /* オフラインでも遊べるように、アプリ本体をキャッシュする。
  * ファイルを変えたら VERSION を上げること。 */
-const VERSION = 'leopa-v130';
+const VERSION = 'leopa-v134';
 const FILES = [
+  'assets/img/cage-zen-back.webp', 'assets/img/cage-zen-floor.webp', 'assets/img/cage-zen-frame.webp', 'assets/img/cage-greenhouse-back.webp', 'assets/img/cage-greenhouse-floor.webp', 'assets/img/cage-greenhouse-frame.webp', 'assets/img/cage-coast-back.webp', 'assets/img/cage-coast-floor.webp', 'assets/img/cage-coast-frame.webp', 'assets/img/cage-loft-back.webp', 'assets/img/cage-loft-floor.webp', 'assets/img/cage-loft-frame.webp', 'assets/img/cage-birch-back.webp', 'assets/img/cage-birch-floor.webp', 'assets/img/cage-birch-frame.webp',
+  'assets/licenses/generated-cages.json',
+  'assets/licenses/themed-furniture.json',
   './', 'index.html', 'style.css', 'manifest.webmanifest',
   'js/vendor/three.min.js', 'js/genetics.js', 'js/art.js', 'js/scene3d.js', 'js/music.js', 'js/kids.js', 'js/photo-save.js', 'js/study.js', 'js/family.js', 'js/activities.js', 'js/app.js',
   'assets/licenses/kenney-nature.txt', 'assets/licenses/kenney-nature-models.json',

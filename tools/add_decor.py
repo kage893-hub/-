@@ -19,15 +19,22 @@ def put(b):
     while len(blob) % 4: blob.append(0)
     off = len(blob); blob.extend(b); return [off, len(b)]
 
-def add_image(path):
+image_cache = {}
+def add_image(path, linear=False):
+    key = (os.path.realpath(path), linear)
+    if key in image_cache: return image_cache[key]
     im = Image.open(path)
     alpha = im.mode in ('RGBA', 'LA') and im.getchannel('A').getextrema()[0] < 250
-    im = im.convert('RGBA' if alpha else 'RGB').resize((512, 512), Image.LANCZOS)
+    resolution = 256 if linear else 512
+    im = im.convert('RGBA' if alpha else 'RGB').resize((resolution, resolution), Image.LANCZOS)
     buf = io.BytesIO()
     if alpha: im.save(buf, 'PNG', optimize=True)
     else: im.save(buf, 'JPEG', quality=82)
-    images.append({'mime': 'image/png' if alpha else 'image/jpeg', 'data': put(buf.getvalue())})
-    return len(images) - 1, alpha
+    record = {'mime': 'image/png' if alpha else 'image/jpeg', 'data': put(buf.getvalue())}
+    if linear: record['linear'] = True
+    images.append(record)
+    image_cache[key] = (len(images) - 1, alpha)
+    return image_cache[key]
 
 def mat4_mul(a, b):
     return [sum(a[r + 4 * k] * b[k + 4 * c] for k in range(4)) for c in range(4) for r in range(4)]
@@ -79,7 +86,8 @@ for spec in SPECS:
         mt = j['materials'][p.get('material', 0)]
         mname = name + '_' + mt.get('name', 'mat')
         if mname not in mats:
-            ti = mt.get('pbrMetallicRoughness', {}).get('baseColorTexture', {}).get('index')
+            pbr = mt.get('pbrMetallicRoughness', {})
+            ti = pbr.get('baseColorTexture', {}).get('index')
             img, alpha = (None, False)
             if ti is not None:
                 uri = j['images'][j['textures'][ti]['source']]['uri']
@@ -88,6 +96,15 @@ for spec in SPECS:
             if img is None:
                 mats[mname]['color'] = mt.get('pbrMetallicRoughness', {}).get('baseColorFactor', [1, 1, 1, 1])[:3]
             if mt.get('alphaMode') == 'BLEND': mats[mname]['glass'] = True
+            if name.startswith('THM_'):
+                # 今回の実写ベース家具は凹凸・金属度・粗さも保持。旧材質は変更しない。
+                mats[mname].update(pbr=True, color=pbr.get('baseColorFactor', [1,1,1,1])[:3],
+                                   roughness=pbr.get('roughnessFactor', 1), metalness=pbr.get('metallicFactor', 1))
+                for key, texture in [('normal', mt.get('normalTexture')), ('arm', pbr.get('metallicRoughnessTexture'))]:
+                    if texture:
+                        uri = j['images'][j['textures'][texture['index']]['source']]['uri']
+                        mats[mname][key] = add_image(os.path.join(d, uri), linear=True)[0]
+                mats[mname]['normalScale'] = mt.get('normalTexture', {}).get('scale', 1)
         big = len(P) > 65535
         prims.append({'mat': mname,
                       'pos': put(struct.pack('<%df' % (len(P) * 3), *[c for v in P for c in (v[0] - cx, v[1] - y0, v[2] - cz)])),
@@ -95,6 +112,19 @@ for spec in SPECS:
                       'uv': put(struct.pack('<%df' % (len(U) * 2), *[c for v in U for c in v])) if U else None,
                       'idx': put(struct.pack('<%d%s' % (len(idx), 'I' if big else 'H'), *idx)), 'i32': big})
     items[name] = {'prims': prims, 'size': [round(hi[0] - lo[0], 3), round(hi[1] - lo[1], 3), round(hi[2] - lo[2], 3)]}
+    meta_path = os.path.join(d, 'meta.json')
+    if name.startswith('THM_') and os.path.isfile(meta_path):
+        meta = json.load(open(meta_path)); care = {}
+        if 'water' in meta:
+            care['water'] = dict(meta['water']); care['water']['y'] -= y0
+            if 'points' in care['water']: care['water']['points'] = [[x-cx,z-cz] for x,z in care['water']['points']]
+            if 'center' in care['water']: care['water']['center'] = [care['water']['center'][0]-cx,care['water']['center'][1]-cz]
+        if 'reservoir' in meta:
+            care['reservoir'] = dict(meta['reservoir'])
+            for key in ['floorY', 'rimY']: care['reservoir'][key] -= y0
+            care['reservoir']['center'] = [care['reservoir']['center'][0]-cx,care['reservoir']['center'][1]-cz]
+        if 'roofY' in meta: care['roofY'] = meta['roofY'] - y0
+        if care: items[name]['care'] = care
     print(name, sum(len(g[4]) // 3 for g in geo), 'tris', items[name]['size'])
 
 head = json.dumps({'items': items, 'mats': mats, 'images': images}, ensure_ascii=False).encode()

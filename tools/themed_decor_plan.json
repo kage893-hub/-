@@ -1,0 +1,182 @@
+[
+  {
+    "theme": "zenGarden",
+    "title": "和の石庭",
+    "items": [
+      [
+        "dishZen",
+        "木彫りの水鉢",
+        "dish",
+        "carved_wooden_plate"
+      ],
+      [
+        "wetZen",
+        "木目のウェットシェルター",
+        "wet",
+        "wooden_bowl_02"
+      ],
+      [
+        "zenLantern",
+        "木枠の灯籠",
+        "decor",
+        "wooden_lantern_01"
+      ],
+      [
+        "zenMossRock",
+        "苔むした庭石",
+        "climb",
+        "rock_moss_set_01"
+      ],
+      [
+        "zenVase",
+        "古陶の花びん",
+        "decor",
+        "antique_ceramic_vase_01"
+      ]
+    ]
+  },
+  {
+    "theme": "rainGarden",
+    "title": "雨の温室",
+    "items": [
+      [
+        "dishRain",
+        "ホーローの水入れ",
+        "dish",
+        "pot_enamel_01"
+      ],
+      [
+        "wetRain",
+        "素焼きのウェットシェルター",
+        "wet",
+        "planter_pot_clay"
+      ],
+      [
+        "rainPlant",
+        "温室の鉢植え",
+        "plant",
+        "potted_plant_02"
+      ],
+      [
+        "rainFern",
+        "しっとりシダ",
+        "plant",
+        "fern_02"
+      ],
+      [
+        "rainBranch",
+        "温室の横たわる枝",
+        "climb",
+        "dead_quiver_branch_02"
+      ]
+    ]
+  },
+  {
+    "theme": "coralCoast",
+    "title": "珊瑚の海辺",
+    "items": [
+      [
+        "dishCoast",
+        "砂色の陶器の水鉢",
+        "dish",
+        "ceramic_pot"
+      ],
+      [
+        "wetCoast",
+        "海岸岩のウェットシェルター",
+        "wet",
+        "rock_07"
+      ],
+      [
+        "coastShell",
+        "海辺の巻き貝",
+        "decor",
+        "lambis_shell"
+      ],
+      [
+        "coastRock",
+        "海岸の平たい岩",
+        "climb",
+        "sand_rocks_small_01"
+      ],
+      [
+        "coastWood",
+        "海辺の白い流木",
+        "climb",
+        "dead_quiver_trunk"
+      ]
+    ]
+  },
+  {
+    "theme": "brickLoft",
+    "title": "レンガのロフト",
+    "items": [
+      [
+        "dishLoft",
+        "真ちゅうの水鉢",
+        "dish",
+        "brass_pot_01"
+      ],
+      [
+        "wetLoft",
+        "木箱のウェットシェルター",
+        "wet",
+        "wooden_crate_02"
+      ],
+      [
+        "loftLamp",
+        "パイプのランプ",
+        "decor",
+        "industrial_pipe_lamp"
+      ],
+      [
+        "loftCrate",
+        "小さな木箱の台",
+        "climb",
+        "wooden_crate_01"
+      ],
+      [
+        "loftToolbox",
+        "古い工具箱",
+        "decor",
+        "metal_toolbox"
+      ]
+    ]
+  },
+  {
+    "theme": "birchForest",
+    "title": "白樺の森",
+    "items": [
+      [
+        "dishBirch",
+        "丸太色の水鉢",
+        "dish",
+        "wooden_bowl_01"
+      ],
+      [
+        "wetBirch",
+        "切り株のウェットシェルター",
+        "wet",
+        "tree_stump_01"
+      ],
+      [
+        "birchStump",
+        "森の低い切り株",
+        "climb",
+        "tree_stump_02"
+      ],
+      [
+        "birchRoots",
+        "森の根のかくれ道",
+        "climb",
+        "pine_roots"
+      ],
+      [
+        "birchMossRock",
+        "木陰の苔石",
+        "climb",
+        "rock_moss_set_02"
+      ]
+    ]
+  }
+]

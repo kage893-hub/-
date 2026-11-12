@@ -17,6 +17,11 @@ for d in ('img', 'expo'):
     for f in glob.glob(R + 'assets/%s/*.webp' % d):
         n = os.path.basename(f)
         h = h.replace('assets/%s/%s' % (d, n), 'data:image/webp;base64,' + b64('assets/%s/%s' % (d, n)))
+# クレジットの素材一覧も、1枚HTMLから取り出せるように同梱する。
+for f in glob.glob(R + 'assets/licenses/*.json'):
+    n = os.path.basename(f)
+    h = h.replace('href="assets/licenses/%s"' % n,
+                  'download="%s" href="data:application/json;base64,%s"' % (n, b64('assets/licenses/' + n)))
 h = h.replace('src="assets/expo/trophy${t.rank}.webp"', 'src="${EXPO_IMG[t.rank]}"').replace('src="assets/expo/trophy${rank}.webp"', 'src="${EXPO_IMG[rank]}"')
 h = h.replace('<script>window.LEOPA_MODEL_B64', '<script>window.EXPO_IMG=[0,' + ','.join('"data:image/webp;base64,%s"' % b64('assets/expo/trophy%d.webp' % i) for i in (1, 2, 3)) + '];</script>\n<script>window.LEOPA_MODEL_B64', 1)
 open(OUT, 'w').write(h)

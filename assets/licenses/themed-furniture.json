@@ -1,0 +1,1276 @@
+{
+  "collection": "新しいケージ5種類に合わせた家具25点",
+  "retrieved": "2026-11-11",
+  "license": "CC0-1.0",
+  "licenseURL": "https://polyhaven.com/license",
+  "legalText": "Our assets are all licensed as CC0, which means they are effectively in the Public Domain and you may use them for absolutely any purpose without restrictions.",
+  "processing": "tools/prepare_themed_decor.py → tools/add_decor.py。色画像512px、凹凸・粗さ・金属度256px。植物には配布元のアルファ画像を合成。",
+  "items": [
+    {
+      "id": "dishZen",
+      "name": "木彫りの水鉢",
+      "theme": "zenGarden",
+      "role": "dish",
+      "sourceAsset": "carved_wooden_plate",
+      "sourceTitle": "Carved Wooden Plate",
+      "sourceURL": "https://polyhaven.com/a/carved_wooden_plate",
+      "authors": {
+        "Jan Martens": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "carved_wooden_plate.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/carved_wooden_plate/carved_wooden_plate_1k.gltf",
+          "md5": "c4866bc4fcdf070b992f9b35acf8d13e",
+          "bytes": 2836
+        },
+        {
+          "path": "textures/carved_wooden_plate_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/carved_wooden_plate/carved_wooden_plate_diff_1k.jpg",
+          "md5": "f4c0f569c128db22906a209905cf3e90",
+          "bytes": 476516
+        },
+        {
+          "path": "textures/carved_wooden_plate_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/carved_wooden_plate/carved_wooden_plate_arm_1k.jpg",
+          "md5": "e9a523f6b0a9851b7b9e9855fa83f896",
+          "bytes": 450417
+        },
+        {
+          "path": "textures/carved_wooden_plate_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/carved_wooden_plate/carved_wooden_plate_nor_gl_1k.jpg",
+          "md5": "b492a0465ff80fc5aff3433991fdc554",
+          "bytes": 582309
+        },
+        {
+          "path": "carved_wooden_plate.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/carved_wooden_plate/carved_wooden_plate.bin",
+          "md5": "70499c8019359d859577d9f7eef46091",
+          "bytes": 52160
+        }
+      ],
+      "adaptation": "ふたを除去または上端を切り、大きさと深さ・内側を調整して水面を追加",
+      "triangles": 2566
+    },
+    {
+      "id": "wetZen",
+      "name": "木目のウェットシェルター",
+      "theme": "zenGarden",
+      "role": "wet",
+      "sourceAsset": "wooden_bowl_02",
+      "sourceTitle": "Wooden Bowl 02",
+      "sourceURL": "https://polyhaven.com/a/wooden_bowl_02",
+      "authors": {
+        "Kuutti Siitonen": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "wooden_bowl_02.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/wooden_bowl_02/wooden_bowl_02_1k.gltf",
+          "md5": "7e1269b42d3cf9e96d3a7a43784a9fc5",
+          "bytes": 2800
+        },
+        {
+          "path": "textures/wooden_bowl_02_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_bowl_02/wooden_bowl_02_arm_1k.jpg",
+          "md5": "a416eec6afe81cfc5b2a94cabe241f69",
+          "bytes": 770851
+        },
+        {
+          "path": "wooden_bowl_02.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/wooden_bowl_02/wooden_bowl_02.bin",
+          "md5": "92850bb8ba7e6dfd53f4b157276a8536",
+          "bytes": 116156
+        },
+        {
+          "path": "textures/wooden_bowl_02_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_bowl_02/wooden_bowl_02_nor_gl_1k.jpg",
+          "md5": "76dedcb76919daaed23a3d7510c43257",
+          "bytes": 816221
+        },
+        {
+          "path": "textures/wooden_bowl_02_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_bowl_02/wooden_bowl_02_diff_1k.jpg",
+          "md5": "69dfe9fa89f7458fbeb03300267a279d",
+          "bytes": 805338
+        }
+      ],
+      "adaptation": "形と大きさを調整し、入口・内部・屋根をくりぬく。本体と一体の水ためを作り、彫り口を丸め、元の表面画像を削った面に投影。天井と水ための底に厚みを残す",
+      "triangles": 4199
+    },
+    {
+      "id": "zenLantern",
+      "name": "木枠の灯籠",
+      "theme": "zenGarden",
+      "role": "decor",
+      "sourceAsset": "wooden_lantern_01",
+      "sourceTitle": "Wooden Lantern 01",
+      "sourceURL": "https://polyhaven.com/a/wooden_lantern_01",
+      "authors": {
+        "James Ray Cock": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "wooden_lantern_01.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/wooden_lantern_01/wooden_lantern_01_1k.gltf",
+          "md5": "e31edca6461023e076183cb74721b0b9",
+          "bytes": 9540
+        },
+        {
+          "path": "textures/wooden_lantern_01_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_lantern_01/wooden_lantern_01_nor_gl_1k.jpg",
+          "md5": "9db1fa975880b3cf6da5e6c30853e0cf",
+          "bytes": 747945
+        },
+        {
+          "path": "textures/wooden_lantern_01_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_lantern_01/wooden_lantern_01_diff_1k.jpg",
+          "md5": "8f9f537ab312b1ec85acb1f5aaf7ad17",
+          "bytes": 712250
+        },
+        {
+          "path": "textures/wooden_lantern_01_glass_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_lantern_01/wooden_lantern_01_glass_nor_gl_1k.jpg",
+          "md5": "38549e36957f90dc61587010c3a8ff3a",
+          "bytes": 216436
+        },
+        {
+          "path": "textures/wooden_lantern_01_glass_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_lantern_01/wooden_lantern_01_glass_arm_1k.jpg",
+          "md5": "890c1dd6ad9c37521f9f0a0d9d08fba2",
+          "bytes": 561615
+        },
+        {
+          "path": "textures/wooden_lantern_01_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_lantern_01/wooden_lantern_01_arm_1k.jpg",
+          "md5": "87b5bdc9f3d5853caef38a00589541ae",
+          "bytes": 842111
+        },
+        {
+          "path": "textures/wooden_lantern_01_glass_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_lantern_01/wooden_lantern_01_glass_diff_1k.jpg",
+          "md5": "c1e45d48f344f86726d02c81679af6a4",
+          "bytes": 410747
+        },
+        {
+          "path": "wooden_lantern_01.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/wooden_lantern_01/wooden_lantern_01.bin",
+          "md5": "3784667126369ce5c21db3c7436409cb",
+          "bytes": 268136
+        }
+      ],
+      "adaptation": "セットから1点を選び、大きさ・高さ・向きを調整",
+      "triangles": 3999
+    },
+    {
+      "id": "zenMossRock",
+      "name": "苔むした庭石",
+      "theme": "zenGarden",
+      "role": "climb",
+      "sourceAsset": "rock_moss_set_01",
+      "sourceTitle": "Rock Moss Set 01",
+      "sourceURL": "https://polyhaven.com/a/rock_moss_set_01",
+      "authors": {
+        "Kless Gyzen": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "rock_moss_set_01.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/rock_moss_set_01/rock_moss_set_01_1k.gltf",
+          "md5": "75113cc1c21806cca5d8badad4737af7",
+          "bytes": 9987
+        },
+        {
+          "path": "textures/rock_moss_set_01_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_moss_set_01/rock_moss_set_01_nor_gl_1k.jpg",
+          "md5": "eb7ebd31ad08e78d0497900652ff1568",
+          "bytes": 209975
+        },
+        {
+          "path": "rock_moss_set_01.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/rock_moss_set_01/rock_moss_set_01.bin",
+          "md5": "207a51c9f56d34732e9814bbf9cc07b1",
+          "bytes": 1466380
+        },
+        {
+          "path": "textures/rock_moss_set_01_rough_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_moss_set_01/rock_moss_set_01_rough_1k.jpg",
+          "md5": "ed9d8a2c863262f76f881346e8047c6a",
+          "bytes": 82624
+        },
+        {
+          "path": "textures/rock_moss_set_01_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_moss_set_01/rock_moss_set_01_diff_1k.jpg",
+          "md5": "b8742301e6b4bc5683d2de712e83f772",
+          "bytes": 168099
+        }
+      ],
+      "adaptation": "セットから1点を選び、大きさ・高さ・向きを調整",
+      "triangles": 3999
+    },
+    {
+      "id": "zenVase",
+      "name": "古陶の花びん",
+      "theme": "zenGarden",
+      "role": "decor",
+      "sourceAsset": "antique_ceramic_vase_01",
+      "sourceTitle": "Antique Ceramic Vase 01",
+      "sourceURL": "https://polyhaven.com/a/antique_ceramic_vase_01",
+      "authors": {
+        "James Ray Cock": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "antique_ceramic_vase_01.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/antique_ceramic_vase_01/antique_ceramic_vase_01_1k.gltf",
+          "md5": "b5a82c883c3a29b54eccd2f8400bd479",
+          "bytes": 2789
+        },
+        {
+          "path": "textures/antique_ceramic_vase_01_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/antique_ceramic_vase_01/antique_ceramic_vase_01_nor_gl_1k.jpg",
+          "md5": "07fef9d384b8e73d1b03604103ed0b65",
+          "bytes": 33062
+        },
+        {
+          "path": "antique_ceramic_vase_01.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/antique_ceramic_vase_01/antique_ceramic_vase_01.bin",
+          "md5": "0758bc04ce9826b1ae61c931aed19715",
+          "bytes": 217216
+        },
+        {
+          "path": "textures/antique_ceramic_vase_01_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/antique_ceramic_vase_01/antique_ceramic_vase_01_diff_1k.jpg",
+          "md5": "a3de8212967f9e230364c5948e1581a5",
+          "bytes": 192337
+        },
+        {
+          "path": "textures/antique_ceramic_vase_01_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/antique_ceramic_vase_01/antique_ceramic_vase_01_arm_1k.jpg",
+          "md5": "ca1d7269913774a351bdf10058d7f06f",
+          "bytes": 80537
+        }
+      ],
+      "adaptation": "セットから1点を選び、大きさ・高さ・向きを調整",
+      "triangles": 3999
+    },
+    {
+      "id": "dishRain",
+      "name": "ホーローの水入れ",
+      "theme": "rainGarden",
+      "role": "dish",
+      "sourceAsset": "pot_enamel_01",
+      "sourceTitle": "Pot Enamel 01",
+      "sourceURL": "https://polyhaven.com/a/pot_enamel_01",
+      "authors": {
+        "Kuutti Siitonen": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "pot_enamel_01.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/pot_enamel_01/pot_enamel_01_1k.gltf",
+          "md5": "84ddd8d2e210d11788dbcb1670b0e530",
+          "bytes": 4018
+        },
+        {
+          "path": "textures/pot_enamel_01_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/pot_enamel_01/pot_enamel_01_arm_1k.jpg",
+          "md5": "be7b3e6c51ac6cbead2496bd0db41d00",
+          "bytes": 497109
+        },
+        {
+          "path": "textures/pot_enamel_01_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/pot_enamel_01/pot_enamel_01_diff_1k.jpg",
+          "md5": "e530e70fc13aef9c595162b293b049a0",
+          "bytes": 538938
+        },
+        {
+          "path": "textures/pot_enamel_01_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/pot_enamel_01/pot_enamel_01_nor_gl_1k.jpg",
+          "md5": "8fc58dc6caa2036f83fed505acd66534",
+          "bytes": 434214
+        },
+        {
+          "path": "pot_enamel_01.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/pot_enamel_01/pot_enamel_01.bin",
+          "md5": "d8845287663697c274192b8ba35cb7a1",
+          "bytes": 270448
+        }
+      ],
+      "adaptation": "ふたを除去または上端を切り、大きさと深さ・内側を調整して水面を追加",
+      "triangles": 4200
+    },
+    {
+      "id": "wetRain",
+      "name": "素焼きのウェットシェルター",
+      "theme": "rainGarden",
+      "role": "wet",
+      "sourceAsset": "planter_pot_clay",
+      "sourceTitle": "Planter Pot Clay",
+      "sourceURL": "https://polyhaven.com/a/planter_pot_clay",
+      "authors": {
+        "Amal Kumar": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "planter_pot_clay.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/planter_pot_clay/planter_pot_clay_1k.gltf",
+          "md5": "1c78fcfd6144747c97e2b822a6229c0d",
+          "bytes": 2813
+        },
+        {
+          "path": "textures/planter_pot_clay_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/planter_pot_clay/planter_pot_clay_diff_1k.jpg",
+          "md5": "6823eb18ca73c8cdcb3cbc04704c443b",
+          "bytes": 596319
+        },
+        {
+          "path": "planter_pot_clay.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/planter_pot_clay/planter_pot_clay.bin",
+          "md5": "93aa55f6378a47c3e2d03eb5b98da8b0",
+          "bytes": 78096
+        },
+        {
+          "path": "textures/planter_pot_clay_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/planter_pot_clay/planter_pot_clay_arm_1k.jpg",
+          "md5": "ec397ae29f1f52292cbc9482037c11c4",
+          "bytes": 613484
+        },
+        {
+          "path": "textures/planter_pot_clay_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/planter_pot_clay/planter_pot_clay_nor_gl_1k.jpg",
+          "md5": "269b48d6a5038e97acf9d670b7381b3a",
+          "bytes": 506446
+        }
+      ],
+      "adaptation": "形と大きさを調整し、入口・内部・屋根をくりぬく。本体と一体の水ためを作り、彫り口を丸め、元の表面画像を削った面に投影。天井と水ための底に厚みを残す",
+      "triangles": 4200
+    },
+    {
+      "id": "rainPlant",
+      "name": "温室の鉢植え",
+      "theme": "rainGarden",
+      "role": "plant",
+      "sourceAsset": "potted_plant_02",
+      "sourceTitle": "Potted Plant 02",
+      "sourceURL": "https://polyhaven.com/a/potted_plant_02",
+      "authors": {
+        "Rico Cilliers": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "potted_plant_02.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/potted_plant_02/potted_plant_02_1k.gltf",
+          "md5": "9999d7e6c51018a85551840e1bdae656",
+          "bytes": 6653
+        },
+        {
+          "path": "textures/potted_plant_02_leaves_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/potted_plant_02/potted_plant_02_leaves_diff_1k.jpg",
+          "md5": "e8a026bd7bfa6497729d855c59da03ce",
+          "bytes": 167700
+        },
+        {
+          "path": "potted_plant_02.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/potted_plant_02/potted_plant_02.bin",
+          "md5": "cdbd4619b2596c9c469ad34676085fa8",
+          "bytes": 1852244
+        },
+        {
+          "path": "textures/potted_plant_02_pot_rough_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/potted_plant_02/potted_plant_02_pot_rough_1k.jpg",
+          "md5": "68ed80fa32791fb0e81df61a75de40b4",
+          "bytes": 114886
+        },
+        {
+          "path": "textures/potted_plant_02_leaves_rough_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/potted_plant_02/potted_plant_02_leaves_rough_1k.jpg",
+          "md5": "ba934a78cc6496d934c014eb8a33af37",
+          "bytes": 102396
+        },
+        {
+          "path": "textures/potted_plant_02_pot_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/potted_plant_02/potted_plant_02_pot_diff_1k.jpg",
+          "md5": "97e149c93eb0d962e491d4c82d3ce477",
+          "bytes": 155244
+        },
+        {
+          "path": "textures/potted_plant_02_leaves_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/potted_plant_02/potted_plant_02_leaves_nor_gl_1k.jpg",
+          "md5": "2420d5c0ab87426f5318a5e91d1ea3bb",
+          "bytes": 127232
+        },
+        {
+          "path": "textures/potted_plant_02_pot_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/potted_plant_02/potted_plant_02_pot_nor_gl_1k.jpg",
+          "md5": "fbb44ccc1c6564b2837b79a11ed45d58",
+          "bytes": 108343
+        }
+      ],
+      "adaptation": "セットから1点を選び、大きさ・高さ・向きを調整",
+      "triangles": 5996
+    },
+    {
+      "id": "rainFern",
+      "name": "しっとりシダ",
+      "theme": "rainGarden",
+      "role": "plant",
+      "sourceAsset": "fern_02",
+      "sourceTitle": "Fern 02",
+      "sourceURL": "https://polyhaven.com/a/fern_02",
+      "authors": {
+        "Rob Tuytel": "scanning",
+        "Rico Cilliers": "modeling"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "fern_02.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/fern_02/fern_02_1k.gltf",
+          "md5": "cf276874d37bfb73c299504a6b355b77",
+          "bytes": 6899
+        },
+        {
+          "path": "textures/fern_02_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fern_02/fern_02_arm_1k.jpg",
+          "md5": "1bbb2b22951f450720d28e17d93a2987",
+          "bytes": 280359
+        },
+        {
+          "path": "textures/fern_02_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fern_02/fern_02_diff_1k.jpg",
+          "md5": "82c18a6cfd5ae91c37c0e078f591181c",
+          "bytes": 315705
+        },
+        {
+          "path": "textures/fern_02_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fern_02/fern_02_nor_gl_1k.jpg",
+          "md5": "43aed63dff79554f6064627515afd9d7",
+          "bytes": 367222
+        },
+        {
+          "path": "fern_02.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/fern_02/fern_02.bin",
+          "md5": "c061e9255f7d36ae9ce0e92ef3e100b2",
+          "bytes": 176176
+        }
+      ],
+      "adaptation": "セットから1点を選び、大きさ・高さ・向きを調整",
+      "triangles": 2384
+    },
+    {
+      "id": "rainBranch",
+      "name": "温室の横たわる枝",
+      "theme": "rainGarden",
+      "role": "climb",
+      "sourceAsset": "dead_quiver_branch_02",
+      "sourceTitle": "Dead Quiver Branch 02",
+      "sourceURL": "https://polyhaven.com/a/dead_quiver_branch_02",
+      "authors": {
+        "Greg Zaal": "Photography",
+        "Jenelle van Heerden": "modeling"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "dead_quiver_branch_02.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/dead_quiver_branch_02/dead_quiver_branch_02_1k.gltf",
+          "md5": "0a6eb67a8b01ee477ef1f5d89c77d2b9",
+          "bytes": 2863
+        },
+        {
+          "path": "dead_quiver_branch_02.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/dead_quiver_branch_02/dead_quiver_branch_02.bin",
+          "md5": "da7df3548c0a84666c4ff6a64877f86b",
+          "bytes": 350572
+        },
+        {
+          "path": "textures/dead_quiver_branch_02_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dead_quiver_branch_02/dead_quiver_branch_02_diff_1k.jpg",
+          "md5": "2ef7e10b6930e9f7daf033a23a637276",
+          "bytes": 617273
+        },
+        {
+          "path": "textures/dead_quiver_branch_02_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dead_quiver_branch_02/dead_quiver_branch_02_nor_gl_1k.jpg",
+          "md5": "09b370b4078946043df16e8ef7ccdad2",
+          "bytes": 737343
+        },
+        {
+          "path": "textures/dead_quiver_branch_02_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dead_quiver_branch_02/dead_quiver_branch_02_arm_1k.jpg",
+          "md5": "5a7d4b51506d683837235bcea8b22ad1",
+          "bytes": 501350
+        }
+      ],
+      "adaptation": "セットから1点を選び、大きさ・高さ・向きを調整",
+      "triangles": 3999
+    },
+    {
+      "id": "dishCoast",
+      "name": "砂色の陶器の水鉢",
+      "theme": "coralCoast",
+      "role": "dish",
+      "sourceAsset": "ceramic_pot",
+      "sourceTitle": "Ceramic Pot",
+      "sourceURL": "https://polyhaven.com/a/ceramic_pot",
+      "authors": {
+        "Aron Łyczek": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "ceramic_pot.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/ceramic_pot/ceramic_pot_1k.gltf",
+          "md5": "8777fd3f023e6f83371786b195ac665b",
+          "bytes": 2990
+        },
+        {
+          "path": "textures/ceramic_pot_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/ceramic_pot/ceramic_pot_nor_gl_1k.jpg",
+          "md5": "a40c80e5e4f9fa107d2c2dc8983d2867",
+          "bytes": 252874
+        },
+        {
+          "path": "textures/ceramic_pot_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/ceramic_pot/ceramic_pot_diff_1k.jpg",
+          "md5": "85746a999ed333628143b3ad2c0b7f42",
+          "bytes": 664480
+        },
+        {
+          "path": "textures/ceramic_pot_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/ceramic_pot/ceramic_pot_arm_1k.jpg",
+          "md5": "e45cd9ad939172ae7b94fd455bc44c08",
+          "bytes": 633246
+        },
+        {
+          "path": "ceramic_pot.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/ceramic_pot/ceramic_pot.bin",
+          "md5": "dab3afea04454ad1fbb1108afe764489",
+          "bytes": 87952
+        }
+      ],
+      "adaptation": "ふたを除去または上端を切り、大きさと深さ・内側を調整して水面を追加",
+      "triangles": 2138
+    },
+    {
+      "id": "wetCoast",
+      "name": "海岸岩のウェットシェルター",
+      "theme": "coralCoast",
+      "role": "wet",
+      "sourceAsset": "rock_07",
+      "sourceTitle": "Rock 07",
+      "sourceURL": "https://polyhaven.com/a/rock_07",
+      "authors": {
+        "Jenelle van Heerden": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "rock_07.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/rock_07/rock_07_1k.gltf",
+          "md5": "2bdb563c126a9d284e60e94951759e2f",
+          "bytes": 2979
+        },
+        {
+          "path": "rock_07.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/rock_07/rock_07.bin",
+          "md5": "817b2cfd1626cb06f18a825f87f58ec3",
+          "bytes": 468936
+        },
+        {
+          "path": "textures/rock_07_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_07/rock_07_arm_1k.jpg",
+          "md5": "530bfd2a510fe6f778bb1198a2395574",
+          "bytes": 309735
+        },
+        {
+          "path": "textures/rock_07_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_07/rock_07_diff_1k.jpg",
+          "md5": "b68ac1824bb3bd3867641b830ad02099",
+          "bytes": 635452
+        },
+        {
+          "path": "textures/rock_07_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_07/rock_07_nor_gl_1k.jpg",
+          "md5": "d3a2a0df0db0177c4df8ef644b003652",
+          "bytes": 766986
+        }
+      ],
+      "adaptation": "形と大きさを調整し、入口・内部・屋根をくりぬく。本体と一体の水ためを作り、彫り口を丸め、元の表面画像を削った面に投影。天井と水ための底に厚みを残す",
+      "triangles": 4200
+    },
+    {
+      "id": "coastShell",
+      "name": "海辺の巻き貝",
+      "theme": "coralCoast",
+      "role": "decor",
+      "sourceAsset": "lambis_shell",
+      "sourceTitle": "Lambis Shell",
+      "sourceURL": "https://polyhaven.com/a/lambis_shell",
+      "authors": {
+        "Kuutti Siitonen": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "lambis_shell.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/lambis_shell/lambis_shell_1k.gltf",
+          "md5": "ba61498d80a33845f25f1a16604e1f65",
+          "bytes": 2772
+        },
+        {
+          "path": "lambis_shell.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/lambis_shell/lambis_shell.bin",
+          "md5": "b895fc766f2ef8adfeaa356833ec90c1",
+          "bytes": 310540
+        },
+        {
+          "path": "textures/lambis_shell_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/lambis_shell/lambis_shell_diff_1k.jpg",
+          "md5": "9d73630d4436fc8afd1d314e1555a88f",
+          "bytes": 785669
+        },
+        {
+          "path": "textures/lambis_shell_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/lambis_shell/lambis_shell_arm_1k.jpg",
+          "md5": "8b8ba38ce52a5eefcfa6c313d5ffdf54",
+          "bytes": 567463
+        },
+        {
+          "path": "textures/lambis_shell_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/lambis_shell/lambis_shell_nor_gl_1k.jpg",
+          "md5": "2499c0c824ecb4b58349ff88ec2a64c1",
+          "bytes": 582208
+        }
+      ],
+      "adaptation": "セットから1点を選び、大きさ・高さ・向きを調整",
+      "triangles": 3999
+    },
+    {
+      "id": "coastRock",
+      "name": "海岸の平たい岩",
+      "theme": "coralCoast",
+      "role": "climb",
+      "sourceAsset": "sand_rocks_small_01",
+      "sourceTitle": "Sand Rocks Small 01",
+      "sourceURL": "https://polyhaven.com/a/sand_rocks_small_01",
+      "authors": {
+        "Rob Tuytel": "Photography, processing",
+        "Rico Cilliers": "cleanup"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "sand_rocks_small_01.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/sand_rocks_small_01/sand_rocks_small_01_1k.gltf",
+          "md5": "b6c774681b156d8e969c81e263f6c7ff",
+          "bytes": 2887
+        },
+        {
+          "path": "textures/sand_rocks_small_01_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/sand_rocks_small_01/sand_rocks_small_01_nor_gl_1k.jpg",
+          "md5": "c1d26206377745357b0e03d71c7c9412",
+          "bytes": 1008354
+        },
+        {
+          "path": "textures/sand_rocks_small_01_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/sand_rocks_small_01/sand_rocks_small_01_diff_1k.jpg",
+          "md5": "d819c51a8f18f0a496b0fcf8d672824a",
+          "bytes": 788042
+        },
+        {
+          "path": "sand_rocks_small_01.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/sand_rocks_small_01/sand_rocks_small_01.bin",
+          "md5": "327c5e2efdde87ecf9d89bbe90ed923e",
+          "bytes": 21253052
+        },
+        {
+          "path": "textures/sand_rocks_small_01_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/sand_rocks_small_01/sand_rocks_small_01_arm_1k.jpg",
+          "md5": "7c8f7fb524059726d323f60df943807c",
+          "bytes": 758948
+        }
+      ],
+      "adaptation": "セットから1点を選び、大きさ・高さ・向きを調整",
+      "triangles": 4000
+    },
+    {
+      "id": "coastWood",
+      "name": "海辺の白い流木",
+      "theme": "coralCoast",
+      "role": "climb",
+      "sourceAsset": "dead_quiver_trunk",
+      "sourceTitle": "Dead Quiver Trunk",
+      "sourceURL": "https://polyhaven.com/a/dead_quiver_trunk",
+      "authors": {
+        "James Ray Cock": "Photography",
+        "Dario Barresi": "Photography",
+        "Rico Cilliers": "modeling"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "dead_quiver_trunk.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/dead_quiver_trunk/dead_quiver_trunk_1k.gltf",
+          "md5": "c51327370de65114dbab13686deb3f07",
+          "bytes": 2833
+        },
+        {
+          "path": "dead_quiver_trunk.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/dead_quiver_trunk/dead_quiver_trunk.bin",
+          "md5": "14020d9d6b8a6303ef0c4204f3aecf39",
+          "bytes": 411388
+        },
+        {
+          "path": "textures/dead_quiver_trunk_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dead_quiver_trunk/dead_quiver_trunk_arm_1k.jpg",
+          "md5": "4cb21dced87f656ceef25711d8897a55",
+          "bytes": 514214
+        },
+        {
+          "path": "textures/dead_quiver_trunk_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dead_quiver_trunk/dead_quiver_trunk_nor_gl_1k.jpg",
+          "md5": "dbc98d5bbef2f50325b8527811eb7377",
+          "bytes": 573241
+        },
+        {
+          "path": "textures/dead_quiver_trunk_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dead_quiver_trunk/dead_quiver_trunk_diff_1k.jpg",
+          "md5": "e9348ba90e390c46d9d6837cf0425d4b",
+          "bytes": 768713
+        }
+      ],
+      "adaptation": "セットから1点を選び、大きさ・高さ・向きを調整",
+      "triangles": 3999
+    },
+    {
+      "id": "dishLoft",
+      "name": "真ちゅうの水鉢",
+      "theme": "brickLoft",
+      "role": "dish",
+      "sourceAsset": "brass_pot_01",
+      "sourceTitle": "Brass Pot 01",
+      "sourceURL": "https://polyhaven.com/a/brass_pot_01",
+      "authors": {
+        "Rico Cilliers": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "brass_pot_01.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/brass_pot_01/brass_pot_01_1k.gltf",
+          "md5": "f7494994ac15f801c5a9e4d2d4bb22dc",
+          "bytes": 2681
+        },
+        {
+          "path": "textures/brass_pot_01_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/brass_pot_01/brass_pot_01_nor_gl_1k.jpg",
+          "md5": "77c56abc2eec2e40aa45eaad12ff76c5",
+          "bytes": 313819
+        },
+        {
+          "path": "brass_pot_01.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/brass_pot_01/brass_pot_01.bin",
+          "md5": "3b3a13f078933ec94b4cbf55c95f12a0",
+          "bytes": 94560
+        },
+        {
+          "path": "textures/brass_pot_01_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/brass_pot_01/brass_pot_01_diff_1k.jpg",
+          "md5": "dd37598e39de2c9415329868e6d5c8dd",
+          "bytes": 648842
+        },
+        {
+          "path": "textures/brass_pot_01_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/brass_pot_01/brass_pot_01_arm_1k.jpg",
+          "md5": "6416768f2c7012fb1ad15513d6f345c3",
+          "bytes": 463572
+        }
+      ],
+      "adaptation": "ふたを除去または上端を切り、大きさと深さ・内側を調整して水面を追加",
+      "triangles": 4200
+    },
+    {
+      "id": "wetLoft",
+      "name": "木箱のウェットシェルター",
+      "theme": "brickLoft",
+      "role": "wet",
+      "sourceAsset": "wooden_crate_02",
+      "sourceTitle": "Wooden Crate 02",
+      "sourceURL": "https://polyhaven.com/a/wooden_crate_02",
+      "authors": {
+        "James Ray Cock": "modeling",
+        "Jurita Burger": "graphic design"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "wooden_crate_02.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/wooden_crate_02/wooden_crate_02_1k.gltf",
+          "md5": "a69eb62fd20e6badb6bb56f052930e06",
+          "bytes": 4150
+        },
+        {
+          "path": "textures/wooden_crate_02_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_crate_02/wooden_crate_02_diff_1k.jpg",
+          "md5": "45bca8f49da9d541e06bc926ab001c81",
+          "bytes": 716110
+        },
+        {
+          "path": "textures/wooden_crate_02_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_crate_02/wooden_crate_02_arm_1k.jpg",
+          "md5": "a7537612dbfb7fd25e756074eec5624e",
+          "bytes": 819577
+        },
+        {
+          "path": "wooden_crate_02.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/wooden_crate_02/wooden_crate_02.bin",
+          "md5": "08d98507231cdeda1070d1a2d0646254",
+          "bytes": 150064
+        },
+        {
+          "path": "textures/wooden_crate_02_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_crate_02/wooden_crate_02_nor_gl_1k.jpg",
+          "md5": "314226b31765168cd8070898f8a7e18e",
+          "bytes": 546319
+        }
+      ],
+      "adaptation": "形と大きさを調整し、入口・内部・屋根をくりぬく。本体と一体の水ためを作り、彫り口を丸め、元の表面画像を削った面に投影。天井と水ための底に厚みを残す",
+      "triangles": 4200
+    },
+    {
+      "id": "loftLamp",
+      "name": "パイプのランプ",
+      "theme": "brickLoft",
+      "role": "decor",
+      "sourceAsset": "industrial_pipe_lamp",
+      "sourceTitle": "Industrial Pipe Lamp",
+      "sourceURL": "https://polyhaven.com/a/industrial_pipe_lamp",
+      "authors": {
+        "Mateusz Sadek": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "industrial_pipe_lamp.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/industrial_pipe_lamp/industrial_pipe_lamp_1k.gltf",
+          "md5": "d8bbade589e987381efdab60b09edfa8",
+          "bytes": 7419
+        },
+        {
+          "path": "textures/industrial_pipe_lamp_emission_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/industrial_pipe_lamp/industrial_pipe_lamp_emission_1k.jpg",
+          "md5": "2e2f1069b18bee34dba2bf9999f3d46d",
+          "bytes": 26599
+        },
+        {
+          "path": "textures/industrial_pipe_lamp_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/industrial_pipe_lamp/industrial_pipe_lamp_nor_gl_1k.jpg",
+          "md5": "0c32b4fc551b8fc15f2439905707398a",
+          "bytes": 602864
+        },
+        {
+          "path": "textures/industrial_pipe_lamp_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/industrial_pipe_lamp/industrial_pipe_lamp_diff_1k.jpg",
+          "md5": "59d8793b0be49c50a7dcf239b5978386",
+          "bytes": 716999
+        },
+        {
+          "path": "textures/industrial_pipe_lamp_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/industrial_pipe_lamp/industrial_pipe_lamp_arm_1k.jpg",
+          "md5": "f8b38078596d89f70e3dc6e4320f03c0",
+          "bytes": 771842
+        },
+        {
+          "path": "industrial_pipe_lamp.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/industrial_pipe_lamp/industrial_pipe_lamp.bin",
+          "md5": "57b3afbb3332f86cfb3a693f3759c4f4",
+          "bytes": 282476
+        }
+      ],
+      "adaptation": "セットから1点を選び、大きさ・高さ・向きを調整",
+      "triangles": 4050
+    },
+    {
+      "id": "loftCrate",
+      "name": "小さな木箱の台",
+      "theme": "brickLoft",
+      "role": "climb",
+      "sourceAsset": "wooden_crate_01",
+      "sourceTitle": "Wooden Crate 01",
+      "sourceURL": "https://polyhaven.com/a/wooden_crate_01",
+      "authors": {
+        "James Ray Cock": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "wooden_crate_01.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/wooden_crate_01/wooden_crate_01_1k.gltf",
+          "md5": "33df4d2ae00186d4b64e878466c9e22e",
+          "bytes": 5612
+        },
+        {
+          "path": "textures/wooden_crate_01_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_crate_01/wooden_crate_01_diff_1k.jpg",
+          "md5": "266e0462d06e77c5745f66e89820544f",
+          "bytes": 711292
+        },
+        {
+          "path": "textures/wooden_crate_01_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_crate_01/wooden_crate_01_nor_gl_1k.jpg",
+          "md5": "e31626a1fcf6f7062c2ffd9fc982b942",
+          "bytes": 594076
+        },
+        {
+          "path": "wooden_crate_01.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/wooden_crate_01/wooden_crate_01.bin",
+          "md5": "8318f76b0c24b5538ce23051dbcb79a0",
+          "bytes": 189408
+        },
+        {
+          "path": "textures/wooden_crate_01_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_crate_01/wooden_crate_01_arm_1k.jpg",
+          "md5": "67c4aeb1154af98f95516b21ef62291c",
+          "bytes": 776699
+        }
+      ],
+      "adaptation": "セットから1点を選び、大きさ・高さ・向きを調整",
+      "triangles": 3998
+    },
+    {
+      "id": "loftToolbox",
+      "name": "古い工具箱",
+      "theme": "brickLoft",
+      "role": "decor",
+      "sourceAsset": "metal_toolbox",
+      "sourceTitle": "Metal Toolbox",
+      "sourceURL": "https://polyhaven.com/a/metal_toolbox",
+      "authors": {
+        "Mateusz Sadek": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "metal_toolbox.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/metal_toolbox/metal_toolbox_1k.gltf",
+          "md5": "bffa3fc13c4599e731df432257f11e3a",
+          "bytes": 10717
+        },
+        {
+          "path": "textures/metal_toolbox_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/metal_toolbox/metal_toolbox_nor_gl_1k.jpg",
+          "md5": "3e06f4331bd197819713b359af2b3eec",
+          "bytes": 572273
+        },
+        {
+          "path": "textures/metal_toolbox_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/metal_toolbox/metal_toolbox_diff_1k.jpg",
+          "md5": "63f1832b685c2e55594b6bb82739dacb",
+          "bytes": 661804
+        },
+        {
+          "path": "textures/metal_toolbox_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/metal_toolbox/metal_toolbox_arm_1k.jpg",
+          "md5": "56cabca578fbafd172ab31b8f0a67a49",
+          "bytes": 1033149
+        },
+        {
+          "path": "metal_toolbox.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/metal_toolbox/metal_toolbox.bin",
+          "md5": "0a7b37a276056e8c1c714dd4af0351f9",
+          "bytes": 468892
+        }
+      ],
+      "adaptation": "セットから1点を選び、大きさ・高さ・向きを調整",
+      "triangles": 4287
+    },
+    {
+      "id": "dishBirch",
+      "name": "丸太色の水鉢",
+      "theme": "birchForest",
+      "role": "dish",
+      "sourceAsset": "wooden_bowl_01",
+      "sourceTitle": "Wooden Bowl 01",
+      "sourceURL": "https://polyhaven.com/a/wooden_bowl_01",
+      "authors": {
+        "Oliver Harries": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "wooden_bowl_01.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/wooden_bowl_01/wooden_bowl_01_1k.gltf",
+          "md5": "d4fa6acadbae81c8f66f346381b11582",
+          "bytes": 2811
+        },
+        {
+          "path": "textures/wooden_bowl_01_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_bowl_01/wooden_bowl_01_diff_1k.jpg",
+          "md5": "64626044995a55e0525dbf8ad1388914",
+          "bytes": 450565
+        },
+        {
+          "path": "wooden_bowl_01.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/wooden_bowl_01/wooden_bowl_01.bin",
+          "md5": "ab8f522a5b859d901de1eed742f275bd",
+          "bytes": 321052
+        },
+        {
+          "path": "textures/wooden_bowl_01_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_bowl_01/wooden_bowl_01_nor_gl_1k.jpg",
+          "md5": "ba2691b4cc8cfdbbd8ff5c5ae9bfadbc",
+          "bytes": 597196
+        },
+        {
+          "path": "textures/wooden_bowl_01_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_bowl_01/wooden_bowl_01_arm_1k.jpg",
+          "md5": "3bdbd9a9f73108f6a6b6c9a248aa1eb9",
+          "bytes": 451613
+        }
+      ],
+      "adaptation": "ふたを除去または上端を切り、大きさと深さ・内側を調整して水面を追加",
+      "triangles": 4200
+    },
+    {
+      "id": "wetBirch",
+      "name": "切り株のウェットシェルター",
+      "theme": "birchForest",
+      "role": "wet",
+      "sourceAsset": "tree_stump_01",
+      "sourceTitle": "Tree Stump 01",
+      "sourceURL": "https://polyhaven.com/a/tree_stump_01",
+      "authors": {
+        "Rob Tuytel": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "tree_stump_01.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/tree_stump_01/tree_stump_01_1k.gltf",
+          "md5": "fedfc620634a8dbaf6345413b13abe1a",
+          "bytes": 2793
+        },
+        {
+          "path": "tree_stump_01.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/tree_stump_01/tree_stump_01.bin",
+          "md5": "acb292727949126b92e58217fd50fca9",
+          "bytes": 965380
+        },
+        {
+          "path": "textures/tree_stump_01_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_stump_01/tree_stump_01_diff_1k.jpg",
+          "md5": "c71fe60400276a37b8847048cbec3720",
+          "bytes": 907451
+        },
+        {
+          "path": "textures/tree_stump_01_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_stump_01/tree_stump_01_nor_gl_1k.jpg",
+          "md5": "cc2a3c6e4682a521b15cccc61a416bbf",
+          "bytes": 1238404
+        },
+        {
+          "path": "textures/tree_stump_01_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_stump_01/tree_stump_01_arm_1k.jpg",
+          "md5": "09b7aa228dccb93f5cf4188ba5530578",
+          "bytes": 825646
+        }
+      ],
+      "adaptation": "形と大きさを調整し、入口・内部・屋根をくりぬく。本体と一体の水ためを作り、彫り口を丸め、元の表面画像を削った面に投影。天井と水ための底に厚みを残す",
+      "triangles": 4200
+    },
+    {
+      "id": "birchStump",
+      "name": "森の低い切り株",
+      "theme": "birchForest",
+      "role": "climb",
+      "sourceAsset": "tree_stump_02",
+      "sourceTitle": "Tree Stump 02",
+      "sourceURL": "https://polyhaven.com/a/tree_stump_02",
+      "authors": {
+        "Rob Tuytel": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "tree_stump_02.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/tree_stump_02/tree_stump_02_1k.gltf",
+          "md5": "b2344d2dfc9f0a00d82cdea8aee84c7a",
+          "bytes": 2802
+        },
+        {
+          "path": "textures/tree_stump_02_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_stump_02/tree_stump_02_nor_gl_1k.jpg",
+          "md5": "c9cd86ad90819ca7a60a6ef9c77424e4",
+          "bytes": 1334839
+        },
+        {
+          "path": "tree_stump_02.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/tree_stump_02/tree_stump_02.bin",
+          "md5": "87f18fe07707d421da70fa2f69b12366",
+          "bytes": 1433880
+        },
+        {
+          "path": "textures/tree_stump_02_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_stump_02/tree_stump_02_diff_1k.jpg",
+          "md5": "e791fc07d2f7a0c2c44a3fcc42b1313d",
+          "bytes": 901605
+        },
+        {
+          "path": "textures/tree_stump_02_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tree_stump_02/tree_stump_02_arm_1k.jpg",
+          "md5": "0e3147e1cc44d37126fa2fb46ba425b1",
+          "bytes": 796214
+        }
+      ],
+      "adaptation": "セットから1点を選び、大きさ・高さ・向きを調整",
+      "triangles": 4000
+    },
+    {
+      "id": "birchRoots",
+      "name": "森の根のかくれ道",
+      "theme": "birchForest",
+      "role": "climb",
+      "sourceAsset": "pine_roots",
+      "sourceTitle": "Pine Roots",
+      "sourceURL": "https://polyhaven.com/a/pine_roots",
+      "authors": {
+        "Rob Tuytel": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "pine_roots.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/pine_roots/pine_roots_1k.gltf",
+          "md5": "d03fc8f8b617a1f82ee91c55ffb8eac7",
+          "bytes": 5161
+        },
+        {
+          "path": "textures/pine_roots_a_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/pine_roots/pine_roots_a_diff_1k.jpg",
+          "md5": "141db64c5f7f3ff0b4332e79e3b92e63",
+          "bytes": 770614
+        },
+        {
+          "path": "textures/pine_roots_a_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/pine_roots/pine_roots_a_nor_gl_1k.jpg",
+          "md5": "a1d72f057d2187c1fd5e28e1c2071373",
+          "bytes": 1345180
+        },
+        {
+          "path": "pine_roots.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/pine_roots/pine_roots.bin",
+          "md5": "55ca478cc9135baa10be976931ee57a7",
+          "bytes": 3753376
+        },
+        {
+          "path": "textures/pine_roots_b_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/pine_roots/pine_roots_b_nor_gl_1k.jpg",
+          "md5": "ab9eb3f7e5f91a6cc86a5dbc5bbab364",
+          "bytes": 1324029
+        },
+        {
+          "path": "textures/pine_roots_b_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/pine_roots/pine_roots_b_diff_1k.jpg",
+          "md5": "32572ea4ae4ba1a474f2e77763af825a",
+          "bytes": 751988
+        },
+        {
+          "path": "textures/pine_roots_a_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/pine_roots/pine_roots_a_arm_1k.jpg",
+          "md5": "831947b9e8113966e6a3fe1b7d8d8871",
+          "bytes": 883065
+        },
+        {
+          "path": "textures/pine_roots_b_arm_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/pine_roots/pine_roots_b_arm_1k.jpg",
+          "md5": "34af145b82e8ab78b4b5f499d3ca5a00",
+          "bytes": 869488
+        }
+      ],
+      "adaptation": "セットから1点を選び、大きさ・高さ・向きを調整",
+      "triangles": 4000
+    },
+    {
+      "id": "birchMossRock",
+      "name": "木陰の苔石",
+      "theme": "birchForest",
+      "role": "climb",
+      "sourceAsset": "rock_moss_set_02",
+      "sourceTitle": "Rock Moss Set 02",
+      "sourceURL": "https://polyhaven.com/a/rock_moss_set_02",
+      "authors": {
+        "Kless Gyzen": "All"
+      },
+      "license": "CC0-1.0",
+      "licenseURL": "https://polyhaven.com/license",
+      "sourceFiles": [
+        {
+          "path": "rock_moss_set_02.gltf",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/rock_moss_set_02/rock_moss_set_02_1k.gltf",
+          "md5": "257569e8c064d0cf198ff866446a5f96",
+          "bytes": 11608
+        },
+        {
+          "path": "textures/rock_moss_set_02_nor_gl_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_moss_set_02/rock_moss_set_02_nor_gl_1k.jpg",
+          "md5": "936601de53528f15a12d16a7e187a4f1",
+          "bytes": 273527
+        },
+        {
+          "path": "textures/rock_moss_set_02_diff_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_moss_set_02/rock_moss_set_02_diff_1k.jpg",
+          "md5": "50a31622ba7d6f3b8157035ce375de4d",
+          "bytes": 194307
+        },
+        {
+          "path": "textures/rock_moss_set_02_rough_1k.jpg",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_moss_set_02/rock_moss_set_02_rough_1k.jpg",
+          "md5": "5de4c0669f19304230fa550a8f3ac0f4",
+          "bytes": 146226
+        },
+        {
+          "path": "rock_moss_set_02.bin",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/rock_moss_set_02/rock_moss_set_02.bin",
+          "md5": "a63878339f14feceab7347cc28110eaa",
+          "bytes": 1316572
+        }
+      ],
+      "adaptation": "セットから1点を選び、大きさ・高さ・向きを調整",
+      "triangles": 4000
+    }
+  ]
+}

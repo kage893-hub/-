@@ -1,0 +1,52 @@
+{
+  "author": "OpenAI image generation, at the user’s request",
+  "use": "Original background, floor and frame textures for five leopard gecko enclosure themes",
+  "processing": "Texture atlas panels extracted, resized and encoded as WebP for the game. Original generations retained outside the repository.",
+  "atlases": [
+    {
+      "theme": "zen",
+      "sourceSha256": "0dfd6d87c2272f7d61463007c373237729ac4e24264d7b3caea26f54e32fe922",
+      "files": [
+        "assets/img/cage-zen-back.webp",
+        "assets/img/cage-zen-floor.webp",
+        "assets/img/cage-zen-frame.webp"
+      ]
+    },
+    {
+      "theme": "greenhouse",
+      "sourceSha256": "da870a1d6d7e4c0fe3c4d276522c2865f2850eb0be75dd60e07d4a81c8005888",
+      "files": [
+        "assets/img/cage-greenhouse-back.webp",
+        "assets/img/cage-greenhouse-floor.webp",
+        "assets/img/cage-greenhouse-frame.webp"
+      ]
+    },
+    {
+      "theme": "coast",
+      "sourceSha256": "019e04569f0aa461b8dd262ff9034ef7b78f268026d8b2b3e4b8cc2e0c135c81",
+      "files": [
+        "assets/img/cage-coast-back.webp",
+        "assets/img/cage-coast-floor.webp",
+        "assets/img/cage-coast-frame.webp"
+      ]
+    },
+    {
+      "theme": "loft",
+      "sourceSha256": "fd066566500b3af81e98f14abceda31efe5e7752fccbb7f4275a51a58eaa6eb1",
+      "files": [
+        "assets/img/cage-loft-back.webp",
+        "assets/img/cage-loft-floor.webp",
+        "assets/img/cage-loft-frame.webp"
+      ]
+    },
+    {
+      "theme": "birch",
+      "sourceSha256": "de27e53fdbc024ea1cbd06d6873b0bb343e865cc3ffd002e1cc941e052e57f9c",
+      "files": [
+        "assets/img/cage-birch-back.webp",
+        "assets/img/cage-birch-floor.webp",
+        "assets/img/cage-birch-frame.webp"
+      ]
+    }
+  ]
+}

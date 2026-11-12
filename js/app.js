@@ -360,7 +360,7 @@
       calc: 10, dust: true, layBox: [], learned: {}, starterFlag: true,
       clinicApology: { visits: 0, coins: 0, at: Date.now(), announced: true },
       speed36Until: 0, speedBefore36: 3,
-      sitter: null, favorites: [], breedingGoals: [], stories: {}, playpen: { slots: window.LeopaActivities.DEFAULT_PEN.map(t => ({ t, rot: 0 })) },
+      sitter: null, favorites: [], breedingGoals: [], playpen: { slots: window.LeopaActivities.DEFAULT_PEN.map(t => ({ t, rot: 0 })) },
     };
     // はじめはショップでレオパを選ぶところから
     S.starters = makeStarters();
@@ -401,8 +401,9 @@
   const unseen = x => G.dexMatches(x.genes, x.tang, x.poly).some(id => !S.dex[id]);
   // 呼び名の候補だけを選ぶ。すでに付いている名前や、見た目の数値は変えない。
   const nameKey = name => String(name).normalize('NFKC').trim().replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60)).toLowerCase();
-  function unusedName(look = {}) {
-    const used = new Set(S.geckos.map(g => nameKey(g.name))), genes = G.normGenes(look.genes), p = look.poly || {};
+  const nameIdentity = name => nameKey(name).replace(/[\s\u200B-\u200D\uFEFF]+/g, '');
+  function unusedName(look = {}, reserved = []) {
+    const used = new Set(S.geckos.map(g => nameIdentity(g.name)).concat(reserved.map(nameIdentity))), genes = G.normGenes(look.genes), p = look.poly || {};
     let preferred;
     if ((p.mel || 0) >= 75 && genes.alb !== 2 && genes.bell !== 2) preferred = NAME_THEMES.dark.concat(['ココア', 'ごま', 'のり']);
     else if (G.isGalaxy(genes, p)) preferred = NAME_THEMES.pattern.slice(0, 10).concat(NAME_THEMES.stars);
@@ -415,11 +416,11 @@
     else preferred = ['きなこ', 'マロン', 'ゆず', 'こはく', 'ぽてと', 'だいず', 'ちくわ', 'むぎ', 'ぷりん', 'こむぎ', 'くるみ', 'レモン'];
     // 合う名前を使い切ったら、色を限定しない呼び名、そのほかの未使用候補へ。
     for (const pool of [preferred, ['すず', 'はな', 'そら', 'たまき', 'ぽん', 'まゆ', 'ふわり', 'かすみ'], NAMES]) {
-      const free = pool.filter(n => !used.has(nameKey(n)));
+      const free = pool.filter(n => !used.has(nameIdentity(n)));
       if (free.length) return pick(free);
     }
-    let suffix = S.nextId;
-    while (used.has(nameKey('レオパ' + suffix))) suffix++;
+    let suffix = 1;
+    while (used.has(nameIdentity('レオパ' + suffix))) suffix++;
     return 'レオパ' + suffix;
   }
 
@@ -1160,7 +1161,7 @@
     g.parents = e.pmom ? { mom: e.pmom, dad: e.pdad } : { mom: { name: e.mom, sex: 'F' }, dad: { name: e.dad, sex: 'M' } };
     S.geckos.push(g);
     S.stats.hatched++;
-    recordGoalBirth(g); ACTIVITIES.record(S, 'hatched');
+    recordGoalBirth(g);
     S.coins += 5;
     const fresh = register(g);
     memo(g, `${e.mom} × ${e.dad} の子として、${e.temp}℃の卵から生まれた`, true);
@@ -1179,8 +1180,8 @@
         ${traitTable(g, true)}
         <form id="renameForm" data-id="${g.id}" data-goto="1" class="rename">
           <label for="renameInput">なまえ</label>
-          <input id="renameInput" value="${esc(g.name)}" maxlength="10" autocomplete="off">
-          <button class="act primary" type="submit">おむかえする</button>
+          <input id="renameInput" value="${esc(g.name)}" data-auto-name="${esc(g.name)}" maxlength="10" autocomplete="off">
+          <div class="rename-actions"><button class="act primary" type="submit">おむかえする</button><button class="act" type="button" data-action="suggestName" data-id="${g.id}">おまかせ</button></div>
         </form></div>`);
     };
     // 3D で、卵がカタカタ → ひび → 殻が割れて、ベビーが顔を出す
@@ -1395,11 +1396,13 @@
           <li>家具・植物：Quaternius「Stylized Nature MegaKit」（CC0）</li>
           <li>恐竜フィギュア：Quaternius「Animated Dinosaur Pack」（CC0）</li>
           <li>流木・岩・植物・置物など：Poly Haven（CC0）</li>
+          <li>新しいケージ5種に合わせた家具25点：<a href="https://polyhaven.com/models" target="_blank" rel="noopener">Poly Haven</a>（<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0</a>）。配布モデルを飼育用品に合わせて加工・軽量化。<a href="assets/licenses/themed-furniture.json" target="_blank" rel="noopener">各素材の作者・出典</a></li>
           <li>月の地球儀の月の画像：NASA Scientific Visualization Studio（パブリックドメイン）</li>
           <li>おかしの飾り：Kenney「Food Kit」（CC0）</li>
           <li>追加の植物・橋・石・置物：<a href="https://kenney.nl/assets/nature-kit" target="_blank" rel="noopener">Kenney「Nature Kit 2.1」</a>（<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0</a>）。大きさと高さを調整</li>
           <li>レオパ・ウェットシェルター・水入れ・ピンセット：Meshy AI で作成</li>
           <li>岩ウェットシェルター：ユーザー作成・生成の提供モデル。スマホ向けに形を軽量化し、3色に調整</li>
+          <li>和の石庭・雨の温室・珊瑚の海辺・レンガのロフト・白樺の森の背景・床・枠：ユーザーの依頼によりOpenAIの画像生成で作成</li>
           <li>品評会の1位トロフィー3種類・追加の記念品3種類：ユーザーの依頼によりOpenAIの画像生成で作成</li>
           <li>3D表示：three.js（MIT License）</li>
         </ul>
@@ -1466,8 +1469,15 @@
         <form id="renameForm" data-id="${g.id}" class="rename">
           <label for="renameInput">なまえ（10文字まで）</label>
           <input id="renameInput" value="${esc(g.name)}" maxlength="10" autocomplete="off">
-          <button class="act primary" type="submit">決定</button>
+          <div class="rename-actions"><button class="act primary" type="submit">決定</button><button class="act" type="button" data-action="suggestName" data-id="${g.id}">おまかせ</button></div>
         </form>`);
+    },
+    suggestName(t) {
+      const g = S.geckos.find(x => x.id === t.dataset.id), form = $('#renameForm'), input = $('#renameInput');
+      if (!g || !form || form.dataset.id !== g.id || !input) return;
+      input.value = unusedName(g, [input.value]);
+      input.dataset.autoName = input.value;
+      input.focus();
     },
     sitterMenu, sitterReport,
     sitterShop() { closeSheet(); S.shopTab = 'food'; switchView('shop'); },
@@ -1692,18 +1702,30 @@
     },
     buyCage(t) {
       const kind = t.dataset.kind, id = t.dataset.id;
+      if (!['size', 'theme'].includes(kind)) return;
       const v = (kind === 'size' ? L3.CAGE_SIZES : L3.CAGE_THEMES)[id];
       const own = cageOwn(), g = selected();
       if (!v) return;
+      let gifts = [];
       if (!own[id]) {
         if (v.expo && view !== 'expo') { toast('レプタイルズショーの会場でだけ買えます'); return; }
         if (S.coins < v.price) { toast('コインが足りません'); return; }
         S.coins -= v.price; own[id] = 1; sfx('buy');
+        gifts = cageFurniture(kind, id);
+        for (const type of gifts) S.decorInv[type] = (S.decorInv[type] || 0) + 1;
         toast(g ? `${v.name}を買って、${g.name}のケースに使いました` : `${v.name}を買いました`);
       } else if (g) toast(`${g.name}のケースを${v.name}にしました`);
       if (g) applyCage(g, kind, id);
       if (t.closest && t.closest('#sheet')) closeSheet();
-      renderView(); save();
+      renderView(); saveNow();
+      if (gifts.length) {
+        openSheet(`<h3 class="sheet-title">${v.name}を買いました</h3><p>家具${gifts.length}点を1個ずつ、持ち物に追加しました。</p>${cageFurnitureList(gifts)}<p class="muted small">ケースの「もようがえ」で置けます。家具はショップで単品でも買えます。</p><div class="sheet-actions">${g ? '<button class="act primary" data-action="decorateCageSet">もようがえへ</button>' : ''}<button class="act" data-action="closeSheet">とじる</button></div>`);
+        fillThumbs();
+      }
+    },
+    decorateCageSet() {
+      if (!selected()) return;
+      closeSheet(); switchView('case'); setEditing({ sel: null, place: null });
     },
     setCageOpt(t) {
       const g = selected();
@@ -1864,8 +1886,8 @@
         <p class="muted">${g.sex === 'M' ? '♂ オス' : '♀ メス'} ・ ${STAGE_LABEL[stageOf(g)]}</p>
         <form id="renameForm" data-id="${g.id}" data-goto="1" class="rename">
           <label for="renameInput">この子の名前をつけてあげよう</label>
-          <input id="renameInput" value="${esc(g.name)}" maxlength="10" autocomplete="off">
-          <button class="act primary" type="submit">この名前にする</button>
+          <input id="renameInput" value="${esc(g.name)}" data-auto-name="${esc(g.name)}" maxlength="10" autocomplete="off">
+          <div class="rename-actions"><button class="act primary" type="submit">この名前にする</button><button class="act" type="button" data-action="suggestName" data-id="${g.id}">おまかせ</button></div>
         </form></div>`);
     },
     resetMenu() {
@@ -1940,8 +1962,11 @@
   document.addEventListener('submit', ev => {
     if (ev.target.id !== 'renameForm') return;
     ev.preventDefault();
+    if (saveLocked || otherSavedNewer()) { reloadForNewer(); return; }
     const g = S.geckos.find(x => x.id === ev.target.dataset.id);
-    const v = $('#renameInput').value.trim().slice(0, 10);
+    const input = $('#renameInput');
+    let v = input.value.trim().slice(0, 10);
+    if (g && v && input.dataset.autoName === v && S.geckos.some(x => x.id !== g.id && nameIdentity(x.name) === nameIdentity(v))) v = unusedName(g);
     if (g && v) { g.name = v; for (const goal of S.breedingGoals) if (goal.childId === g.id) goal.child = v; }
     if (g && ev.target.dataset.goto) { S.selected = g.id; switchView('case'); }
     closeSheet();
@@ -2131,7 +2156,6 @@
       </div>
       ${dailyCard()}
       ${studyCard()}
-      <button class="sitter-card" data-action="stories"><span><b>みんなのお願い ${storyBadge()}</b><small>3人とつながる、9つのお願い</small></span><span aria-hidden="true">›</span></button>
 
       <div class="actions sub">
         <button class="act ghost" data-action="viewGecko" data-id="${g.id}">${ic('look')}くわしく見る</button>
@@ -2570,8 +2594,8 @@
         <p class="muted">${g.sex === 'M' ? '♂ オス' : '♀ メス'} ・ ${esc(o.note)}</p>
         <form id="renameForm" data-id="${g.id}" data-next="starter" class="rename">
           <label for="renameInput">この子の名前をつけてあげよう</label>
-          <input id="renameInput" value="${esc(g.name)}" maxlength="10" autocomplete="off">
-          <button class="act primary" type="submit">この名前にする</button>
+          <input id="renameInput" value="${esc(g.name)}" data-auto-name="${esc(g.name)}" maxlength="10" autocomplete="off">
+          <div class="rename-actions"><button class="act primary" type="submit">この名前にする</button><button class="act" type="button" data-action="suggestName" data-id="${g.id}">おまかせ</button></div>
         </form></div>`);
     },
     starterDone() {
@@ -2622,7 +2646,6 @@
     if (!existing && S.breedingGoals.length >= 5) { toast('目標は5つまで。達成した目標を整理しよう'); return; }
     if (existing) { existing.mom = mom || existing.mom; existing.dad = dad || existing.dad; }
     else S.breedingGoals.push({ target, mom, dad, createdAt: Date.now(), achievedAt: 0, child: '', childId: '' });
-    ACTIVITIES.record(S, 'goal');
     saveNow(); renderView(); toast('繁殖の目標を保存しました');
   }
   function recordGoalBirth(g) {
@@ -2662,7 +2685,7 @@
     const run = playSession; playSession = null;
     tank?.setPlaypen(false);
     if (run.elapsed >= 15 && run.distance >= 3) {
-      ACTIVITIES.record(S, 'walk'); saveNow();
+      saveNow();
       if (!quiet) toast('おさんぽを見守りました。ケースでひと休みしよう');
     }
     renderView();
@@ -2688,23 +2711,6 @@
     S.playpen.slots[i].t = t; saveNow(); sceneMount();
   });
 
-  // ---- 3人からの連続依頼。各段階を受けてからの行動だけを数える。
-  function storyReady(story, state) {
-    const step = story.steps[state.step], c = state.counts;
-    if (!step) return false;
-    if (step.kind === 'home') return S.geckos.some(g => decorOf(g).some(d => L3.DECOR[d.t]?.shelter) && decorOf(g).some(d => L3.DECOR[d.t]?.drink));
-    if (step.kind === 'decor') return S.geckos.some(g => new Set(decorOf(g).map(d => d.t)).size >= 3);
-    if (step.kind === 'care') return c.fed >= 3 && c.cleaned >= 1;
-    return (c[step.kind] || 0) >= step.need;
-  }
-  function storyBadge() { const n = ACTIVITIES.STORIES.filter(story => S.stories[story.id] && storyReady(story, S.stories[story.id])).length; return n ? `<span class="record-badge">${n}</span>` : ''; }
-  function storiesMenu() {
-    openSheet(`<p class="eyebrow">3人とつながる、9つのお願い</p><h3 class="sheet-title">みんなのお願い</h3><p class="small">期限はありません。途中の記録は保存され、3段階を終えると家具と称号がもらえます。</p>${ACTIVITIES.STORIES.map(story => {
-      const r = S.stories[story.id], done = r && r.step >= story.steps.length, step = story.steps[r?.step || 0], ready = r && !done && storyReady(story, r);
-      const count = !r || done ? '' : step.kind === 'care' ? `ごはん ${Math.min(3, r.counts.fed || 0)}/3 ・ おそうじ ${Math.min(1, r.counts.cleaned || 0)}/1` : ['home', 'decor'].includes(step.kind) ? (ready ? 'お部屋の準備ができました' : 'もようがえで準備しよう') : `${Math.min(step.need, r.counts[step.kind] || 0)} / ${step.need}`;
-      return `<article class="card story-card"><small class="muted">${story.person}</small><h4>${story.title}</h4>${done ? `<p class="good">✓ 全3話達成</p><p>「${story.badge}」</p><p class="small">「ありがとう。またレオパの話を聞かせてね」</p>` : `<p class="eyebrow">第${(r?.step || 0) + 1}話 ・ ${step.title}</p><p>${step.text}</p>${r ? `<p class="story-progress">${count}</p>` : ''}<p class="small">お礼 ${step.coins}コイン${(r?.step || 0) === 2 ? ` ＋ ${L3.DECOR[story.gift].name}` : ''}</p>${!r ? `<button class="act primary" data-action="storyStart" data-id="${story.id}">お願いを受ける</button>` : `<button class="act ${ready ? 'primary' : ''}" data-action="storyClaim" data-id="${story.id}" data-step="${r.step}" ${ready ? '' : 'disabled'}>${ready ? '報告してお礼を受け取る' : 'お願いを進めよう'}</button>${!ready ? `<button class="act ghost" data-action="storyGo" data-kind="${step.kind}">やってみる</button>` : ''}`}`}</article>`;
-    }).join('')}<button class="act wide" data-action="closeSheet">とじる</button>`);
-  }
   Object.assign(ACTIONS, {
     careMenu,
     careFilter(t) { if (!CARE_FILTERS.some(([k]) => k === t.dataset.filter)) return; careFilter = t.dataset.filter; for (const b of document.querySelectorAll('[data-action=careFilter]')) b.setAttribute('aria-pressed', String(b.dataset.filter === careFilter)); careRows(); },
@@ -2719,10 +2725,7 @@
     walkEnd() { closeSheet(); finishWalk(); },
     walkLayout,
     penRotate(t) { const i = Number(t.dataset.i); if (!playSession || !Number.isInteger(i) || !S.playpen.slots[i]) return; S.playpen.slots[i].rot = (S.playpen.slots[i].rot + Math.PI / 2) % (Math.PI * 2); saveNow(); sceneMount(); },
-    stories: storiesMenu,
-    storyStart(t) { if (!ACTIVITIES.STORIES.some(s => s.id === t.dataset.id) || S.stories[t.dataset.id]) return; S.stories[t.dataset.id] = { step: 0, counts: {} }; saveNow(); storiesMenu(); renderView(); },
-    storyClaim(t) { const story = ACTIVITIES.STORIES.find(s => s.id === t.dataset.id), r = S.stories[t.dataset.id]; if (!story || !r || r.step !== Number(t.dataset.step) || !storyReady(story, r)) return; const reward = story.steps[r.step].coins; r.step++; r.counts = {}; S.coins += reward; if (r.step === story.steps.length) { S.decorInv[story.gift] = (S.decorInv[story.gift] || 0) + 1; toast(`「${story.badge}」の称号と家具を受け取りました`); } saveNow(); sfx('coin'); storiesMenu(); renderView(); },
-    storyGo(t) { const kind = t.dataset.kind; closeSheet(); if (kind === 'goal') openPairPlanner('target'); else if (kind === 'hatched') switchView('eggs'); else if (kind === 'family') ACTIONS.family({ dataset: {} }); else { switchView('case'); if (kind === 'walk') openWalk(); else if (['home', 'decor'].includes(kind)) ACTIONS.editStart(); else if (kind === 'photo') ACTIONS.camera(); else if (kind === 'handled') ACTIONS.handle(); else careMenu(); } },
+
   });
 
   // 目標：今日のおせわ・ブリーダー依頼・実績
@@ -2767,7 +2770,6 @@
   }
   function daily(key) {
     tutAdvance(key);
-    ACTIVITIES.record(S, key);
     const d = dailyState();
     const was = DAILY.every(t => d[t.key] >= t.need);
     d[key] = (d[key] || 0) + 1;
@@ -2969,6 +2971,10 @@
   const cageOf = g => { if (!g.cage) g.cage = { size: 'std', theme: 'glass' }; return g.cage; };
   const cageDims = g => L3.CAGE_SIZES[cageOf(g).size] || L3.CAGE_SIZES.std;
   const cageOwn = () => { if (!S.cageOwn) S.cageOwn = { std: 1, glass: 1 }; return S.cageOwn; };
+  const cageFurniture = (kind, id) => kind === 'theme' ? ((L3.CAGE_THEMES[id] || {}).furniture || []).filter(t => L3.DECOR[t]) : [];
+  function cageFurnitureList(ids) {
+    return `<div class="cage-furniture-list">${ids.map(id => `<div>${thumb('decor', id)}<b>${L3.DECOR[id].name}</b><small>1個</small></div>`).join('')}</div>`;
+  }
   function applyCage(g, kind, id) {
     const c = cageOf(g);
     if (kind === 'size') {
@@ -2985,7 +2991,7 @@
     const own = cageOwn(), g = selected();
     const row = (kind, id, v) => {
       const has = own[id], on = g && cageOf(g)[kind] === id;
-      return itemCard(kind, id, v, has ? (on ? '使用中' : '持っている') : String(v.price), on);
+      return itemCard(kind, id, v, has ? (on ? '使用中' : '持っている') : cageFurniture(kind, id).length ? `${v.price} コイン・家具${v.furniture.length}点つき` : String(v.price), on);
     };
     return `<h3 class="h3">ケージの大きさ <small class="muted">${g ? `${esc(g.name)}のケースに使います` : ''}</small></h3>
       <div class="item-grid">${Object.entries(L3.CAGE_SIZES).map(([id, v]) => row('size', id, v)).join('')}</div>
@@ -3035,6 +3041,7 @@
   const THEME_DECOR = { dino: /^(trex|trike|stego|para)$/, candy: /^(donut|cookie|cake|ginger)$/ };
   function themeFits(g, id, d) {
     const th = cageOf(g).theme;
+    if (d.theme === th) return true;
     if (th === 'expoGold') return d.expo === 'gold';
     if (th === 'expoNight') return d.expo === 'night';
     return !!(THEME_DECOR[th] && THEME_DECOR[th].test(id));
@@ -3151,7 +3158,6 @@
     return focus ? `<div class="lineage-node focus">${inner}</div>` : `<button class="lineage-node" data-action="family" data-id="${esc(g.id)}">${inner}<small class="lineage-link">この子の家系を見る →</small></button>`;
   }
   ACTIONS.family = function (t) {
-    ACTIVITIES.record(S, 'family');
     const all = window.LeopaFamily.sync(S), id = t && t.dataset.id || (selected() || {}).id, f = window.LeopaFamily.relatives(S, id);
     if (!f) return;
     const grandparents = [['父方の祖父', f.dad && all[f.dad.parents.dad]], ['父方の祖母', f.dad && all[f.dad.parents.mom]], ['母方の祖父', f.mom && all[f.mom.parents.dad]], ['母方の祖母', f.mom && all[f.mom.parents.mom]]];
@@ -3210,15 +3216,28 @@
   const DECOR_CATEGORIES = [['all', 'すべて'], ['care', 'お世話用品'], ['plant', '植物'], ['climb', '登れる家具'], ['ornament', '飾り']];
   let interiorSection = 'decor';
   let decorCategory = 'all'; // 表示用の選択。セーブの項目は増やさない。
+  let decorTheme = 'all';
+  const furnitureThemes = () => Object.keys(L3.CAGE_THEMES).filter(id => Object.values(L3.DECOR).some(d => d.theme === id));
   const decorCategoryOf = (id, d) => (d.shelter || d.drink) ? 'care' : (d.soft || /^(plant|grass|flower|mushroom)/.test(id)) ? 'plant' : d.climb ? 'climb' : 'ornament';
   function interiorShop() {
-    const items = Object.entries(L3.DECOR).filter(([, d]) => !d.expo && !d.rewardOnly);
+    const items = Object.entries(L3.DECOR).filter(([, d]) => !d.expo && (decorTheme === 'all' || d.theme === decorTheme));
     const filtered = items.filter(([id, d]) => decorCategory === 'all' || decorCategoryOf(id, d) === decorCategory);
     return `<h3 class="h3">家具 <small class="muted">買った家具は「もようがえ」で置けます</small></h3>
+      <label class="decor-theme" for="decorTheme">ケージに合わせて探す<select id="decorTheme"><option value="all" ${decorTheme === 'all' ? 'selected' : ''}>すべての家具</option>${furnitureThemes().map(id => `<option value="${id}" ${decorTheme === id ? 'selected' : ''}>${L3.CAGE_THEMES[id].name}の家具（5点）</option>`).join('')}</select></label>
       <div class="decor-tabs" role="group" aria-label="家具の用途">${DECOR_CATEGORIES.map(([key, label]) => `<button type="button" aria-pressed="${decorCategory === key}" aria-controls="decorItems" class="${decorCategory === key ? 'on' : ''}" data-action="decorCategory" data-category="${key}">${label}<small>${items.filter(([id, d]) => key === 'all' || decorCategoryOf(id, d) === key).length}</small></button>`).join('')}</div>
-      <div id="decorItems" class="item-grid" aria-label="${DECOR_CATEGORIES.find(([key]) => key === decorCategory)[1]}">${filtered.map(([t, d]) => itemCard('decor', t, d, String(d.price))).join('')}</div><button class="act wide" data-action="stories">お願いでもらえる限定家具も見る</button>`;
+      <div id="decorItems" class="item-grid" aria-label="${DECOR_CATEGORIES.find(([key]) => key === decorCategory)[1]}">${filtered.map(([t, d]) => itemCard('decor', t, d, String(d.price))).join('')}</div>`;
   }
+  document.addEventListener('change', ev => {
+    if (ev.target.id !== 'decorTheme' || !['all', ...furnitureThemes()].includes(ev.target.value)) return;
+    decorTheme = ev.target.value; renderView();
+    document.getElementById('decorTheme')?.focus({ preventScroll: true });
+  });
   Object.assign(ACTIONS, {
+    matchingDecor(t) {
+      if (!furnitureThemes().includes(t.dataset.theme)) return;
+      decorTheme = t.dataset.theme; decorCategory = 'all'; interiorSection = 'decor';
+      closeSheet(); renderView();
+    },
     interiorSection(t) {
       if (!['decor', 'cage'].includes(t.dataset.section)) return;
       interiorSection = t.dataset.section;
@@ -3280,14 +3299,16 @@
       const v = kind === 'decor' ? L3.DECOR[id] : (kind === 'size' ? L3.CAGE_SIZES : L3.CAGE_THEMES)[id];
       if (!v) return;
       const g = selected();
-      let info = '', btn = '';
+      let info = '', btn = '', bundle = '';
       if (kind === 'decor') {
         const pr = decorPriceNow(id);
         info = `${S.decorInv[id] ? `手持ち ${S.decorInv[id]}個 ・ ` : ''}${v.shelter ? 'もぐって眠れるシェルター' : 'ケースに置ける家具'}${pr < v.price ? ` ・ ショー特価（いつもは ${v.price}）` : ''}`;
-        btn = v.rewardOnly ? '<button class="act primary" data-action="stories">みんなのお願いで手に入れる</button>' : `<button class="act primary" data-action="buyDecor" data-t="${id}" ${S.coins < pr ? 'disabled' : ''}>${pr} コインで買う</button>`;
+        btn = `<button class="act primary" data-action="buyDecor" data-t="${id}" ${S.coins < pr ? 'disabled' : ''}>${pr} コインで買う</button>`;
       } else {
         const has = cageOwn()[id], on = g && cageOf(g)[kind] === id;
         info = kind === 'size' ? '同じ大きさのレオパと並べた見本です' : 'レギュラーサイズの見本です';
+        const gifts = cageFurniture(kind, id);
+        if (gifts.length) bundle = `<section class="cage-furniture">${has ? '' : `<p class="cage-set-price">${v.price} コイン</p>`}<h4 class="h4">${has ? 'セットの家具' : `初回購入で家具${gifts.length}点つき`}</h4><p class="small">${has ? '家具はショップで単品でも買えます。' : '1個ずつ持ち物に追加します。「もようがえ」で置けます。家具は単品でも買えます。'}</p>${cageFurnitureList(gifts)}</section>`;
         btn = on ? '<button class="act" disabled>いまのケースで使用中</button>'
           : has ? `<button class="act primary" data-action="buyCage" data-kind="${kind}" data-id="${id}">${g ? `${esc(g.name)}のケースに使う` : '使う'}</button>`
           : `<button class="act primary" data-action="buyCage" data-kind="${kind}" data-id="${id}" ${S.coins < v.price ? 'disabled' : ''}>${v.price} コインで買う${g ? `（${esc(g.name)}のケースに使う）` : ''}</button>`;
@@ -3297,13 +3318,14 @@
         <h3 class="sheet-title">${v.name}</h3>
         <p>${v.desc}</p>
         <p class="muted small">${info}</p>
+        ${bundle}
+        ${kind === 'theme' && furnitureThemes().includes(id) ? `<button class="act wide" data-action="matchingDecor" data-theme="${id}">このケージに合う家具を見る</button>` : ''}
         <div class="sheet-actions">${btn}<button class="act" data-action="closeSheet">とじる</button></div>
       </div>`);
       fillThumbs();
     },
     buyDecor(t) {
       const d = L3.DECOR[t.dataset.t];
-      if (d?.rewardOnly) { toast('この家具は、みんなのお願いでもらえます'); return; }
       const pr = d ? decorPriceNow(t.dataset.t) : 0;
       if (!d || S.coins < pr) { toast('コインが足りません'); return; }
       S.coins -= pr;
@@ -3377,7 +3399,6 @@
         try { img = tank.snapshot(); } catch (e) { toast('写真をとれませんでした'); return; }
         let pid;
         try { pid = putPhoto(img); } catch (err) { toast('保存できる写真がいっぱいです。いらない写真を消してね'); return; }
-        ACTIVITIES.record(S, 'photo');
         a.entries.push({ t: Date.now(), text: `${stageOf(g) === 'baby' ? 'ベビー' : stageOf(g) === 'young' ? 'ヤング' : 'アダルト'}のころの一枚`, pid });
         sfx('tap');
         try { save(); } catch (e) { /* 保存がいっぱいでも遊べる */ }
@@ -3795,7 +3816,6 @@
       if (a.entries.filter(e => e.img || e.pid).length >= MAX_PHOTOS) { toast(`アルバムは${MAX_PHOTOS}枚までです。いらない写真を消してね`); return; }
       let pid;
       try { pid = putPhoto(shot.img); } catch (err) { toast('保存できる写真がいっぱいです'); return; }
-      ACTIVITIES.record(S, 'photo');
       a.entries.push({ t: Date.now(), text: `${weightOf(g)}g のころの一枚`, pid });
       save(); toast('アルバムに残しました'); sfx('coin'); closeSheet();
     },
@@ -4311,7 +4331,7 @@
         return o;
       });
       // 用品：家具10種類がいつもの半額
-      const ids = Object.keys(L3.DECOR).filter(t => !L3.DECOR[t].expo && !L3.DECOR[t].rewardOnly).sort((a, b) => strHash(info.key + a) - strHash(info.key + b)).slice(0, 10);
+      const ids = Object.keys(L3.DECOR).filter(t => !L3.DECOR[t].expo).sort((a, b) => strHash(info.key + a) - strHash(info.key + b)).slice(0, 10);
       // ほかのお客さんがおむかえしていく順番
       const order = [0, 1, 2, 3, 4, 5].sort((a, b) => strHash(info.key + 'o' + a) - strHash(info.key + 'o' + b));
       S.expo = { day: info.key, ticket: false, stock, order, others: 0, decor: ids, theme: EXPO_THEMES[strHash(info.key) % EXPO_THEMES.length], booth: [], sold: [], champ: false, seminar: false, noticed: false, done: false };

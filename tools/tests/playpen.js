@@ -21,7 +21,6 @@ const OUT = process.argv[2] || '/tmp/leopa-tests'; fs.mkdirSync(OUT, { recursive
       s.decorInv.knBridge = 1; s.decorInv.knSteps = 1; _playTest.renderView();
       Object.assign(tank._st, { x: 0, z: 0, yaw: Math.PI/2, mode: 'idle', sleeping: false, wait: 999, act: null, hidePeek: null });
       window.baseCase = JSON.stringify(s.geckos[0]); window.baseFood = JSON.stringify(s.food); window.baseCoins = s.coins;
-      _playTest.actions.storyStart({dataset:{id:'garden'}}); _playTest.actions.storyClaim({dataset:{id:'garden',step:'0'}}); _playTest.actions.closeSheet();
     });
     await p.locator('[data-action=walkStart]').click();
     assert.equal(await p.locator('[data-action=walkEnd]').count(), 1);
@@ -43,17 +42,12 @@ const OUT = process.argv[2] || '/tmp/leopa-tests'; fs.mkdirSync(OUT, { recursive
     await p.locator('#sheetBody [data-action=closeSheet]').click();
     await p.locator('[data-action=walkEnd]').click();
     assert.equal(await p.evaluate(() => _playTest.session()), null);
-    assert.equal(await p.evaluate(() => __leopaState().stories.garden.counts.walk), 1);
     assert.equal(await p.evaluate(() => JSON.stringify(__leopaState().geckos[0]) === baseCase), true);
     assert.equal(await p.evaluate(() => tank._st.playpen), false);
-    await p.evaluate(() => { tank.setActive(false); _playTest.actions.stories(); });
-    await p.locator('[data-action=storyClaim][data-id=garden]').click(); await p.locator('#sheetBody [data-action=closeSheet]').click();
-    // カメラ→アルバム保存で第三話を達成。
+    // カメラ→アルバム保存はお願いの廃止後も使える。
     await p.evaluate(() => { tank._render(); _playTest.actions.snapPhoto({ dataset: { id: __leopaState().selected } }); });
-    await p.waitForFunction(() => __leopaState().stories.garden.counts.photo === 1);
-    await p.evaluate(() => _playTest.actions.stories()); await p.locator('[data-action=storyClaim][data-id=garden]').click();
-    assert.equal(await p.evaluate(() => __leopaState().decorInv.knPalm), 1);
-    await p.locator('#sheetBody [data-action=closeSheet]').click();
+    await p.waitForFunction(() => __leopaState().albums[__leopaState().selected].entries.some(e => e.pid));
+    await p.keyboard.press('Escape');
     const handling = await p.evaluate(() => {
       tank.setActive(false); const st = tank._st;
       tank.setDecor(Leopa3D.DEFAULT_DECOR); Object.assign(st, {x:0,z:0,yaw:0,mode:'idle',act:null,sleeping:false,hidePeek:null});
@@ -87,6 +81,6 @@ const OUT = process.argv[2] || '/tmp/leopa-tests'; fs.mkdirSync(OUT, { recursive
     for(const photo of photos){assert.ok(photo.src && photo.src.startsWith('data:image/'),photo.id);fs.writeFileSync(OUT+'/'+photo.id+'.png',Buffer.from(photo.src.split(',')[1],'base64'))}
     fs.writeFileSync(OUT+'/furniture.json',JSON.stringify(photos.map(({id,name})=>({id,name})),null,2));
     fs.writeFileSync(OUT+'/playpen-results.json',JSON.stringify({progress,handling,pointer,furniture,errors},null,2));
-    assert.deepEqual(errors,[]); console.log('おさんぽの歩行・時間・配置保存・元のケース維持・連続依頼と写真報酬・家具のあるケースのふれあい・指のキャンセル・トンネル通過・家具17種 OK'); console.log('[]');
+    assert.deepEqual(errors,[]); console.log('おさんぽの歩行・時間・配置保存・元のケース維持・アルバム保存・家具のあるケースのふれあい・指のキャンセル・トンネル通過・家具17種 OK'); console.log('[]');
   } finally { await b.close(); }
 })().catch(e=>{console.error(e);process.exit(1)});

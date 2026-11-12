@@ -239,6 +239,7 @@ button { font: inherit; color: inherit; }
 .feed-buttons .primary { flex: 1; }
 .feed-caution { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px; }
 .rename { display: grid; gap: 8px; }
+.rename-actions { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 8px; }
 .rename label { font-size: 13px; color: var(--muted); }
 .rename input { font: inherit; font-size: 17px; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); }
 .reveal { display: grid; justify-items: center; text-align: center; gap: 6px; }
@@ -836,6 +837,15 @@ body.sheet-open { overflow: hidden; }
 .decor-tabs button { min-height: 44px; padding: 8px 5px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--muted); font: inherit; font-size: 12px; font-weight: 700; }
 .decor-tabs button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
 .decor-tabs small { margin-left: 5px; font-size: 11px; font-weight: 500; }
+.decor-theme { display: block; margin-bottom: 12px; color: var(--muted); font-size: 13px; }
+.decor-theme select { display: block; width: 100%; min-height: 46px; margin-top: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; }
+.cage-furniture { margin: 16px 0; text-align: left; }
+.cage-set-price { margin: 8px 0; font-size: 20px; font-weight: 700; }
+.cage-furniture-list { display: grid; gap: 8px; margin: 12px 0; text-align: left; }
+.cage-furniture-list > div { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 10px 6px 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.cage-furniture-list .item-img { width: 52px; height: 52px; margin: 0; border-radius: 8px; object-fit: cover; }
+.cage-furniture-list b { min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+.cage-furniture-list small { white-space: nowrap; color: var(--muted); }
 
 .interior-switch { position: static; }
 .interior-switch button { min-height: 44px; }
@@ -901,7 +911,7 @@ body.sheet-open { overflow: hidden; }
 .sitter-totals dt { font-size:12px; }
 .sitter-totals dd { margin:4px 0 0; font-weight:700; font-size:22px; }
 
-/* 一覧・目標・お願いは、必要なときに開く。 */
+/* 一覧・目標は、必要なときに開く。 */
 .activity-entry { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
 .activity-filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
 .activity-filters .chip[aria-pressed="true"] { background: var(--accent); color: var(--ink); }
@@ -916,10 +926,7 @@ body.sheet-open { overflow: hidden; }
 .care-person-main .tags { margin-top: 6px; }
 .favorite-button { width: 44px; min-height: 48px; flex-shrink: 0; color: var(--muted); background: none; border: 0; border-radius: 14px; font-size: 26px; cursor: pointer; }
 .favorite-button[aria-pressed="true"] { color: #9c6900; background: #fff1c5; }
-.goal-card, .story-card { margin: 12px 0; overflow-wrap: anywhere; }
-.story-card h4 { font-size: 18px; margin: 6px 0 12px; }
-.story-card .eyebrow { margin-top: 12px; }
-.story-progress { font-weight: 700; color: var(--good); }
+.goal-card { margin: 12px 0; overflow-wrap: anywhere; }
 .pen-slot { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; margin: 15px 0; }
 .pen-slot label { min-width: 0; font-weight: 700; }
 .pen-slot select { display: block; width: 100%; min-height: 48px; margin-top: 6px; font: inherit; }
