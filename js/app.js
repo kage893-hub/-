@@ -1682,23 +1682,20 @@
       save();
       const comment = me.base >= 80 ? 'この部門の特徴がとてもよく出ています' : me.base >= 60 ? '部門の特徴がしっかり出ています' : me.base >= 40 ? '特徴はひかえめ。血統を重ねるともっと伸びそう' : 'この部門とは少し相性がよくないかも';
       const cond = me.cond >= 15 ? 'コンディションは最高です' : me.cond >= 9 ? 'コンディションも良好' : 'お世話をしてから出ると、もっと点が伸びます';
-      openSheet(`<div class="show-judge"><p class="eyebrow">${lv.name} ・ ${th.name}</p><span class="spinner big" aria-hidden="true"></span><p class="muted">審査員がじっくり見ています……</p></div>`);
-      setTimeout(() => {
-        sfx(rank === 1 ? 'hatch' : 'coin');
-        openSheet(`<div class="show-result">
-          <p class="eyebrow">${lv.name} ・ ${th.name}</p>
-          <h3 class="morph big">${rank === 1 ? '優勝！' : `${rank}位`}</h3>
-          ${!champ && rank === 1 ? `<img class="champ-prize" src="${SHOW_TROPHY_IMAGES[lv.id]}" alt="${lv.mark}の1位トロフィー">` : ''}
-          ${champ && rank <= 3 ? `<img class="champ-prize" src="assets/expo/trophy${rank}.webp" alt="${rank === 1 ? 'トロフィー' : 'リボン'}">` : ''}
-          <div class="reveal-art">${portrait(g, stageOf(g), nameOf(g))}</div>
-          <ol class="show-rank">${all.map((x, i) => `<li class="${x.me ? 'me' : ''}"><span>${i + 1}位</span><b>${esc(x.name)}</b><small>${x.total}点</small></li>`).join('')}</ol>
-          <div class="show-break"><span>見た目 <b>${Math.round(me.base * 0.85)}</b></span><span>お世話 <b>${me.cond >= 0 ? '+' : ''}${me.cond}</b></span><span>当日の調子 <b>${me.luck >= 0 ? '+' : ''}${me.luck}</b></span></div>
-          <p class="small">審査員より：「${comment}。${cond}」</p>
-          ${coins ? `<p><b>${coins} コイン</b>もらいました！</p>` : `<p class="muted small">今回は入賞ならず。また${champ ? '来週' : '明日'}チャレンジしよう</p>`}
-          <button class="act primary" data-action="closeSheet">とじる</button>
-        </div>`);
-        renderView();
-      }, 600);
+      sfx(rank === 1 ? 'hatch' : 'coin');
+      openSheet(`<div class="show-result">
+        <p class="eyebrow">${lv.name} ・ ${th.name}</p>
+        <h3 class="morph big">${rank === 1 ? '優勝！' : `${rank}位`}</h3>
+        ${!champ && rank === 1 ? `<img class="champ-prize" src="${SHOW_TROPHY_IMAGES[lv.id]}" alt="${lv.mark}の1位トロフィー">` : ''}
+        ${champ && rank <= 3 ? `<img class="champ-prize" src="assets/expo/trophy${rank}.webp" alt="${rank === 1 ? 'トロフィー' : 'リボン'}">` : ''}
+        <div class="reveal-art">${portrait(g, stageOf(g), nameOf(g))}</div>
+        <ol class="show-rank">${all.map((x, i) => `<li class="${x.me ? 'me' : ''}"><span>${i + 1}位</span><b>${esc(x.name)}</b><small>${x.total}点</small></li>`).join('')}</ol>
+        <div class="show-break"><span>見た目 <b>${Math.round(me.base * 0.85)}</b></span><span>お世話 <b>${me.cond >= 0 ? '+' : ''}${me.cond}</b></span><span>当日の調子 <b>${me.luck >= 0 ? '+' : ''}${me.luck}</b></span></div>
+        <p class="small">審査員より：「${comment}。${cond}」</p>
+        ${coins ? `<p><b>${coins} コイン</b>もらいました！</p>` : `<p class="muted small">今回は入賞ならず。また${champ ? '来週' : '明日'}チャレンジしよう</p>`}
+        <button class="act primary" data-action="closeSheet">とじる</button>
+      </div>`);
+      renderView();
     },
     buyCage(t) {
       const kind = t.dataset.kind, id = t.dataset.id;
