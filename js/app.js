@@ -248,6 +248,11 @@
     movePhotosOut(s);
     if (!s.tut) s.tut = { step: 99 }; // 前から遊んでいる人にはガイドを出さない
     s.decorInv = s.decorInv || {};
+    // 即売の自動売り切れを廃止。自分で購入した印は保つ。
+    if (s.expo) {
+      for (const offer of s.expo.stock || []) delete offer.other;
+      delete s.expo.order; delete s.expo.others;
+    }
     if (s.calc == null) { s.calc = 10; s.dust = true; }
     // ベルアルビノ・ジャイアントの遺伝子が増えたので、そろえておく
     for (const x of [...s.geckos, ...s.eggs, ...(s.offers || []), ...(s.layBox || []), ...(s.special && s.special.offer ? [s.special.offer] : [])]) if (x.genes) x.genes = G.normGenes(x.genes);
@@ -638,7 +643,7 @@
   }
   const offerAt = i => i === 'sp' ? (S.special && !S.special.sold ? S.special.offer : null)
     : i[0] === 'x' ? (S.expo && S.expo.stock[Number(i.slice(1))] && !stockGone(S.expo.stock[Number(i.slice(1))]) ? S.expo.stock[Number(i.slice(1))] : null) : S.offers[Number(i)];
-  const stockGone = o => o.sold || o.other;
+  const stockGone = o => !!o.sold;
   function takeOffer(i) { if (i === 'sp') S.special.sold = true; else if (i[0] === 'x') S.expo.stock[Number(i.slice(1))].sold = true; else S.offers.splice(Number(i), 1); }
   function refreshOffers(now) {
     refreshSpecial(now);
@@ -4339,26 +4344,9 @@
       });
       // 用品：家具10種類がいつもの半額
       const ids = Object.keys(L3.DECOR).filter(t => !L3.DECOR[t].expo).sort((a, b) => strHash(info.key + a) - strHash(info.key + b)).slice(0, 10);
-      // ほかのお客さんがおむかえしていく順番
-      const order = [0, 1, 2, 3, 4, 5].sort((a, b) => strHash(info.key + 'o' + a) - strHash(info.key + 'o' + b));
-      S.expo = { day: info.key, ticket: false, stock, order, others: 0, decor: ids, theme: EXPO_THEMES[strHash(info.key) % EXPO_THEMES.length], booth: [], sold: [], champ: false, seminar: false, noticed: false, done: false };
+      S.expo = { day: info.key, ticket: false, stock, decor: ids, theme: EXPO_THEMES[strHash(info.key) % EXPO_THEMES.length], booth: [], sold: [], champ: false, seminar: false, noticed: false, done: false };
     }
-    otherBuyers(S.expo, info, now);
     return S.expo;
-  }
-  // 即売の残り：10時 6匹 → 12時 5匹 → 15時 4匹 → 18時 3匹 → 20時 2匹（プレイヤーが買った子はのぞく）
-  const OTHER_HOURS = [12, 15, 18, 20];
-  function otherBuyers(E, info, now) {
-    if (!info.sunday) return;
-    const day0 = info.t0 - EXPO_OPEN * HOUR;
-    const due = OTHER_HOURS.filter(h => now >= day0 + h * HOUR).length;
-    if (!E.order) { E.order = [0, 1, 2, 3, 4, 5]; E.others = 0; }
-    while ((E.others || 0) < due) {
-      const i = E.order.find(k => E.stock[k] && !E.stock[k].sold && !E.stock[k].other);
-      if (i == null) break;
-      E.stock[i].other = true;
-      E.others = (E.others || 0) + 1;
-    }
   }
   // ブースの販売：開催中に少しずつ売れていく。閉場後にまとめて結果
   function expoTick(now) {
@@ -4513,7 +4501,7 @@
     let body = '';
     if (tab === 'sale') {
       body = `<img class="expo-strip" src="assets/expo/booth.webp" alt="">
-        <p class="muted small">ブリーダーさんたちが、今日だけの子を連れてきています。1匹ずつの早い者勝ち。夜になるほど、ほかのお客さんにおむかえされていきます（いま ${E.stock.filter(o => !stockGone(o)).length} / ${E.stock.length}匹）。</p>
+        <p class="muted small">ブリーダーさんたちが、今日だけの子を連れてきています。閉場までじっくり選べます（いま ${E.stock.filter(o => !stockGone(o)).length} / ${E.stock.length}匹）。</p>
         <div class="offers">${E.stock.map((o, i) => {
           const morph = nameOf(o);
           const hets = G.hets(o.genes);
@@ -4527,7 +4515,7 @@
               ${hets.length ? `<small class="het-line">${hets.map(h => 'het ' + h).join(' / ')}</small>` : ''}
               ${unseen(o) ? '<small class="new-line">図鑑にまだいない</small>' : ''}
               ${traitTable(o, true)}
-              ${gone ? `<span class="pill">${o.sold ? 'おむかえしました' : 'ほかのお客さんがおむかえ'}</span>` : `<button class="act sm" data-action="viewOffer" data-i="x${i}">じっくり見る</button>
+              ${gone ? `<span class="pill">おむかえしました</span>` : `<button class="act sm" data-action="viewOffer" data-i="x${i}">じっくり見る</button>
               <button class="act primary sm" data-action="buyGecko" data-i="x${i}" ${S.coins < o.price || S.geckos.length >= S.cases ? 'disabled' : ''}>${o.price} コインでおむかえ</button>`}
             </div></div>`;
         }).join('')}</div>

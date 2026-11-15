@@ -1,5 +1,5 @@
 const { chromium } = require(process.env.PLAYWRIGHT || '/opt/node22/lib/node_modules/playwright');
-const fs = require('fs');
+const fs = require('fs'), assert = require('node:assert/strict');
 const SP = process.argv[2];
 // 問題の正解（各問の選択肢の先頭）をソースから取り出す
 const src = fs.readFileSync(__dirname + '/../../js/app.js', 'utf8');
@@ -46,7 +46,8 @@ for (const m of src.matchAll(/\['([^']+？)', \['([^']+)'/g)) ANS[m[1]] = m[2];
   await ev(() => document.querySelector('[data-action=closeSheet]').click());
   for (const t of ['2026-10-04T10:05:00', '2026-10-04T12:05:00', '2026-10-04T15:05:00', '2026-10-04T18:05:00', '2026-10-04T20:05:00', '2026-10-04T21:30:00']) {
     await ev(t => window.__setNow(t), t); await re(); await p.waitForTimeout(300);
-    console.log(t.slice(11, 16), await ev(() => { const E = window.__leopaState().expo; return E.stock.filter(o => !o.sold && !o.other).length; }));
+    const remaining = await ev(() => { const E = window.__leopaState().expo; return E.stock.filter(o => !o.sold && !o.other).length; });
+    assert.equal(remaining, 6); console.log(t.slice(11, 16), remaining);
   }
   console.log(JSON.stringify(errs)); await b.close();
 })();
